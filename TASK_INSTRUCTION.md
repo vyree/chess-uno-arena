@@ -296,3 +296,25 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
 
 - Timer jawaban 2 menit; 1 game = 2 putaran; reaksi 4 jenis;
   jatah PASS 1x per pemain per game; gelar dihitung dari reaksi.
+
+---
+
+## MENU UTAMA DUA TINGKAT + TEMA UNGU PASTEL (Sensei, 21 Okt 2026 malam)
+
+Referensi visual dari Sensei: menu aplikasi board-game (kartu game besar
+bergambar dalam grid, latar terang bersih). Spesifikasi Sensei:
+
+1. **Menu utama = pilih game dulu.** Grid kartu game besar (Catur, UNO).
+   TIDAK ada sapaan ("Hey, ...!" dihilangkan). Ada tombol Settings (cog ⚙️)
+   dan pill progres lokal.
+2. **Gerbang nickname:** klik kartu game -> kalau nickname belum tersimpan,
+   muncul message box isi nickname dulu -> tersimpan (localStorage cua-nick)
+   -> lanjut masuk menu game. Kalau sudah ada, langsung masuk.
+3. **Menu game (per game):** tombol kembali, judul game, lalu isinya:
+   Vs Bot (khusus UNO: ukuran 2/4/6/8 + Mode Ekstrim), Buat Room,
+   Gabung kode room, daftar room yang menunggu (khusus game itu).
+4. **Settings (cog):** Change Nickname + Sound On/Off (sumber suara tunggal
+   localStorage cua-sound, sinkron dengan tombol suara di arena UNO).
+5. **Tema UNGU PASTEL** (warna kesukaan Sensei) diterapkan ke SEMUA layar:
+   menu utama, menu game, lobby, arena catur (papan ikut ungu pastel), dan
+   arena UNO (panel meja ungu plum; kartu UNO tetap 4 warna klasik).

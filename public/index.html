@@ -9,36 +9,45 @@
 <body>
 <div id="app">
 
-  <!-- ============ LANDING ============ -->
+  <!-- ============ LANDING / MENU UTAMA ============ -->
   <section id="screen-landing" class="screen">
-    <div class="hero">
-      <h1>♟️🃏 Chess + UNO Arena</h1>
-      <p class="tagline">Main bareng teman — tanpa daftar, tanpa ribet!</p>
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-mark">♟️</span>
+        <span class="brand-name">Chess + UNO Arena</span>
+      </div>
+      <button id="btn-settings" class="icon-btn" title="Pengaturan" aria-label="Pengaturan">⚙️</button>
+    </header>
+    <p class="tagline">Main bareng teman — tanpa daftar, tanpa ribet!</p>
+
+    <div class="game-grid">
+      <button id="pick-chess" class="game-card card-chess" data-game="chess">
+        <span class="gc-head"><span class="gc-name">Catur</span><span class="gc-meta"><i class="dot"></i>2 pemain</span></span>
+        <span class="gc-art art-chess" aria-hidden="true"><span class="knight knight-b">♞</span><span class="knight knight-w">♞</span></span>
+      </button>
+      <button id="pick-uno" class="game-card card-uno" data-game="uno">
+        <span class="gc-head"><span class="gc-name">UNO</span><span class="gc-meta"><i class="dot"></i>2–8 pemain</span></span>
+        <span class="gc-art art-uno" aria-hidden="true"><span class="mini-card mc-red"><span class="oval"><span class="val">7</span></span></span><span class="mini-card mc-yellow"><span class="oval"><span class="val">3</span></span></span><span class="mini-card mc-blue"><span class="oval"><span class="val">5</span></span></span></span>
+      </button>
     </div>
-    <div class="card">
-      <div id="landing-controls">
-      <div id="nick-block">
-        <label for="nickname">Nickname kamu</label>
-        <input id="nickname" maxlength="16" placeholder="cth: Noir" autocomplete="off">
-        <div id="nick-error" class="field-error"></div>
-        <p id="local-stats" class="muted small-note"></p>
+
+    <div id="local-stats" class="stats-pill">🏆 Progresmu tersimpan lokal di perangkat ini</div>
+    <p class="landing-note">Pilih game untuk mulai. Nickname diminta sekali saja, lalu tersimpan di perangkat ini.</p>
+  </section>
+
+  <!-- ============ MENU GAME ============ -->
+  <section id="screen-gamemenu" class="screen hidden">
+    <div class="gm-header">
+      <button id="btn-back-menu" class="icon-btn" title="Kembali ke menu utama" aria-label="Kembali">←</button>
+      <div class="gm-title-box">
+        <h2 id="gm-title">UNO</h2>
+        <p id="gm-sub" class="muted">2–8 pemain</p>
       </div>
+    </div>
 
-      <div class="game-pick">
-        <button id="pick-chess" class="game-card selected" data-game="chess">
-          <span class="emoji">♟️</span><span>Catur</span><small>2 pemain</small>
-        </button>
-        <button id="pick-uno" class="game-card" data-game="uno">
-          <span class="emoji">🃏</span><span>UNO</span><small>2–8 pemain</small>
-        </button>
-      </div>
-
-      <button id="btn-create" class="btn primary big">🚪 Buat Room</button>
-
-      <div class="divider"><span>atau main sendiri</span></div>
-
+    <div class="card hidden" id="bot-card">
+      <h3 class="card-title">🤖 Lawan Bot</h3>
       <div class="bot-row">
-        <span>🤖 Lawan Bot (UNO)</span>
         <select id="bot-size" title="Total pemain termasuk kamu">
           <option value="2">2 pemain</option>
           <option value="4" selected>4 pemain</option>
@@ -48,21 +57,21 @@
         <label class="extreme-toggle" title="Mode Ekstrim: +4 tidak bisa ditumpuk, hanya +2 yang bisa stack">
           <input type="checkbox" id="bot-extreme"> Mode Ekstrim
         </label>
-        <button id="btn-bot" class="btn primary">▶️ Mulai Lawan Bot</button>
       </div>
+      <button id="btn-bot" class="btn primary big">▶️ Mulai Lawan Bot</button>
+    </div>
 
-      <div class="divider"><span>atau</span></div>
-
+    <div class="card">
+      <button id="btn-create" class="btn primary big">🚪 Buat Room</button>
+      <div class="divider"><span>atau gabung room teman</span></div>
       <div class="join-row">
         <input id="room-code" maxlength="6" placeholder="Kode room" autocomplete="off" class="code-input">
         <button id="btn-join" class="btn secondary">Masuk</button>
       </div>
       <div id="join-error" class="field-error"></div>
-
       <h3>Room yang menunggu</h3>
       <div id="room-list" class="room-list"><p class="muted">Memuat…</p></div>
       <button id="btn-refresh" class="btn ghost small">🔄 Refresh</button>
-      </div><!-- /landing-controls -->
     </div>
   </section>
 
@@ -168,6 +177,43 @@
     <h2 id="modal-title"></h2>
     <div id="modal-body"></div>
     <div id="modal-actions" class="row"></div>
+  </div>
+</div>
+
+<!-- ============ NICKNAME GATE ============ -->
+<div id="nick-modal" class="modal hidden">
+  <div class="modal-box">
+    <h2>Nickname kamu</h2>
+    <p class="muted">Nama ini yang tampil di room. Tersimpan di perangkat ini, bisa diubah lagi lewat Pengaturan ⚙️.</p>
+    <input id="nick-input" maxlength="16" placeholder="cth: Noir" autocomplete="off">
+    <div id="nick-modal-error" class="field-error"></div>
+    <div class="row modal-row">
+      <button id="btn-nick-cancel" class="btn ghost">Batal</button>
+      <button id="btn-nick-save" class="btn primary">Simpan &amp; Main</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SETTINGS ============ -->
+<div id="settings-modal" class="modal hidden">
+  <div class="modal-box settings-box">
+    <h2>⚙️ Pengaturan</h2>
+    <label for="settings-nick">Nickname</label>
+    <div class="edit-nick-row">
+      <input id="settings-nick" maxlength="16" placeholder="Nickname kamu" autocomplete="off">
+      <button id="btn-settings-save-nick" class="btn primary small">Simpan</button>
+    </div>
+    <div id="settings-nick-msg" class="field-error"></div>
+    <div class="setting-row">
+      <span>🔊 Suara</span>
+      <label class="switch" title="Suara nyala/mati">
+        <input type="checkbox" id="settings-sound">
+        <span class="track"></span>
+      </label>
+    </div>
+    <div class="row modal-row">
+      <button id="btn-settings-close" class="btn secondary">Tutup</button>
+    </div>
   </div>
 </div>
 

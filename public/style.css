@@ -1,16 +1,22 @@
 /* Chess + UNO Arena — design tokens & styles (mobile-first) */
 :root {
-  --color-primary: #5b8def;
-  --color-secondary: #9a7ede;
+  --color-primary: #7a68d6;
+  --color-primary-deep: #6553c2;
+  --color-secondary: #9d8ae8;
   --color-success: #3fae6a;
   --color-warning: #e0a34e;
   --color-danger: #e05c5c;
-  --color-bg: #f4f6fb;
+  --color-bg: #f4f1fd;
   --color-surface: #ffffff;
-  --color-text: #2b3a4a;
-  --color-text-muted: #6b7c93;
-  --color-board-light: #f0d9b5;
-  --color-board-dark: #b58863;
+  --color-text: #38304f;
+  --color-text-muted: #7e74a3;
+  --color-lav: #ece5fc;
+  --color-lav-2: #d9ccf9;
+  --color-plum: #3d2b63;
+  --color-felt: #543f8f;
+  --color-felt-edge: #3a2a66;
+  --color-board-light: #efe9fc;
+  --color-board-dark: #b3a1e0;
   --color-uno-red: #d92323;
   --color-uno-yellow: #e69c00;
   --color-uno-green: #159947;
@@ -328,3 +334,136 @@ input:focus { outline: none; border-color: var(--color-primary); }
 .edit-nick-row input { flex: 1; }
 .small-note { font-size: 12px; margin-top: 6px; }
 #landing-controls.locked { opacity: .45; pointer-events: none; filter: grayscale(.4); }
+
+/* ===== Pastel purple re-theme + two-level menu (Sensei, 2026-10-21) ===== */
+body {
+  background-image:
+    radial-gradient(620px 300px at 88% -40px, rgba(167, 139, 250, .28), transparent 60%),
+    radial-gradient(520px 280px at -12% 32%, rgba(122, 104, 214, .16), transparent 60%);
+  background-attachment: fixed;
+}
+::selection { background: var(--color-lav-2); }
+input, select, textarea { caret-color: var(--color-primary); }
+:focus-visible { outline: 3px solid var(--color-lav-2); outline-offset: 2px; }
+input { border-color: var(--color-lav-2); }
+input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(122, 104, 214, .18); }
+select {
+  border: 2px solid var(--color-lav-2); border-radius: var(--radius-md);
+  background: #fff; color: var(--color-text); padding: 10px; font-size: 15px;
+}
+.card { border: 1px solid var(--color-lav); box-shadow: 0 6px 20px rgba(84, 64, 160, .10); }
+.btn.ghost { border-color: var(--color-lav-2); color: var(--color-primary-deep); }
+.btn:hover { filter: brightness(1.06); }
+.divider::before { border-top-color: var(--color-lav-2); }
+.turn-badge { background: var(--color-lav); color: var(--color-plum); }
+.square.last-from, .square.last-to { background: rgba(122, 104, 214, .5); }
+.board { box-shadow: 0 10px 26px rgba(84, 64, 160, .25); border: 3px solid #fff; }
+.game-bar { box-shadow: 0 6px 18px rgba(84, 64, 160, .12); border: 1px solid var(--color-lav); }
+.chat-box, .room-item, .room-code-box, .player-list li { background: #f3eefc; }
+.toast { background: var(--color-plum); box-shadow: 0 10px 24px rgba(56, 40, 110, .35); }
+.modal { background: rgba(46, 33, 87, .55); }
+.promo-pick button { border-color: var(--color-lav-2); }
+.score-table td { border-bottom-color: var(--color-lav); }
+
+/* header + settings button */
+.app-header { display: flex; align-items: center; justify-content: space-between; margin: 6px 0 2px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-mark {
+  width: 40px; height: 40px; border-radius: 12px; font-size: 21px;
+  background: linear-gradient(150deg, #8f7fe0, #6a54c4);
+  display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 14px rgba(101, 83, 194, .35);
+}
+.brand-name { font-size: 19px; font-weight: 800; letter-spacing: -.01em; }
+.icon-btn {
+  width: 42px; height: 42px; border-radius: 50%; flex: 0 0 auto;
+  border: 1px solid var(--color-lav-2); background: var(--color-surface);
+  font-size: 19px; cursor: pointer; color: var(--color-text);
+  display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: 0 3px 10px rgba(84, 64, 160, .12); transition: transform .12s;
+}
+.icon-btn:active { transform: scale(.94); }
+.tagline { margin: 2px 0 4px; font-size: 14px; }
+
+/* game picker grid (reference-style cards) */
+.game-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 14px 0 16px; }
+.game-card {
+  border: none; border-radius: 22px; padding: 16px 16px 0; cursor: pointer;
+  text-align: left; color: #fff; overflow: hidden; position: relative;
+  display: flex; flex-direction: column; align-items: stretch; gap: 10px;
+  min-height: 198px; font-family: inherit;
+  box-shadow: 0 10px 24px rgba(84, 64, 160, .22);
+  transition: transform .16s cubic-bezier(.22, 1, .36, 1), box-shadow .16s;
+}
+.game-card:hover { transform: translateY(-3px); box-shadow: 0 16px 30px rgba(84, 64, 160, .28); }
+.game-card:active { transform: scale(.98); }
+.card-chess { background: linear-gradient(165deg, #8f7fe0, #6750c2); }
+.card-uno { background: linear-gradient(165deg, #ab90f7, #7c5cd6); }
+.gc-head { display: flex; flex-direction: column; gap: 3px; position: relative; z-index: 2; }
+.gc-name { font-size: 24px; font-weight: 800; letter-spacing: -.01em; }
+.gc-meta { font-size: 12.5px; font-weight: 600; color: rgba(255, 255, 255, .88); display: inline-flex; align-items: center; gap: 6px; }
+.gc-meta .dot { width: 7px; height: 7px; border-radius: 50%; background: #5eeaa0; box-shadow: 0 0 0 3px rgba(94, 234, 160, .25); }
+.gc-art { position: relative; flex: 1; display: block; }
+.art-chess .knight { position: absolute; bottom: 10px; font-size: 72px; line-height: 1; }
+.knight-b { left: 6px; color: #2e2157; transform: scaleX(-1); text-shadow: 0 3px 8px rgba(30, 18, 70, .35); }
+.knight-w { right: 6px; color: #fff; text-shadow: 0 3px 8px rgba(30, 18, 70, .35); }
+.art-chess::after {
+  content: ''; position: absolute; left: -16px; right: -16px; bottom: 0; height: 22px; opacity: .45;
+  background: repeating-conic-gradient(rgba(255, 255, 255, .55) 0% 25%, rgba(46, 33, 87, .4) 0% 50%) 0 0 / 22px 22px;
+}
+.art-uno { display: flex; align-items: flex-end; justify-content: center; }
+.mini-card {
+  width: 52px; height: 74px; border-radius: 8px; border: 2.5px solid #fff;
+  box-shadow: 0 6px 14px rgba(30, 18, 70, .3); margin-bottom: 14px;
+  display: flex; align-items: center; justify-content: center;
+}
+.mc-red { background: var(--color-uno-red); transform: rotate(-13deg) translateY(4px); }
+.mc-yellow { background: var(--color-uno-yellow); transform: translateY(-4px); z-index: 2; margin-left: -12px; }
+.mc-blue { background: var(--color-uno-blue); transform: rotate(13deg) translateY(4px); margin-left: -12px; }
+.mini-card .oval { width: 82%; height: 54%; background: #fff; border-radius: 50%; transform: rotate(-22deg); display: flex; align-items: center; justify-content: center; }
+.mini-card .val { transform: rotate(22deg); font-weight: 800; font-size: 19px; }
+.mc-red .val { color: var(--color-uno-red); }
+.mc-yellow .val { color: var(--color-uno-yellow); }
+.mc-blue .val { color: var(--color-uno-blue); }
+
+.stats-pill {
+  background: var(--color-surface); border: 1px solid var(--color-lav);
+  border-radius: var(--radius-full); padding: 12px 16px; text-align: center;
+  font-weight: 700; font-size: 14px; box-shadow: 0 4px 14px rgba(84, 64, 160, .10);
+}
+.landing-note { text-align: center; color: var(--color-text-muted); font-size: 12.5px; margin: 10px 6px 0; }
+
+/* game menu header */
+.gm-header { display: flex; align-items: center; gap: 12px; margin: 6px 0 14px; }
+.gm-title-box h2 { margin: 0; font-size: 26px; }
+.gm-title-box .muted { margin: 2px 0 0; }
+.card h3.card-title { margin: 0 0 10px; }
+
+/* settings + nickname modals */
+.settings-box { text-align: left; }
+.settings-box h2 { text-align: center; }
+.field-ok { color: var(--color-success); font-size: 13px; min-height: 18px; margin-bottom: 6px; }
+.modal-row { justify-content: center; }
+.setting-row { display: flex; align-items: center; justify-content: space-between; margin: 14px 0 4px; font-weight: 600; }
+.switch { position: relative; display: inline-block; width: 50px; height: 28px; flex: 0 0 auto; margin: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch .track { position: absolute; inset: 0; border-radius: 999px; background: var(--color-lav-2); transition: background .18s; cursor: pointer; }
+.switch .track::after {
+  content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px;
+  border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(56, 40, 110, .3);
+  transition: transform .18s cubic-bezier(.22, 1, .36, 1);
+}
+.switch input:checked + .track { background: var(--color-primary); }
+.switch input:checked + .track::after { transform: translateX(22px); }
+
+/* UNO table becomes a deep-plum panel so the arena matches the theme */
+.uno-arena {
+  background: radial-gradient(120% 90% at 50% 38%, var(--color-felt), var(--color-felt-edge));
+  border-radius: 26px;
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, .14),
+    inset 0 -18px 34px rgba(20, 10, 50, .35), 0 14px 30px rgba(56, 40, 110, .30);
+}
+.uno-card.deck { background: #2e2050; }
+.dir-badge { background: #2e2050; }
+.seat-chip { background: #fff; }
+.uno-hand { scrollbar-color: var(--color-lav-2) transparent; }

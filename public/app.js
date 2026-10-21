@@ -54,11 +54,20 @@ function connect() {
   const ws = new WebSocket(window.CUA_WS_ENDPOINT || (proto + '://' + location.host));
   S.ws = ws;
   ws.onopen = async () => {
+    // A fresh socket knows nobody yet: hello must be re-sent unless we
+    // rejoin an existing room session (helloSent from a dead socket lies).
+    S.helloSent = false;
     const sess = loadSession();
     if (sess && sess.playerId && sess.code) {
       send('rejoin', { playerId: sess.playerId, code: sess.code });
-    } else if (sess && sess.nickname) {
-      $('nickname').value = sess.nickname;
+    } else {
+      if (sess && sess.nickname) S.nickname = sess.nickname;
+      const nick = currentNick();
+      if (nick) {
+        send('hello', { nickname: nick });
+        S.helloSent = true;
+        S.nickname = nick;
+      }
     }
   };
   ws.onmessage = (ev) => {
@@ -84,11 +93,15 @@ function loadSession() {
 }
 function clearSession() { sessionStorage.removeItem('cua'); }
 
+// The nickname lives in localStorage (cua-nick) + S.nickname; the gate
+// modal collects it once, Settings can change it later.
+function currentNick() {
+  if (S.nickname) return S.nickname;
+  try { return (localStorage.getItem(NICK_KEY) || '').trim(); } catch { return ''; }
+}
 function ensureHello() {
-  const nick = $('nickname').value.trim();
-  if (!nick) { $('nick-error').textContent = 'Isi nickname dulu ya'; return false; }
-  if (nick.length > 16) { $('nick-error').textContent = 'Maksimal 16 karakter'; return false; }
-  $('nick-error').textContent = '';
+  const nick = currentNick();
+  if (!nick) { openNickModal(); return false; }
   if (!S.helloSent) {
     send('hello', { nickname: nick });
     S.helloSent = true;
@@ -113,7 +126,7 @@ function route(m) {
     case 'chat': addChat(m.from, m.text); break;
     case 'left_room':
       hideModal();
-      S.roomCode = null; clearSession(); showScreen('screen-landing'); refreshRooms();
+      S.roomCode = null; clearSession(); openGameMenu();
       break;
     case 'error':
       if (/room|kode/i.test(m.message)) $('join-error').textContent = m.message;
@@ -128,15 +141,75 @@ function refreshRooms() {
   send('list_rooms');
 }
 function ensureHelloQuiet() {
-  const nick = $('nickname').value.trim() || 'Tamu';
+  const nick = currentNick() || 'Tamu';
   if (!S.helloSent) { send('hello', { nickname: nick }); S.helloSent = true; S.nickname = nick; }
   return true;
+}
+// ---------- two-level menu: game menu + nickname gate + settings ----------
+function enterGame(game) {
+  S.game = game;
+  if (!currentNick()) { openNickModal(); return; }
+  openGameMenu();
+}
+function openGameMenu() {
+  const isUno = S.game === 'uno';
+  $('gm-title').textContent = isUno ? '🃏 UNO' : '♟️ Catur';
+  $('gm-sub').textContent = isUno
+    ? '2–8 pemain · tumpuk +2/+4, jangan lupa teriak UNO!'
+    : '2 pemain · klasik, timer per giliran';
+  $('bot-card').classList.toggle('hidden', !isUno);
+  showScreen('screen-gamemenu');
+  refreshRooms();
+}
+function openNickModal() {
+  $('nick-input').value = currentNick();
+  $('nick-modal-error').textContent = '';
+  $('nick-modal').classList.remove('hidden');
+  setTimeout(() => $('nick-input').focus(), 60);
+}
+function closeNickModal() { $('nick-modal').classList.add('hidden'); }
+function saveNickFromModal() {
+  const v = $('nick-input').value.trim();
+  if (!v) { $('nick-modal-error').textContent = 'Isi nickname dulu ya'; return; }
+  if (v.length > 16) { $('nick-modal-error').textContent = 'Maksimal 16 karakter'; return; }
+  S.nickname = v;
+  saveLocalNick();
+  closeNickModal();
+  openGameMenu();
+}
+function openSettings() {
+  $('settings-nick').value = currentNick();
+  const msg = $('settings-nick-msg');
+  msg.textContent = ''; msg.className = 'field-error';
+  $('settings-sound').checked = soundOn;
+  $('settings-modal').classList.remove('hidden');
+}
+function saveNickFromSettings() {
+  const v = $('settings-nick').value.trim();
+  const msg = $('settings-nick-msg');
+  if (!v) { msg.className = 'field-error'; msg.textContent = 'Nickname tidak boleh kosong'; return; }
+  if (v.length > 16) { msg.className = 'field-error'; msg.textContent = 'Maksimal 16 karakter'; return; }
+  S.nickname = v;
+  saveLocalNick();
+  msg.className = 'field-ok'; msg.textContent = 'Tersimpan ✓';
+}
+// Single sound switch: Settings toggle and the in-game button both call this.
+function setSound(on) {
+  soundOn = on;
+  try { localStorage.setItem('cua-sound', on ? 'on' : 'off'); } catch { /* private mode */ }
+  if (!on && 'speechSynthesis' in window) speechSynthesis.cancel();
+  const b = $('btn-sound'); if (b) b.textContent = on ? '🔊' : '🔇';
+  const t = $('settings-sound'); if (t) t.checked = on;
 }
 function renderRoomList(rooms) {
   const box = $('room-list');
   box.innerHTML = '';
-  if (!rooms.length) { box.innerHTML = '<p class="muted">Belum ada room. Buat satu yuk!</p>'; return; }
-  for (const r of rooms) {
+  const mine = rooms.filter((r) => r.game === S.game);
+  if (!mine.length) {
+    box.innerHTML = `<p class="muted">Belum ada room ${S.game === 'uno' ? 'UNO' : 'catur'} yang menunggu. Buat satu yuk!</p>`;
+    return;
+  }
+  for (const r of mine) {
     const div = document.createElement('div');
     div.className = 'room-item';
     const label = r.game === 'chess' ? '♟️ Catur' : '🃏 UNO';
@@ -611,7 +684,8 @@ setInterval(() => {
 }, 500);
 
 // ---------- local progress (login parked, Sensei 2026-10-21) ----------
-// No accounts: the nickname is typed on the landing page and the player's
+// No accounts: the nickname is collected once by the gate modal (or via
+// Settings) and the player's
 // progress (games played / won / points) lives in this device's
 // localStorage only. The Firebase login code was removed on Sensei's
 // order; the server-side verifier stays parked behind REQUIRE_AUTH.
@@ -651,19 +725,23 @@ function saveLocalNick() {
 function prefillLocalNick() {
   try {
     const nick = localStorage.getItem(NICK_KEY);
-    if (nick && !$('nickname').value) $('nickname').value = nick;
+    if (nick) S.nickname = nick;
   } catch { /* ignore */ }
 }
 
 // ---------- wire up ----------
 document.addEventListener('DOMContentLoaded', () => {
   for (const b of document.querySelectorAll('.game-card')) {
-    b.onclick = () => {
-      document.querySelectorAll('.game-card').forEach((x) => x.classList.remove('selected'));
-      b.classList.add('selected');
-      S.game = b.dataset.game;
-    };
+    b.onclick = () => enterGame(b.dataset.game);
   }
+  $('btn-back-menu').onclick = () => showScreen('screen-landing');
+  $('btn-nick-save').onclick = saveNickFromModal;
+  $('btn-nick-cancel').onclick = closeNickModal;
+  $('nick-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') saveNickFromModal(); });
+  $('btn-settings').onclick = openSettings;
+  $('btn-settings-close').onclick = () => $('settings-modal').classList.add('hidden');
+  $('btn-settings-save-nick').onclick = saveNickFromSettings;
+  $('settings-sound').onchange = (e) => setSound(e.target.checked);
   $('btn-create').onclick = () => {
     if (!ensureHello()) return;
     send('create_room', { game: S.game });
@@ -690,13 +768,9 @@ document.addEventListener('DOMContentLoaded', () => {
     extreme: S.game === 'uno' && $('lobby-extreme').checked,
   });
   const btnSound = $('btn-sound');
-  const syncSoundIcon = () => { btnSound.textContent = soundOn ? '🔊' : '🔇'; };
-  syncSoundIcon();
+  btnSound.textContent = soundOn ? '🔊' : '🔇';
   btnSound.onclick = () => {
-    soundOn = !soundOn;
-    try { localStorage.setItem('cua-sound', soundOn ? 'on' : 'off'); } catch { /* private mode */ }
-    if (!soundOn && 'speechSynthesis' in window) speechSynthesis.cancel();
-    syncSoundIcon();
+    setSound(!soundOn);
     if (soundOn) sfx('draw');
   };
   // browsers unlock audio only after a user gesture; warm the context up early

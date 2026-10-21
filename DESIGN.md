@@ -9,21 +9,27 @@
 
 | Token | Value | Used for |
 |---|---|---|
-| `--color-primary` | #5b8def | tombol utama, link aktif |
-| `--color-secondary` | #9a7ede | aksen sekunder (UNO) |
+| `--color-primary` | #7a68d6 | tombol utama, link aktif (ungu pastel, tema Sensei 2026-10-21) |
+| `--color-primary-deep` | #6553c2 | teks/tombol di atas latar lavender |
+| `--color-secondary` | #9d8ae8 | aksen sekunder |
 | `--color-success` | #3fae6a | status menang / valid |
 | `--color-warning` | #e0a34e | timer < 15 detik, peringatan |
 | `--color-danger` | #e05c5c | error, kalah, tombol bahaya |
-| `--color-bg` | #f4f6fb | background utama |
+| `--color-bg` | #f4f1fd | background utama (lavender sangat muda) |
 | `--color-surface` | #ffffff | kartu, panel |
-| `--color-text` | #2b3a4a | teks utama |
-| `--color-text-muted` | #6b7c93 | teks sekunder |
-| `--color-board-light` | #f0d9b5 | petak catur terang |
-| `--color-board-dark` | #b58863 | petak catur gelap |
-| `--color-uno-red` | #e05c5c | kartu UNO merah |
-| `--color-uno-yellow` | #f2c14e | kartu UNO kuning |
-| `--color-uno-green` | #3fae6a | kartu UNO hijau |
-| `--color-uno-blue` | #5b8def | kartu UNO biru |
+| `--color-text` | #38304f | teks utama (plum gelap) |
+| `--color-text-muted` | #7e74a3 | teks sekunder (ungu keabuan) |
+| `--color-lav` | #ece5fc | isian lavender (badge, bingkai) |
+| `--color-lav-2` | #d9ccf9 | garis tepi lavender |
+| `--color-plum` | #3d2b63 | plum gelap (toast, teks di lavender) |
+| `--color-felt` | #543f8f | panel meja UNO (radial, tengah) |
+| `--color-felt-edge` | #3a2a66 | panel meja UNO (tepi) |
+| `--color-board-light` | #efe9fc | petak catur terang (ungu pastel) |
+| `--color-board-dark` | #b3a1e0 | petak catur gelap (ungu pastel) |
+| `--color-uno-red` | #d92323 | kartu UNO merah (klasik) |
+| `--color-uno-yellow` | #e69c00 | kartu UNO kuning (klasik) |
+| `--color-uno-green` | #159947 | kartu UNO hijau (klasik) |
+| `--color-uno-blue` | #2266b8 | kartu UNO biru (klasik) |
 
 ### Typography
 
@@ -56,5 +62,12 @@
 - Aksi penting (keluar room saat game berjalan): konfirmasi dulu.
 - Error selalu pesan manusia Bahasa Indonesia, bukan stack trace.
 - Form: nickname wajib 1–16 karakter, pesan error di bawah field.
+- Menu dua tingkat (2026-10-21): menu utama hanya berisi pemilih game +
+  pill progres + tombol Settings (⚙️). Klik game membuka menu game
+  (Vs Bot khusus UNO, Buat Room, Gabung, room menunggu per game).
+  Nickname adalah gerbang: belum tersimpan -> message box dulu, lalu
+  tersimpan di localStorage; ganti nickname & suara (on/off) lewat Settings.
+  Tema ungu pastel berlaku di semua layar; arena UNO memakai panel meja
+  plum gelap agar kartu klasik tetap terbaca.
 - Mobile-first: papan catur & kartu UNO muat di layar HP (lebar 360px); tombol cukup besar untuk jempol.
 - Bidak catur memakai karakter Unicode (♔♕♖♗♘♙) — tanpa aset gambar.
