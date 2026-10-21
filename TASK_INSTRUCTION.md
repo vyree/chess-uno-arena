@@ -223,3 +223,12 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
 - [x] Desain kartu gaya klasik (referensi Sensei): oval putih miring di
   tengah + angka besar sewarna kartu, angka kecil pojok kiri-atas &
   kanan-bawah (terbalik), wild hitam bermotif 4 warna, palet warna klasik.
+- [x] LOGIN DIPARKIR (perintah Sensei 21 Okt 2026): gerbang Google
+  dicabut dari client (kotak login dihapus, SDK Firebase tidak dimuat),
+  pemain kembali nickname-only; progres (main/menang/poin) disimpan
+  LOKAL per perangkat (localStorage 'cua-stats', nickname 'cua-nick').
+  Server: verifikasi token kini opt-in (FIREBASE_PROJECT_ID +
+  REQUIRE_AUTH=1) — kode verifier & rules RTDB tetap tersimpan rapi
+  untuk dihidupkan lagi kapan pun. Terverifikasi: hello tanpa token
+  diterima dengan env persis Railway; landing tanpa auth-box; bot game
+  langsung mulai.

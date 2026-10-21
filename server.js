@@ -17,12 +17,17 @@ const { RoomManager, MAX_PLAYERS } = require('./game/rooms');
 const { validateMessage } = require('./game/validate');
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
-// Auth gate (Misi 2 Fase 4): active only when a Firebase project is set.
-// Without it the server runs in open dev mode so local tests keep working.
+// Auth gate (Misi 2 Fase 4) — PARKED by Sensei (2026-10-21). The gate
+// only activates with FIREBASE_PROJECT_ID *and* REQUIRE_AUTH=1; otherwise
+// the server runs open (nickname-only) and progress lives on the client.
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || null;
-const tokenVerifier = FIREBASE_PROJECT_ID ? createVerifier(FIREBASE_PROJECT_ID) : null;
+// Login gate PARKED (Sensei, 2026-10-21): token verification stays off
+// unless explicitly re-enabled with REQUIRE_AUTH=1.
+const tokenVerifier = (FIREBASE_PROJECT_ID && process.env.REQUIRE_AUTH === '1')
+  ? createVerifier(FIREBASE_PROJECT_ID)
+  : null;
 if (!tokenVerifier) {
-  console.warn('[auth] FIREBASE_PROJECT_ID tidak terisi — gerbang login MATI (mode dev)');
+  console.warn('[auth] gerbang login MATI — login diparkir (mode nickname terbuka)');
 }
 const TURN_TIMEOUT_MS = 60 * 1000;
 const BOT_DELAY_MS = 900; // bot "thinking" pause so humans can follow the game

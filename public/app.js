@@ -7,7 +7,8 @@ const S = {
   chess: null, uno: null, unoMeta: {},
   selected: null, legalMoves: [],
   saidUnoArmed: false, deadline: null, helloSent: false,
-  authMode: !!window.CUA_FIREBASE, fbUser: null, profileNickname: null,
+  authMode: false, // login PARKED (Sensei, 2026-10-21): nickname-only, local progress
+  fbUser: null, profileNickname: null,
 };
 
 const PIECES = {
@@ -55,18 +56,8 @@ function connect() {
   ws.onopen = async () => {
     const sess = loadSession();
     if (sess && sess.playerId && sess.code) {
-      if (S.authMode) {
-        // rejoin must carry a fresh ID token proving the same Google account
-        const user = await waitForFbUser();
-        if (user) {
-          send('rejoin', { playerId: sess.playerId, code: sess.code, idToken: await user.getIdToken() });
-          return;
-        }
-        clearSession();
-      } else {
-        send('rejoin', { playerId: sess.playerId, code: sess.code });
-      }
-    } else if (sess && sess.nickname && !S.authMode) {
+      send('rejoin', { playerId: sess.playerId, code: sess.code });
+    } else if (sess && sess.nickname) {
       $('nickname').value = sess.nickname;
     }
   };
@@ -94,7 +85,6 @@ function loadSession() {
 function clearSession() { sessionStorage.removeItem('cua'); }
 
 function ensureHello() {
-  if (S.authMode) return !!S.profileNickname; // hello is sent by the auth flow
   const nick = $('nickname').value.trim();
   if (!nick) { $('nick-error').textContent = 'Isi nickname dulu ya'; return false; }
   if (nick.length > 16) { $('nick-error').textContent = 'Maksimal 16 karakter'; return false; }
@@ -111,7 +101,7 @@ function ensureHello() {
 function route(m) {
   switch (m.type) {
     case 'welcome':
-      S.playerId = m.playerId; S.nickname = m.nickname; saveSession();
+      S.playerId = m.playerId; S.nickname = m.nickname; saveSession(); saveLocalNick();
       if (m.rejoined) toast('Kembali tersambung! 🎉');
       break;
     case 'room_list': renderRoomList(m.rooms); break;
@@ -134,12 +124,10 @@ function route(m) {
 
 // ---------- landing ----------
 function refreshRooms() {
-  if (S.authMode && !S.profileNickname) return; // gate: no profile, no room list
   if (!ensureHelloQuiet()) return;
   send('list_rooms');
 }
 function ensureHelloQuiet() {
-  if (S.authMode) return true; // the auth flow owns hello in Firebase mode
   const nick = $('nickname').value.trim() || 'Tamu';
   if (!S.helloSent) { send('hello', { nickname: nick }); S.helloSent = true; S.nickname = nick; }
   return true;
@@ -622,162 +610,49 @@ setInterval(() => {
   }
 }, 500);
 
-// ---------- firebase auth + profile (Fase 4) ----------
-// The Google identity (name/email/photo) is NEVER rendered anywhere; the
-// in-game identity is only the self-chosen nickname stored per account.
-// The SDK is loaded as ES modules via dynamic import (pinned version) so a
-// CDN failure only closes the login gate instead of killing the whole app.
-// Profiles/stats live in Realtime Database (Sensei's decision, 2026-10-21):
-// this project's (default) database is Datastore Mode and creating a
-// Firestore database is billing-locked, while RTDB is free on Spark.
-let fb = null;
-let fbAuth = null;
-let fbDb = null;
-const FB_VERSION = '10.12.2';
+// ---------- local progress (login parked, Sensei 2026-10-21) ----------
+// No accounts: the nickname is typed on the landing page and the player's
+// progress (games played / won / points) lives in this device's
+// localStorage only. The Firebase login code was removed on Sensei's
+// order; the server-side verifier stays parked behind REQUIRE_AUTH.
+const STATS_KEY = 'cua-stats';
+const NICK_KEY = 'cua-nick';
 
-async function loadFirebase() {
-  if (fb) return fb;
-  const base = `https://www.gstatic.com/firebasejs/${FB_VERSION}`;
-  const [appM, authM, dbM] = await Promise.all([
-    import(`${base}/firebase-app.js`),
-    import(`${base}/firebase-auth.js`),
-    import(`${base}/firebase-database.js`),
-  ]);
-  fb = { ...appM, ...authM, ...dbM };
-  return fb;
-}
-
-function authShow(which) {
-  for (const id of ['auth-login', 'auth-create', 'auth-profile']) {
-    $(id).classList.toggle('hidden', id !== which);
-  }
-}
-function setControlsLocked(locked) {
-  $('landing-controls').classList.toggle('locked', locked);
-}
-function renderProfileStats(stats) {
-  const el = $('profile-stats');
-  if (!stats) { el.textContent = ''; return; }
-  el.textContent = `🏆 Statistik: ${stats.played || 0} main · ${stats.won || 0} menang · ${stats.points || 0} poin`;
-}
-function profileRef(uid) { return fb.ref(fbDb, 'users/' + uid); }
-
-async function sendAuthHello() {
-  if (!fbAuth || !fbAuth.currentUser || !S.profileNickname) return;
-  const idToken = await fbAuth.currentUser.getIdToken();
-  send('hello', { nickname: S.profileNickname, idToken });
-  S.helloSent = true;
-  S.nickname = S.profileNickname;
-}
-
-async function onFbUser(user) {
-  S.fbUser = user;
-  if (!user) {
-    S.profileNickname = null;
-    authShow('auth-login');
-    setControlsLocked(true);
-    return;
-  }
+function loadLocalStats() {
   try {
-    const snap = await fb.get(profileRef(user.uid));
-    if (!snap.exists()) {
-      authShow('auth-create');
-      setControlsLocked(true);
-      return;
-    }
-    const data = snap.val();
-    S.profileNickname = data.nickname;
-    $('profile-nick').textContent = data.nickname;
-    renderProfileStats(data.stats);
-    authShow('auth-profile');
-    setControlsLocked(false);
-    sendAuthHello();
-  } catch (e) {
-    $('auth-error').textContent = 'Gagal memuat profil — periksa koneksi lalu muat ulang ya';
-  }
+    const s = JSON.parse(localStorage.getItem(STATS_KEY));
+    if (s && typeof s.played === 'number') return s;
+  } catch { /* corrupted storage falls through to a fresh record */ }
+  return { played: 0, won: 0, points: 0 };
 }
 
-function waitForFbUser() {
-  return new Promise((resolve) => {
-    if (!fbAuth) { resolve(null); return; }
-    const un = fb.onAuthStateChanged(fbAuth, (u) => { un(); resolve(u); });
-    setTimeout(() => resolve(fbAuth.currentUser), 4000);
-  });
+function renderLocalStats() {
+  const el = $('local-stats');
+  if (!el) return;
+  const s = loadLocalStats();
+  el.textContent = s.played
+    ? `🏆 Progres lokal: ${s.played} main · ${s.won} menang · ${s.points} poin`
+    : '🏆 Progresmu tersimpan lokal di perangkat ini';
 }
 
-async function initAuth() {
-  if (!S.authMode) return; // dev mode: the auth box stays hidden
-  $('auth-box').classList.remove('hidden');
-  $('nick-block').classList.add('hidden');
-  setControlsLocked(true);
-  try {
-    await loadFirebase();
-  } catch (e) {
-    // SDK failed to load: fail closed, the gate stays up
-    $('auth-error').textContent = 'Komponen login gagal dimuat — periksa koneksi internet kamu';
-    return;
-  }
-  const app = fb.initializeApp(window.CUA_FIREBASE);
-  fbAuth = fb.getAuth(app);
-  fbDb = fb.getDatabase(app);
-  fb.onAuthStateChanged(fbAuth, onFbUser);
-  $('btn-google').onclick = async () => {
-    $('auth-error').textContent = '';
-    try {
-      await fb.signInWithPopup(fbAuth, new fb.GoogleAuthProvider());
-    } catch (e) {
-      $('auth-error').textContent = 'Login dibatalkan atau gagal — coba lagi ya';
-    }
-  };
-  $('btn-create-nick').onclick = async () => {
-    const nick = $('new-nickname').value.trim();
-    $('create-error').textContent = '';
-    if (!nick) { $('create-error').textContent = 'Isi nickname dulu ya'; return; }
-    if (nick.length > 16) { $('create-error').textContent = 'Maksimal 16 karakter'; return; }
-    try {
-      await fb.set(profileRef(fbAuth.currentUser.uid), {
-        nickname: nick,
-        stats: { played: 0, won: 0, points: 0 },
-        createdAt: fb.serverTimestamp(),
-      });
-      onFbUser(fbAuth.currentUser);
-    } catch (e) {
-      $('create-error').textContent = 'Gagal menyimpan nickname, coba lagi ya';
-    }
-  };
-  $('btn-edit-nick').onclick = () => {
-    $('edit-nickname').value = S.profileNickname || '';
-    $('edit-nick-row').classList.toggle('hidden');
-  };
-  $('btn-save-nick').onclick = async () => {
-    const nick = $('edit-nickname').value.trim();
-    if (!nick || nick.length > 16) { toast('Nickname 1–16 karakter ya'); return; }
-    try {
-      await fb.update(profileRef(fbAuth.currentUser.uid), { nickname: nick });
-      S.profileNickname = nick;
-      S.nickname = nick;
-      $('profile-nick').textContent = nick;
-      $('edit-nick-row').classList.add('hidden');
-      sendAuthHello(); // refresh the server-side nickname binding
-      toast('Nickname diperbarui! ✏️');
-    } catch (e) { toast('Gagal memperbarui nickname'); }
-  };
-  $('btn-signout').onclick = async () => {
-    await fb.signOut(fbAuth);
-    location.reload();
-  };
-}
-
-// Record one finished game into the player's own Realtime Database stats.
+// Record one finished game into the local stats (best-effort only).
 function recordStats(m) {
-  if (!S.authMode || !fb || !fbDb || !fbAuth || !fbAuth.currentUser) return;
+  const s = loadLocalStats();
   const won = !!m.winnerNickname && m.winnerNickname === S.nickname;
-  fb.update(profileRef(fbAuth.currentUser.uid), {
-    'stats/played': fb.increment(1),
-    'stats/won': fb.increment(won ? 1 : 0),
-    'stats/points': fb.increment(won && m.points ? m.points : 0),
-    lastPlayedAt: fb.serverTimestamp(),
-  }).catch(() => { /* stats are best-effort; never break the game-over UI */ });
+  s.played += 1;
+  if (won) { s.won += 1; s.points += m.points || 0; }
+  try { localStorage.setItem(STATS_KEY, JSON.stringify(s)); } catch { /* private mode */ }
+  renderLocalStats();
+}
+
+function saveLocalNick() {
+  try { localStorage.setItem(NICK_KEY, S.nickname || ''); } catch { /* ignore */ }
+}
+function prefillLocalNick() {
+  try {
+    const nick = localStorage.getItem(NICK_KEY);
+    if (nick && !$('nickname').value) $('nickname').value = nick;
+  } catch { /* ignore */ }
 }
 
 // ---------- wire up ----------
@@ -840,6 +715,7 @@ document.addEventListener('DOMContentLoaded', () => {
   wireChat('chat-input', 'btn-chat', 'chat-box');
   wireChat('chat-input-chess', 'btn-chat-chess', 'chat-box-chess');
   wireChat('chat-input-uno', 'btn-chat-uno', 'chat-box-uno');
-  initAuth();
+  prefillLocalNick();
+  renderLocalStats();
   connect();
 });

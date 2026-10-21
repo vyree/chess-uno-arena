@@ -23,6 +23,13 @@
 
 ## 3. Authentication & Authorization
 
+> STATUS (2026-10-21): **LOGIN DIPARKIR atas perintah Sensei.** Gerbang
+> Google di bawah ini NONAKTIF — server berjalan mode nickname terbuka
+> (verifikasi token hanya menyala bila FIREBASE_PROJECT_ID terisi DAN
+> REQUIRE_AUTH=1), client tidak memuat Firebase sama sekali, dan progres
+> pemain disimpan lokal di perangkat masing-masing (localStorage).
+> Bagian ini dipertahankan sebagai desain bila login dihidupkan lagi.
+
 - **Login Google wajib** (Firebase Auth) sebagai gerbang semua game.
   Server memverifikasi ID token Firebase secara kriptografis
   (`game/auth.js`: tanda tangan RS256 vs sertifikat x509 Google, cek

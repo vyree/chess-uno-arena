@@ -16,41 +16,12 @@
       <p class="tagline">Main bareng teman — tanpa daftar, tanpa ribet!</p>
     </div>
     <div class="card">
-      <!-- Auth gate (Fase 4): visible only when Firebase is configured -->
-      <div id="auth-box" class="hidden">
-        <div id="auth-login">
-          <p class="auth-note">Masuk dulu ya untuk main — satu kali klik, tanpa password.</p>
-          <button id="btn-google" class="btn primary big">🔐 Masuk dengan Google</button>
-          <div id="auth-error" class="field-error"></div>
-        </div>
-        <div id="auth-create" class="hidden">
-          <label for="new-nickname">Buat nickname kamu (tampil di game)</label>
-          <input id="new-nickname" maxlength="16" placeholder="cth: Noir" autocomplete="off">
-          <div id="create-error" class="field-error"></div>
-          <button id="btn-create-nick" class="btn primary big">💾 Simpan Nickname</button>
-          <p class="muted small-note">Nama/email/foto akun Google kamu TIDAK akan tampil di game — hanya nickname ini.</p>
-        </div>
-        <div id="auth-profile" class="hidden">
-          <div class="profile-row">
-            <span>🎮 <strong id="profile-nick"></strong></span>
-            <span class="profile-actions">
-              <button id="btn-edit-nick" class="btn ghost small">✏️ Edit</button>
-              <button id="btn-signout" class="btn ghost small">Keluar</button>
-            </span>
-          </div>
-          <div id="edit-nick-row" class="edit-nick-row hidden">
-            <input id="edit-nickname" maxlength="16" autocomplete="off">
-            <button id="btn-save-nick" class="btn secondary small">Simpan</button>
-          </div>
-          <div id="profile-stats" class="muted small-note"></div>
-        </div>
-      </div>
-
       <div id="landing-controls">
       <div id="nick-block">
         <label for="nickname">Nickname kamu</label>
         <input id="nickname" maxlength="16" placeholder="cth: Noir" autocomplete="off">
         <div id="nick-error" class="field-error"></div>
+        <p id="local-stats" class="muted small-note"></p>
       </div>
 
       <div class="game-pick">
