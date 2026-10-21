@@ -327,3 +327,18 @@ server cadangan di Fly.io; Railway tetap utama, tidak ditinggalkan.
 - Client: parameter ?server=fly mengalihkan WebSocket ke
   wss://chess-uno-arena.fly.dev; tanpa parameter tetap Railway.
   Link cadangan pemain: https://fir-pro2-d77c3.web.app/?server=fly
+- SELESAI 21 Okt malam: app "chess-uno-arena" LIVE di Fly (org personal
+  "Aldika", slug personal; login feiraalchemy@gmail.com via flyctl auth
+  login --code). Mesin TUNGGAL e82e962f55d698, region sin, started
+  (WAJIB 1 mesin: room stateful di memori — 2 mesin memecah room).
+- Jalur deploy as-built: builder Fly (depot & klasik) DAN pull image lokal
+  DIBLOKIR proksi egress sandbox (TLS timeout ke *.fly.dev builder &
+  CDN registry). Jalan yang berhasil: GitHub Actions
+  (.github/workflows/build-image.yml, trigger push main + manual) build
+  image -> push registry.fly.io/chess-uno-arena:latest (secret repo
+  FLY_API_TOKEN = deploy token app, dibuat Sensei via dashboard Fly) ->
+  dari sandbox: flyctl deploy --image registry.fly.io/chess-uno-arena:latest.
+- Verifikasi: flyctl status started; log boot server tampil; HTTPS fly.dev
+  200 berisi UI baru. Uji WS end-to-end dari sandbox terhalang proksi
+  (pola sama seperti Railway dulu) — bukti akhir di perangkat Sensei via
+  https://fir-pro2-d77c3.web.app/?server=fly
