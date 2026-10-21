@@ -232,3 +232,67 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
   untuk dihidupkan lagi kapan pun. Terverifikasi: hello tanpa token
   diterima dengan env persis Railway; landing tanpa auth-box; bot game
   langsung mulai.
+
+# MISI 3 — Truth or Truth (RANCANGAN, 21 Okt 2026)
+
+> Status: BARU RANCANGAN tertulis atas persetujuan Sensei — BELUM
+> dieksekusi. Menunggu kata "gas" per fase seperti pola Misi 2.
+> Konteks: game party sosial untuk arena (di luar catur & UNO); tetap
+> nickname-only (login diparkir), progres lokal per perangkat.
+
+## Konsep
+
+- Room 3–10 pemain, kode room seperti game lain; host memilih **paket
+  soal**: Santai (ice breaking), Nostalgia (kenangan), Mendalam
+  (perasaan/mimpi, tetap sopan), Campuran.
+- Inti permainan = bank soal + roda giliran + reaksi. Tidak ada engine
+  aturan rumit; kualitas ditentukan kurasi soal.
+
+## Sistem permainan (desain Sensei–Arona, 21 Okt 2026)
+
+1. **Giliran**: sistem memutar roda nama (acak, tanpa mengulang sampai
+   semua pemain kena satu putaran) → pemain terpilih menerima **kartu
+   pertanyaan acak** dari paket terpilih.
+2. **Menjawab**: lewat chat/teks di room; **timer jawaban 2 menit** —
+   waktu habis = dianggap pass.
+3. **Reaksi & poin**: pemain lain memberi reaksi pada jawaban
+   (🔥 greget, 😂 ngakak, 🥺 deep, 👏 apresiasi) → reaksi = poin bagi
+   penjawab. Tombol **"Kurang greget!"**: bila mayoritas menekannya,
+   penjawab menerima satu pertanyaan susulan yang lebih menantang.
+4. **Jatah PASS**: tiap pemain 1x per game melewati pertanyaan tanpa
+   hukuman (jaga kenyamanan; soal dikurasi sopan, tidak vulgar).
+5. **Akhir game**: 2 putaran penuh (atau setting host) → podium gelar
+   seru-seruan: Paling Greget, Paling Ngakak, Paling Deep (berdasarkan
+   reaksi terbanyak per jenis). Statistik (main + gelar) masuk progres
+   lokal localStorage.
+6. **Bot**: TIDAK ikut menjawab. Bot hanya jadi MC (putar roda, bacakan
+   soal, hitung poin) bila manusia < 3.
+
+## Bank soal
+
+- Format data: daftar soal per paket (file data terpisah, mudah ditambah).
+- Target awal: ±50 soal per paket, bertumbuh ke ±100. Semua soal lolos
+  kurasi: aman, sopan, tidak menyinggung SARA pribadi.
+
+## Arsitektur (mengikuti pola arena)
+
+- Engine state machine giliran di `game/truth.js`; pesan WS baru awalan
+  `truth_`; validasi terpusat di `game/validate.js`; state live in-memory
+  server (room/lobby/chat/timer/reconnect 60 dtk dipakai ulang apa adanya).
+- UI: layar baru `screen-truth` (roda nama, kartu soal, tombol reaksi,
+  podium), gaya visual mengikuti design system yang ada.
+
+## Fase pengerjaan (checklist — belum dimulai)
+
+- [ ] Fase 1 — Engine `game/truth.js` + bank soal inti (4 paket × ±50)
+      + validasi + tes unit
+- [ ] Fase 2 — Integrasi server: room tipe truth, alur giliran/reaksi/
+      poin/gelar, MC bot, simulasi WS end-to-end
+- [ ] Fase 3 — UI: layar truth, animasi roda nama, kartu soal, reaksi,
+      podium gelar, efek suara
+- [ ] Fase 4 — Deploy (Railway + Hosting) + uji publik
+
+## Asumsi terbuka (boleh dikoreksi Sensei kapan pun)
+
+- Timer jawaban 2 menit; 1 game = 2 putaran; reaksi 4 jenis;
+  jatah PASS 1x per pemain per game; gelar dihitung dari reaksi.
