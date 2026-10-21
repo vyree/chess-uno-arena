@@ -49,9 +49,17 @@ function showModal(title, bodyHTML, actions) {
 function hideModal() { $('modal').classList.add('hidden'); }
 
 // ---------- websocket ----------
+// Backup-server switch: ?server=fly points the game at the Fly.io mirror
+// (Sensei, 2026-10-21, while Railway had a builds outage). Anything else
+// keeps the default endpoint from firebase-config.js (Railway).
+function serverEndpoint(proto) {
+  const pick = new URLSearchParams(location.search).get('server');
+  if (pick === 'fly') return 'wss://chess-uno-arena.fly.dev';
+  return window.CUA_WS_ENDPOINT || (proto + '://' + location.host);
+}
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(window.CUA_WS_ENDPOINT || (proto + '://' + location.host));
+  const ws = new WebSocket(serverEndpoint(proto));
   S.ws = ws;
   ws.onopen = async () => {
     // A fresh socket knows nobody yet: hello must be re-sent unless we

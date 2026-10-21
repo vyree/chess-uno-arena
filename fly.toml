@@ -1,0 +1,22 @@
+# Chess + UNO Arena — Fly.io BACKUP server (Sensei, 2026-10-21).
+# Primary stays on Railway; this mirror exists so the game keeps a spare
+# WebSocket home. Players reach it via https://fir-pro2-d77c3.web.app/?server=fly
+app = "chess-uno-arena"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

@@ -318,3 +318,12 @@ bergambar dalam grid, latar terang bersih). Spesifikasi Sensei:
 5. **Tema UNGU PASTEL** (warna kesukaan Sensei) diterapkan ke SEMUA layar:
    menu utama, menu game, lobby, arena catur (papan ikut ungu pastel), dan
    arena UNO (panel meja ungu plum; kartu UNO tetap 4 warna klasik).
+
+## SERVER CADANGAN FLY.IO (Sensei, 21 Okt 2026 malam)
+Railway kena Major Outage (builds paused global) -> Sensei putuskan siapkan
+server cadangan di Fly.io; Railway tetap utama, tidak ditinggalkan.
+- fly.toml: app "chess-uno-arena", region sin (Singapura), 1 mesin
+  shared-cpu-1x 256MB SELALU NYALA (auto_stop_machines=false), Dockerfile repo.
+- Client: parameter ?server=fly mengalihkan WebSocket ke
+  wss://chess-uno-arena.fly.dev; tanpa parameter tetap Railway.
+  Link cadangan pemain: https://fir-pro2-d77c3.web.app/?server=fly
