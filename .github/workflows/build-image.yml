@@ -6,6 +6,8 @@
 # Needs one repo secret: FLY_API_TOKEN (a Fly deploy token for this app).
 name: build-image
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
