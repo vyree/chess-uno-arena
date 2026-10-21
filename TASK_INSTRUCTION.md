@@ -130,12 +130,19 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
 
 - [x] Baca SECURITY.md dulu (aturan proyek: wajib sebelum sentuh auth)
 - [x] Firebase Auth Google 1x klik sebagai gerbang; token diverifikasi server
-- [x] Nickname per akun di Firestore + halaman setting edit nickname
-- [x] Statistik & riwayat match ke Firestore
-- [ ] Deploy: Hosting + Cloud Run; uji end-to-end di URL publik
-  — SEBAGIAN (21 Okt 2026): Hosting LIVE https://fir-pro2-d77c3.web.app +
-  rules Realtime Database terpasang & terverifikasi menolak akses anonim;
-  Cloud Run (server game) masih menunggu billing aktif.
+- [x] Nickname per akun di Realtime Database (menggantikan Firestore —
+  keputusan Sensei 21 Okt 2026) + halaman setting edit nickname
+- [x] Statistik per akun ke Realtime Database (riwayat match: statistik agregat)
+- [x] Deploy: Hosting + server; uji end-to-end di URL publik
+  — SELESAI via RAILWAY (keputusan Sensei 21 Okt 2026, menggantikan
+  Cloud Run yang terkunci billing): Hosting LIVE
+  https://fir-pro2-d77c3.web.app; server LIVE di
+  https://chess-uno-arena-production.up.railway.app (auto-deploy GitHub,
+  commit 18c5e95); terverifikasi halaman baru di kedua URL, upgrade
+  WebSocket → 101, rules RTDB menolak akses anonim. CATATAN: env
+  FIREBASE_PROJECT_ID di Railway belum diisi (perlu dashboard Railway
+  Sensei) — selama kosong server berjalan mode terbuka; gerbang login
+  client tetap memaksa login Google.
 
 ### Asumsi & desain Fase 4 (ditulis sebelum implementasi — AGENTS.md §1)
 
