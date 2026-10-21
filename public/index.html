@@ -16,20 +16,69 @@
       <p class="tagline">Main bareng teman — tanpa daftar, tanpa ribet!</p>
     </div>
     <div class="card">
-      <label for="nickname">Nickname kamu</label>
-      <input id="nickname" maxlength="16" placeholder="cth: Noir" autocomplete="off">
-      <div id="nick-error" class="field-error"></div>
+      <!-- Auth gate (Fase 4): visible only when Firebase is configured -->
+      <div id="auth-box" class="hidden">
+        <div id="auth-login">
+          <p class="auth-note">Masuk dulu ya untuk main — satu kali klik, tanpa password.</p>
+          <button id="btn-google" class="btn primary big">🔐 Masuk dengan Google</button>
+          <div id="auth-error" class="field-error"></div>
+        </div>
+        <div id="auth-create" class="hidden">
+          <label for="new-nickname">Buat nickname kamu (tampil di game)</label>
+          <input id="new-nickname" maxlength="16" placeholder="cth: Noir" autocomplete="off">
+          <div id="create-error" class="field-error"></div>
+          <button id="btn-create-nick" class="btn primary big">💾 Simpan Nickname</button>
+          <p class="muted small-note">Nama/email/foto akun Google kamu TIDAK akan tampil di game — hanya nickname ini.</p>
+        </div>
+        <div id="auth-profile" class="hidden">
+          <div class="profile-row">
+            <span>🎮 <strong id="profile-nick"></strong></span>
+            <span class="profile-actions">
+              <button id="btn-edit-nick" class="btn ghost small">✏️ Edit</button>
+              <button id="btn-signout" class="btn ghost small">Keluar</button>
+            </span>
+          </div>
+          <div id="edit-nick-row" class="edit-nick-row hidden">
+            <input id="edit-nickname" maxlength="16" autocomplete="off">
+            <button id="btn-save-nick" class="btn secondary small">Simpan</button>
+          </div>
+          <div id="profile-stats" class="muted small-note"></div>
+        </div>
+      </div>
+
+      <div id="landing-controls">
+      <div id="nick-block">
+        <label for="nickname">Nickname kamu</label>
+        <input id="nickname" maxlength="16" placeholder="cth: Noir" autocomplete="off">
+        <div id="nick-error" class="field-error"></div>
+      </div>
 
       <div class="game-pick">
         <button id="pick-chess" class="game-card selected" data-game="chess">
           <span class="emoji">♟️</span><span>Catur</span><small>2 pemain</small>
         </button>
         <button id="pick-uno" class="game-card" data-game="uno">
-          <span class="emoji">🃏</span><span>UNO</span><small>2–6 pemain</small>
+          <span class="emoji">🃏</span><span>UNO</span><small>2–8 pemain</small>
         </button>
       </div>
 
       <button id="btn-create" class="btn primary big">🚪 Buat Room</button>
+
+      <div class="divider"><span>atau main sendiri</span></div>
+
+      <div class="bot-row">
+        <span>🤖 Lawan Bot (UNO)</span>
+        <select id="bot-size" title="Total pemain termasuk kamu">
+          <option value="2">2 pemain</option>
+          <option value="4" selected>4 pemain</option>
+          <option value="6">6 pemain</option>
+          <option value="8">8 pemain</option>
+        </select>
+        <label class="extreme-toggle" title="Mode Ekstrim: +4 tidak bisa ditumpuk, hanya +2 yang bisa stack">
+          <input type="checkbox" id="bot-extreme"> Mode Ekstrim
+        </label>
+        <button id="btn-bot" class="btn primary">▶️ Mulai Lawan Bot</button>
+      </div>
 
       <div class="divider"><span>atau</span></div>
 
@@ -42,6 +91,7 @@
       <h3>Room yang menunggu</h3>
       <div id="room-list" class="room-list"><p class="muted">Memuat…</p></div>
       <button id="btn-refresh" class="btn ghost small">🔄 Refresh</button>
+      </div><!-- /landing-controls -->
     </div>
   </section>
 
@@ -56,6 +106,13 @@
       </div>
       <h3>Pemain (<span id="lobby-count">0</span>)</h3>
       <ul id="lobby-players" class="player-list"></ul>
+      <div id="lobby-extreme-row" class="extreme-row hidden">
+        <label class="extreme-toggle" title="Mode Ekstrim: +4 tidak bisa ditumpuk, hanya +2 yang bisa stack">
+          <input type="checkbox" id="lobby-extreme"> 🔥 Mode Ekstrim UNO
+          <small class="muted">(+4 tidak bisa ditumpuk)</small>
+        </label>
+        <div id="lobby-extreme-note" class="muted hidden">Hanya host yang bisa mengubah ini</div>
+      </div>
       <div id="chat-box" class="chat-box"></div>
       <div class="chat-row">
         <input id="chat-input" maxlength="200" placeholder="Tulis chat…" autocomplete="off">
@@ -95,14 +152,24 @@
   <!-- ============ UNO ============ -->
   <section id="screen-uno" class="screen hidden">
     <div class="game-bar">
-      <div id="uno-opponents" class="opponents"></div>
-      <div id="uno-timer" class="timer">⏱️ 60</div>
+      <div><strong>🃏 UNO</strong> <span id="uno-extreme-badge" class="extreme-badge hidden">🔥 EKSTRIM</span></div>
+      <div class="game-bar-right">
+        <button id="btn-sound" class="btn ghost small" title="Suara nyala/mati">🔊</button>
+        <div id="uno-timer" class="timer">⏱️ 60</div>
+      </div>
     </div>
     <div id="uno-status" class="status-line"></div>
-    <div class="uno-table">
-      <div id="uno-deck" class="uno-card deck" title="Ambil kartu">🎴<small id="deck-count"></small></div>
-      <div id="uno-discard" class="uno-card"></div>
-      <div id="uno-color-badge" class="color-badge"></div>
+    <div id="uno-arena" class="uno-arena">
+      <div id="uno-ring" class="uno-ring"></div>
+      <div class="uno-table">
+        <div id="uno-deck" class="uno-card deck" title="Ambil kartu">🎴<small id="deck-count"></small></div>
+        <div id="uno-discard" class="uno-card"></div>
+        <div class="uno-badges">
+          <div id="uno-color-badge" class="color-badge"></div>
+          <div id="uno-dir" class="dir-badge" title="Arah putaran">↻</div>
+        </div>
+      </div>
+      <div id="uno-flash" class="uno-flash hidden"></div>
     </div>
     <div class="uno-actions">
       <button id="btn-uno-say" class="btn warning">📢 UNO!</button>
@@ -135,6 +202,7 @@
 
 <div id="toast" class="toast hidden"></div>
 
+<script src="firebase-config.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

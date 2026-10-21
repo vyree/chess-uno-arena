@@ -20,6 +20,16 @@ function validNickname(n) {
   return { ok: true, value: escapeHtml(t) };
 }
 
+// Firebase ID token: optional at this layer (the server enforces its
+// presence when auth is enabled). Format check only; crypto is game/auth.js.
+function validIdToken(t) {
+  if (t === undefined || t === null) return { ok: true, value: null };
+  if (typeof t !== 'string' || t.length < 10 || t.length > 8192) {
+    return { ok: false, error: 'token login tidak valid' };
+  }
+  return { ok: true, value: t };
+}
+
 function validCode(c) {
   if (typeof c !== 'string') return { ok: false, error: 'kode room harus teks' };
   const t = c.trim().toUpperCase();
@@ -62,7 +72,9 @@ const VALIDATORS = {
   hello(d) {
     const n = validNickname(d.nickname);
     if (!n.ok) return n;
-    return { ok: true, data: { nickname: n.value } };
+    const t = validIdToken(d.idToken);
+    if (!t.ok) return t;
+    return { ok: true, data: { nickname: n.value, idToken: t.value } };
   },
   create_room(d) {
     if (!['chess', 'uno'].includes(d.game)) return { ok: false, error: 'game harus chess atau uno' };
@@ -81,9 +93,20 @@ const VALIDATORS = {
     }
     const c = validCode(d.code);
     if (!c.ok) return c;
-    return { ok: true, data: { playerId: d.playerId, code: c.value } };
+    const t = validIdToken(d.idToken);
+    if (!t.ok) return t;
+    return { ok: true, data: { playerId: d.playerId, code: c.value, idToken: t.value } };
   },
-  start_game() { return { ok: true, data: {} }; },
+  start_game(d) {
+    // extreme = UNO Mode Ekstrim toggle set by the host (Misi 2)
+    return { ok: true, data: { extreme: d.extreme === true } };
+  },
+  create_bot_room(d) {
+    if (![2, 4, 6, 8].includes(d.size)) {
+      return { ok: false, error: 'ukuran meja bot harus 2, 4, 6, atau 8 pemain' };
+    }
+    return { ok: true, data: { size: d.size, extreme: d.extreme === true } };
+  },
   chat(d) {
     if (typeof d.text !== 'string') return { ok: false, error: 'chat harus teks' };
     const t = d.text.trim();

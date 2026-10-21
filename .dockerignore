@@ -1,0 +1,8 @@
+node_modules
+test
+*.md
+.git
+firebase-debug.log
+.firebaserc
+firebase.json
+firestore.rules

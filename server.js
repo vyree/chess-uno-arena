@@ -11,11 +11,21 @@ const { WebSocketServer } = require('ws');
 
 const chess = require('./game/chess');
 const uno = require('./game/uno');
+const bot = require('./game/bot');
+const { createVerifier } = require('./game/auth');
 const { RoomManager, MAX_PLAYERS } = require('./game/rooms');
 const { validateMessage } = require('./game/validate');
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
+// Auth gate (Misi 2 Fase 4): active only when a Firebase project is set.
+// Without it the server runs in open dev mode so local tests keep working.
+const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || null;
+const tokenVerifier = FIREBASE_PROJECT_ID ? createVerifier(FIREBASE_PROJECT_ID) : null;
+if (!tokenVerifier) {
+  console.warn('[auth] FIREBASE_PROJECT_ID tidak terisi — gerbang login MATI (mode dev)');
+}
 const TURN_TIMEOUT_MS = 60 * 1000;
+const BOT_DELAY_MS = 900; // bot "thinking" pause so humans can follow the game
 const RECONNECT_GRACE_MS = 60 * 1000;
 const MSG_PER_SEC = 20;
 
@@ -49,7 +59,7 @@ function lobbySnapshot(room, forPlayer) {
     you: forPlayer ? forPlayer.id : null,
     hostId: room.hostId,
     maxPlayers: MAX_PLAYERS[room.game],
-    players: room.players.map((p) => ({ id: p.id, nickname: p.nickname, seat: p.seat })),
+    players: room.players.map((p) => ({ id: p.id, nickname: p.nickname, seat: p.seat, isBot: !!p.isBot })),
   };
 }
 
@@ -60,7 +70,7 @@ function gameSnapshot(room, player) {
     type: 'game_state', code: room.code, game: room.game, status: room.status,
     you: player.id, hostId: room.hostId, deadline: room.deadline,
     players: room.players.map((p) => ({
-      id: p.id, nickname: p.nickname, seat: p.seat,
+      id: p.id, nickname: p.nickname, seat: p.seat, isBot: !!p.isBot,
       color: room.game === 'chess' ? chessColor(p.seat) : undefined,
       connected: p.connected,
     })),
@@ -134,7 +144,7 @@ function onTurnTimeout(room) {
     const u = room.uno;
     if (!u || u.st.over) return;
     const seat = u.st.turn;
-    if (!u.active[seat]) { unoFixTurn(room); startTurnTimer(room); sendGameState(room); return; }
+    if (!u.active[seat]) { unoFixTurn(room); startTurnTimer(room); sendGameState(room); scheduleBotIfNeeded(room); return; }
     if (u.st.pendingDraw > 0) {
       uno.drawCard(u.st, seat);
     } else {
@@ -144,6 +154,7 @@ function onTurnTimeout(room) {
     unoFixTurn(room);
     startTurnTimer(room);
     sendGameState(room);
+    scheduleBotIfNeeded(room);
   }
 }
 
@@ -200,6 +211,12 @@ function handleDisconnect(player) {
   player.socket = null;
   const room = player.roomCode ? rooms.get(player.roomCode) : null;
   if (!room) { players.delete(player.id); return; }
+  if (room.isBotRoom) {
+    // bot room is a solo table: it ends together with its human
+    teardownBotRoom(room);
+    players.delete(player.id);
+    return;
+  }
   if (room.status === 'lobby') {
     rooms.removePlayer(room, player.id);
     players.delete(player.id);
@@ -213,7 +230,7 @@ function handleDisconnect(player) {
 }
 
 // ---------------- game actions ----------------
-function handleStartGame(player, room) {
+function handleStartGame(player, room, data) {
   if (room.hostId !== player.id) { sendError(player.socket, 'Hanya pembuat room yang bisa mulai'); return; }
   if (room.status !== 'lobby') { sendError(player.socket, 'Game sudah berjalan'); return; }
   if (room.game === 'chess') {
@@ -222,8 +239,11 @@ function handleStartGame(player, room) {
     room.status = 'playing';
   } else {
     if (room.players.length < 2) { sendError(player.socket, 'UNO butuh minimal 2 pemain'); return; }
+    // UNO: seat order is shuffled at every game start (Sensei, Misi 2)
+    rooms.shuffleSeats(room);
+    room.unoExtreme = !!(data && data.extreme);
     const n = room.players.length;
-    room.uno = { st: uno.newGame(n), active: new Array(n).fill(true), round: 1 };
+    room.uno = { st: uno.newGame(n, { extreme: room.unoExtreme }), active: new Array(n).fill(true), round: 1 };
     room.scoreBoard = {};
     for (const p of room.players) room.scoreBoard[p.id] = 0;
     room.status = 'playing';
@@ -249,18 +269,10 @@ function handleChessMove(player, room, data) {
   }
 }
 
-function handleUnoPlay(player, room, data) {
+// Shared tail of a successful UNO play (human or bot): scoring on a win,
+// otherwise advance the turn and broadcast the new state + engine events.
+function afterUnoPlay(room, player, r) {
   const u = room.uno;
-  if (room.status !== 'playing' || !u) { sendError(player.socket, 'Game belum berjalan'); return; }
-  if (u.st.turn !== player.seat) { sendError(player.socket, 'Bukan giliranmu'); return; }
-  const isDrawn = u.st.drewThisTurn && u.st.drawnCard === data.cardId;
-  const playFn = isDrawn ? uno.playDrawnCard : uno.playCard;
-  const r = playFn(u.st, player.seat, data.cardId, { saidUno: data.saidUno, wildColor: data.wildColor });
-  if (!r.ok) {
-    const msgs = { 'bukan giliranmu': 'Bukan giliranmu', 'kartu tidak cocok': 'Kartu tidak cocok', 'pilih warna dulu': 'Pilih warna dulu untuk kartu wild', 'kartu tidak ada di tanganmu': 'Kartu tidak ada di tanganmu' };
-    sendError(player.socket, msgs[r.error] || 'Langkah tidak valid');
-    return;
-  }
   clearTurnTimer(room);
   let note = null;
   if (r.penalty) note = `${player.nickname} lupa bilang UNO! Penalti +${r.penalty}`;
@@ -277,13 +289,31 @@ function handleUnoPlay(player, room, data) {
     const payload = gameOverPayload(room, u.st.over);
     payload.points = gained;
     if (note) payload.note = note;
+    if (r.events && r.events.length) payload.events = r.events;
     broadcast(room, payload);
     return;
   }
   unoFixTurn(room);
   startTurnTimer(room);
   sendGameState(room);
+  if (r.events && r.events.length) broadcast(room, { type: 'uno_events', events: r.events });
   if (note) broadcast(room, { type: 'chat', from: 'Sistem', text: note });
+  scheduleBotIfNeeded(room);
+}
+
+function handleUnoPlay(player, room, data) {
+  const u = room.uno;
+  if (room.status !== 'playing' || !u) { sendError(player.socket, 'Game belum berjalan'); return; }
+  if (u.st.turn !== player.seat) { sendError(player.socket, 'Bukan giliranmu'); return; }
+  const isDrawn = u.st.drewThisTurn && u.st.drawnCard === data.cardId;
+  const playFn = isDrawn ? uno.playDrawnCard : uno.playCard;
+  const r = playFn(u.st, player.seat, data.cardId, { saidUno: data.saidUno, wildColor: data.wildColor });
+  if (!r.ok) {
+    const msgs = { 'bukan giliranmu': 'Bukan giliranmu', 'kartu tidak cocok': 'Kartu tidak cocok', 'pilih warna dulu': 'Pilih warna dulu untuk kartu wild', 'kartu tidak ada di tanganmu': 'Kartu tidak ada di tanganmu', 'hanya kartu sejenis yang bisa menumpuk': 'Hanya kartu sejenis yang bisa menumpuk tumpukan ini', 'mode ekstrim: +4 tidak bisa ditumpuk': 'Mode Ekstrim: +4 tidak bisa ditumpuk — ambil kartunya!' };
+    sendError(player.socket, msgs[r.error] || 'Langkah tidak valid');
+    return;
+  }
+  afterUnoPlay(room, player, r);
 }
 
 function handleUnoDraw(player, room) {
@@ -299,6 +329,8 @@ function handleUnoDraw(player, room) {
   unoFixTurn(room);
   startTurnTimer(room);
   sendGameState(room);
+  if (r.events) broadcast(room, { type: 'uno_events', events: r.events });
+  scheduleBotIfNeeded(room);
 }
 
 function handleUnoPass(player, room) {
@@ -310,6 +342,7 @@ function handleUnoPass(player, room) {
   unoFixTurn(room);
   startTurnTimer(room);
   sendGameState(room);
+  scheduleBotIfNeeded(room);
 }
 
 function handleUnoNewRound(player, room) {
@@ -321,21 +354,86 @@ function handleUnoNewRound(player, room) {
     if (p.active === false) { rooms.removePlayer(room, p.id); players.delete(p.id); }
   }
   if (room.players.length < 2) { sendError(player.socket, 'Butuh minimal 2 pemain'); return; }
+  // UNO: seats are re-shuffled every new round (Sensei, Misi 2)
+  rooms.shuffleSeats(room);
   const n = room.players.length;
-  room.uno = { st: uno.newGame(n), active: new Array(n).fill(true), round: room.uno.round + 1 };
+  room.uno = { st: uno.newGame(n, { extreme: room.unoExtreme }), active: new Array(n).fill(true), round: room.uno.round + 1 };
   room.status = 'playing';
   startTurnTimer(room);
   sendGameState(room);
+  scheduleBotIfNeeded(room);
+}
+
+// ---------------- UNO bots ----------------
+// If the current turn belongs to a bot, let it move after a short delay.
+function scheduleBotIfNeeded(room) {
+  if (room.game !== 'uno' || room.status !== 'playing' || !room.uno || room.uno.st.over) return;
+  if (room.botTimer) return;
+  const seat = room.uno.st.turn;
+  if (!room.uno.active[seat]) return;
+  const p = room.players[seat];
+  if (!p || !p.isBot) return;
+  room.botTimer = setTimeout(() => {
+    room.botTimer = null;
+    if (!rooms.get(room.code)) return; // room was torn down meanwhile
+    runBotTurn(room);
+  }, BOT_DELAY_MS);
+}
+
+function runBotTurn(room) {
+  if (room.status !== 'playing' || !room.uno || room.uno.st.over) return;
+  const seat = room.uno.st.turn;
+  const p = room.players[seat];
+  if (!p || !p.isBot) return;
+  const acts = bot.takeTurn(room.uno.st, seat);
+  if (!acts.length) return;
+  const events = acts.flatMap((a) => (a.r && a.r.events) || []);
+  const playAct = [...acts].reverse().find((a) => a.action === 'play' || a.action === 'playDrawn');
+  if (playAct) {
+    afterUnoPlay(room, p, { ...playAct.r, events });
+    return;
+  }
+  // draw-only turn (took the pile / drew a card, maybe passed)
+  clearTurnTimer(room);
+  unoFixTurn(room);
+  startTurnTimer(room);
+  sendGameState(room);
+  if (events.length) broadcast(room, { type: 'uno_events', events });
+  scheduleBotIfNeeded(room);
+}
+
+// A bot room exists only for its human: remove the bots and the room itself.
+function teardownBotRoom(room) {
+  if (room.botTimer) { clearTimeout(room.botTimer); room.botTimer = null; }
+  for (const p of [...room.players]) {
+    if (p.isBot) { rooms.removePlayer(room, p.id); players.delete(p.id); }
+  }
+  rooms.destroy(room.code);
 }
 
 // ---------------- message router ----------------
-function route(ws, type, data) {
+// Returns the verified Firebase uid for a token, or null (error already sent).
+async function checkToken(ws, idToken) {
+  if (!tokenVerifier) return 'dev-mode';
+  if (!idToken) { sendError(ws, 'Silakan masuk dengan Google dulu ya'); return null; }
+  try {
+    const decoded = await tokenVerifier.verify(idToken);
+    return decoded.uid;
+  } catch {
+    sendError(ws, 'Login tidak valid — silakan masuk dengan Google lagi ya');
+    return null;
+  }
+}
+
+async function route(ws, type, data) {
   const player = getPlayerBySocket(ws);
 
   if (type === 'hello') {
     let p = player;
     if (!p) {
-      p = { id: crypto.randomUUID(), nickname: data.nickname, socket: ws, roomCode: null, seat: 0, connected: true, active: true };
+      const uid = await checkToken(ws, data.idToken);
+      if (uid === null) return;
+      p = { id: crypto.randomUUID(), uid, nickname: data.nickname, socket: ws, roomCode: null, seat: 0, connected: true, active: true };
       players.set(p.id, p);
       ws._playerId = p.id;
     } else {
@@ -351,6 +449,11 @@ function route(ws, type, data) {
     const p = players.get(data.playerId);
     const room = rooms.get(data.code);
     if (!p || !room || p.roomCode !== room.code) { sendError(ws, 'Sesi tidak ditemukan, masuk ulang ya'); return; }
+    if (tokenVerifier) {
+      // auth mode: a rejoin must prove the same Google account owns this seat
+      const uid = await checkToken(ws, data.idToken);
+      if (uid === null || uid !== p.uid) { sendError(ws, 'Sesi tidak ditemukan, masuk ulang ya'); return; }
+    }
     const ft = room.forfeitTimers.get(p.id);
     if (ft) { clearTimeout(ft); room.forfeitTimers.delete(p.id); }
     p.socket = ws; p.connected = true; ws._playerId = p.id;
@@ -378,6 +481,33 @@ function route(ws, type, data) {
       sendLobby(r.room);
       return;
     }
+    case 'create_bot_room': {
+      // Solo UNO table: the human plus (size - 1) server-side bots, game starts at once.
+      if (player.roomCode) { sendError(ws, 'Kamu sudah di sebuah room'); return; }
+      const created = rooms.create('uno', player);
+      if (!created.ok) { sendError(ws, created.error); return; }
+      const room = created.room;
+      room.isBotRoom = true;
+      room.unoExtreme = !!data.extreme;
+      for (let i = 0; i < data.size - 1; i++) {
+        const bp = {
+          id: 'bot-' + crypto.randomUUID(), nickname: bot.BOT_NAMES[i % bot.BOT_NAMES.length],
+          isBot: true, socket: null, roomCode: room.code, seat: 0, connected: true, active: true,
+        };
+        players.set(bp.id, bp);
+        rooms.addPlayer(room, bp);
+      }
+      rooms.shuffleSeats(room);
+      const n = room.players.length;
+      room.uno = { st: uno.newGame(n, { extreme: room.unoExtreme }), active: new Array(n).fill(true), round: 1 };
+      room.scoreBoard = {};
+      for (const p of room.players) room.scoreBoard[p.id] = 0;
+      room.status = 'playing';
+      startTurnTimer(room);
+      sendGameState(room);
+      scheduleBotIfNeeded(room);
+      return;
+    }
     case 'list_rooms': {
       send(ws, { type: 'room_list', rooms: rooms.list() });
       return;
@@ -393,6 +523,14 @@ function route(ws, type, data) {
     }
     case 'leave_room': {
       const room = needRoom(); if (!room) return;
+      if (room.isBotRoom) {
+        teardownBotRoom(room);
+        player.roomCode = null;
+        players.delete(player.id);
+        ws._playerId = null;
+        send(ws, { type: 'left_room' });
+        return;
+      }
       if (room.status === 'playing') {
         // anggap forfeit langsung
         const t = room.forfeitTimers.get(player.id);
@@ -410,7 +548,7 @@ function route(ws, type, data) {
     }
     case 'start_game': {
       const room = needRoom(); if (!room) return;
-      handleStartGame(player, room);
+      handleStartGame(player, room, data);
       return;
     }
     case 'chat': {
@@ -519,7 +657,10 @@ wss.on('connection', (ws) => {
       ws._times.push(now);
       const v = validateMessage(raw.toString());
       if (!v.ok) { sendError(ws, v.error); return; }
-      route(ws, v.type, v.data);
+      Promise.resolve(route(ws, v.type, v.data)).catch((e) => {
+        console.error('route error:', e.message);
+        sendError(ws, 'Terjadi kesalahan, coba lagi.');
+      });
     } catch (e) {
       console.error('message handler error:', e.message);
       sendError(ws, 'Terjadi kesalahan, coba lagi.');

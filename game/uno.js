@@ -1,8 +1,11 @@
 'use strict';
 /**
  * UNO engine: standard 108-card rules (simplified per PRD).
- * Simplifications (documented): no wild+4 challenge, no +2/+4 stacking,
+ * Simplifications (documented): no wild+4 challenge.
  * UNO declaration via saidUno flag (forget = draw 2 penalty).
+ * House rules (Misi 2, Sensei 2026-10-21): 2-8 players; STRICT stacking —
+ * +2 stacks only on +2, +4 only on +4 (any color); in extreme mode +4
+ * cannot be stacked at all (deadly), only +2 stacks.
  */
 
 const COLORS = ['red', 'yellow', 'green', 'blue'];
@@ -43,9 +46,12 @@ function shuffle(arr, rand) {
   return arr;
 }
 
-function newGame(numPlayers, rand) {
-  if (numPlayers < 2 || numPlayers > 6) throw new Error('pemain harus 2-6');
-  const deck = shuffle(buildDeck(), rand);
+function newGame(numPlayers, opts) {
+  // opts: { rand, extreme } — a bare function is treated as rand (legacy calls)
+  if (typeof opts === 'function') opts = { rand: opts };
+  opts = opts || {};
+  if (numPlayers < 2 || numPlayers > 8) throw new Error('pemain harus 2-8');
+  const deck = shuffle(buildDeck(), opts.rand);
   const hands = [];
   for (let p = 0; p < numPlayers; p++) hands.push(deck.splice(0, 7));
   // flip starter: must be a number card (bury action cards back into deck)
@@ -60,6 +66,8 @@ function newGame(numPlayers, rand) {
     turn: 0, dir: 1,
     currentColor: starter.color,
     pendingDraw: 0,       // next player draws this many & loses turn
+    pendingKind: null,    // 'draw2' | 'wild4' — which kind started the pending pile
+    extreme: !!opts.extreme, // extreme mode: +4 cannot be stacked (deadly)
     drawnCard: null,      // card drawn this turn (may be played or passed)
     drewThisTurn: false,
     over: null,
@@ -70,8 +78,17 @@ function newGame(numPlayers, rand) {
 
 function topCard(st) { return st.discard[st.discard.length - 1]; }
 
+// While a draw pile is pending, only a same-kind draw card may answer it
+// (strict stacking, any color). Extreme mode: a pending +4 has no answer.
+function isStackCard(st, card) {
+  if (!st.pendingKind || card.kind !== st.pendingKind) return false;
+  if (st.extreme && st.pendingKind === 'wild4') return false;
+  return true;
+}
+
 function canPlay(st, playerIdx, card) {
-  if (st.over || st.turn !== playerIdx || st.pendingDraw > 0 || st.drewThisTurn) return false;
+  if (st.over || st.turn !== playerIdx || st.drewThisTurn) return false;
+  if (st.pendingDraw > 0) return isStackCard(st, card);
   const top = topCard(st);
   if (card.kind === 'wild' || card.kind === 'wild4') return true;
   if (card.color === st.currentColor) return true;
@@ -103,13 +120,23 @@ function playCard(st, playerIdx, cardId, opts) {
   opts = opts || {};
   if (st.over) return { ok: false, error: 'ronde sudah selesai' };
   if (st.turn !== playerIdx) return { ok: false, error: 'bukan giliranmu' };
-  if (st.pendingDraw > 0) return { ok: false, error: 'kamu kena penalti, ambil kartu dulu' };
   if (st.drewThisTurn) return { ok: false, error: 'kamu sudah ambil kartu, mainkan atau lewati' };
   const hand = st.hands[playerIdx];
   const hi = hand.findIndex((c) => c.id === cardId);
   if (hi < 0) return { ok: false, error: 'kartu tidak ada di tanganmu' };
   const card = hand[hi];
-  if (!canPlay(st, playerIdx, card)) return { ok: false, error: 'kartu tidak cocok' };
+  const stacking = st.pendingDraw > 0;
+  if (stacking) {
+    // facing a draw pile: the only legal answer is a same-kind stack card
+    if (st.extreme && st.pendingKind === 'wild4') {
+      return { ok: false, error: 'mode ekstrim: +4 tidak bisa ditumpuk' };
+    }
+    if (card.kind !== st.pendingKind) {
+      return { ok: false, error: 'hanya kartu sejenis yang bisa menumpuk' };
+    }
+  } else if (!canPlay(st, playerIdx, card)) {
+    return { ok: false, error: 'kartu tidak cocok' };
+  }
   if ((card.kind === 'wild' || card.kind === 'wild4') && !COLORS.includes(opts.wildColor)) {
     return { ok: false, error: 'pilih warna dulu' };
   }
@@ -117,6 +144,7 @@ function playCard(st, playerIdx, cardId, opts) {
   hand.splice(hi, 1);
   st.discard.push(card);
   st.currentColor = (card.kind === 'wild' || card.kind === 'wild4') ? opts.wildColor : card.color;
+  const events = [{ type: 'play', player: playerIdx, kind: card.kind }];
 
   // UNO penalty: forgot to declare with 1 card left
   let penalty = 0;
@@ -125,11 +153,12 @@ function playCard(st, playerIdx, cardId, opts) {
     replenish(st);
     for (let i = 0; i < 2 && st.deck.length; i++) hand.push(st.deck.pop());
   }
+  if (hand.length === 1) events.push({ type: 'uno', player: playerIdx });
 
   // win?
   if (hand.length === 0) {
     st.over = { winner: playerIdx, reason: 'habis' };
-    return { ok: true, won: true, penalty };
+    return { ok: true, won: true, penalty, events };
   }
 
   // action effects
@@ -138,10 +167,14 @@ function playCard(st, playerIdx, cardId, opts) {
   else if (card.kind === 'reverse') {
     st.dir *= -1;
     skip = st.hands.length === 2 ? 2 : 1; // reverse = skip in 2-player
-  } else if (card.kind === 'draw2') st.pendingDraw = 2;
-  else if (card.kind === 'wild4') st.pendingDraw = 4;
+  } else if (card.kind === 'draw2' || card.kind === 'wild4') {
+    // start a new pile or stack onto the pending one (strict: same kind only)
+    st.pendingDraw += card.kind === 'draw2' ? 2 : 4;
+    st.pendingKind = card.kind;
+    if (stacking) events.push({ type: 'stack', player: playerIdx, total: st.pendingDraw });
+  }
   advanceTurn(st, skip);
-  return { ok: true, penalty };
+  return { ok: true, penalty, events };
 }
 
 // Draw 1 card. If pendingDraw > 0, draws the penalty pile and loses turn.
@@ -155,15 +188,16 @@ function drawCard(st, playerIdx) {
   if (st.pendingDraw > 0) {
     const n = st.pendingDraw;
     st.pendingDraw = 0;
+    st.pendingKind = null;
     for (let i = 0; i < n && st.deck.length; i++) st.hands[playerIdx].push(st.deck.pop());
     advanceTurn(st, 1);
-    return { ok: true, drew: n, lostTurn: true };
+    return { ok: true, drew: n, lostTurn: true, events: [{ type: 'drawPenalty', player: playerIdx, n }] };
   }
   const card = st.deck.pop();
   st.hands[playerIdx].push(card);
   st.drewThisTurn = true;
   st.drawnCard = card.id;
-  return { ok: true, drew: 1, card, playable: canPlayAfterDraw(st, playerIdx, card) };
+  return { ok: true, drew: 1, card, playable: canPlayAfterDraw(st, playerIdx, card), events: [{ type: 'draw', player: playerIdx, n: 1 }] };
 }
 
 function canPlayAfterDraw(st, playerIdx, card) {
@@ -227,6 +261,8 @@ function toClient(st, playerIdx) {
     turn: st.turn,
     dir: st.dir,
     pendingDraw: st.pendingDraw,
+    pendingKind: st.pendingKind,
+    extreme: st.extreme,
     drewThisTurn: st.turn === playerIdx ? st.drewThisTurn : false,
     deckCount: st.deck.length,
     over: st.over,
@@ -236,6 +272,6 @@ function toClient(st, playerIdx) {
 }
 
 module.exports = {
-  COLORS, buildDeck, shuffle, newGame, canPlay, playCard, drawCard,
+  COLORS, buildDeck, shuffle, newGame, canPlay, isStackCard, playCard, drawCard,
   passTurn, playDrawnCard, scoreRound, cardPoints, toClient, topCard,
 };

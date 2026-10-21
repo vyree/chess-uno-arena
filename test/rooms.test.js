@@ -31,11 +31,26 @@ test('join: penuh ditolak, nickname ganda didedupe', () => {
   assert.equal(r3.ok, false);
 });
 
-test('uno muat 6 pemain', () => {
+test('uno muat 8 pemain', () => {
   const rm = new RoomManager();
   const { room } = rm.create('uno', mkPlayer('p1', 'A'));
-  for (let i = 2; i <= 6; i++) assert.equal(rm.addPlayer(room, mkPlayer('p' + i, 'P' + i)).ok, true);
-  assert.equal(rm.addPlayer(room, mkPlayer('p7', 'P7')).ok, false);
+  for (let i = 2; i <= 8; i++) assert.equal(rm.addPlayer(room, mkPlayer('p' + i, 'P' + i)).ok, true);
+  assert.equal(rm.addPlayer(room, mkPlayer('p9', 'P9')).ok, false);
+});
+
+test('shuffleSeats: permutasi valid, seat rapat, urutan berubah', () => {
+  const rm = new RoomManager();
+  const { room } = rm.create('uno', mkPlayer('p1', 'A'));
+  for (let i = 2; i <= 6; i++) rm.addPlayer(room, mkPlayer('p' + i, 'P' + i));
+  const before = room.players.map((p) => p.id).join(',');
+  let changed = false;
+  for (let t = 0; t < 30 && !changed; t++) {
+    rm.shuffleSeats(room);
+    assert.deepEqual(room.players.map((p) => p.seat), [0, 1, 2, 3, 4, 5]);
+    assert.deepEqual([...room.players.map((p) => p.id)].sort(), ['p1', 'p2', 'p3', 'p4', 'p5', 'p6']);
+    if (room.players.map((p) => p.id).join(',') !== before) changed = true;
+  }
+  assert.equal(changed, true, 'urutan tidak pernah berubah dalam 30x shuffle');
 });
 
 test('removePlayer: seat dirapatkan, host pindah, room kosong terhapus', () => {

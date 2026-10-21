@@ -6,7 +6,7 @@
 const crypto = require('crypto');
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I/L
-const MAX_PLAYERS = { chess: 2, uno: 6 };
+const MAX_PLAYERS = { chess: 2, uno: 8 };
 
 function genCode(existing) {
   let code;
@@ -82,6 +82,19 @@ class RoomManager {
       return true;
     }
     return true;
+  }
+
+  // Shuffle seat order (UNO: at game start and again every new round).
+  // rand is injectable for tests; seat indexes are reassigned to match.
+  shuffleSeats(room, rand) {
+    const r = rand || Math.random;
+    const a = room.players;
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(r() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    a.forEach((p, idx) => { p.seat = idx; });
+    return room;
   }
 
   destroy(code) {

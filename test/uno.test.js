@@ -32,9 +32,9 @@ test('newGame: 7 kartu per pemain, starter kartu angka', () => {
   assert.equal(st.turn, 0);
 });
 
-test('newGame menolak jumlah pemain di luar 2-6', () => {
-  assert.throws(() => U.newGame(1), /2-6/);
-  assert.throws(() => U.newGame(7), /2-6/);
+test('newGame menolak jumlah pemain di luar 2-8', () => {
+  assert.throws(() => U.newGame(1), /2-8/);
+  assert.throws(() => U.newGame(9), /2-8/);
 });
 
 test('canPlay: cocok warna / angka / simbol / wild', () => {
