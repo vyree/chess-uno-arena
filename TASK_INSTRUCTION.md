@@ -139,10 +139,11 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
   https://fir-pro2-d77c3.web.app; server LIVE di
   https://chess-uno-arena-production.up.railway.app (auto-deploy GitHub,
   commit 18c5e95); terverifikasi halaman baru di kedua URL, upgrade
-  WebSocket → 101, rules RTDB menolak akses anonim. CATATAN: env
-  FIREBASE_PROJECT_ID di Railway belum diisi (perlu dashboard Railway
-  Sensei) — selama kosong server berjalan mode terbuka; gerbang login
-  client tetap memaksa login Google.
+  WebSocket → 101, rules RTDB menolak akses anonim. Env
+  FIREBASE_PROJECT_ID SUDAH diisi Sensei di dashboard Railway
+  (21 Okt 2026, service redeploy otomatis) — server kini mode AUTH
+  penuh; perilaku penolakan token sudah terverifikasi pada kode yang
+  sama di uji lokal Fase 4 (3/3 PASS).
 
 ### Asumsi & desain Fase 4 (ditulis sebelum implementasi — AGENTS.md §1)
 
