@@ -11,10 +11,10 @@
   --color-text-muted: #6b7c93;
   --color-board-light: #f0d9b5;
   --color-board-dark: #b58863;
-  --color-uno-red: #e05c5c;
-  --color-uno-yellow: #f2c14e;
-  --color-uno-green: #3fae6a;
-  --color-uno-blue: #5b8def;
+  --color-uno-red: #d92323;
+  --color-uno-yellow: #e69c00;
+  --color-uno-green: #159947;
+  --color-uno-blue: #2266b8;
   --radius-sm: 6px;
   --radius-md: 12px;
   --radius-lg: 20px;
@@ -224,19 +224,50 @@ input:focus { outline: none; border-color: var(--color-primary); }
   .uno-flash.pop { animation-duration: .01s; }
 }
 .uno-card {
-  width: 84px; height: 120px; border-radius: var(--radius-md);
+  width: 84px; height: 120px; border-radius: 10px;
+  border: 3px solid #fff;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   font-size: 30px; font-weight: 800; color: #fff; cursor: pointer;
   box-shadow: 0 3px 10px rgba(0,0,0,.25); user-select: none; position: relative;
-  text-shadow: 0 2px 4px rgba(0,0,0,.4);
+}
+/* classic face: corner values + tilted white oval with the big value */
+.uno-card .cnr {
+  position: absolute; font-style: normal; font-weight: 800; line-height: 1;
+  font-size: .44em; text-shadow: 0 1px 2px rgba(0,0,0,.35); z-index: 2;
+}
+.uno-card .cnr.tl { top: 5px; left: 6px; }
+.uno-card .cnr.br { bottom: 5px; right: 6px; transform: rotate(180deg); }
+.uno-card .oval {
+  width: 84%; height: 56%; background: #fff; border-radius: 50%;
+  transform: rotate(-22deg);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,.05);
+}
+.uno-card .oval .val { transform: rotate(22deg); font-size: .92em; }
+.uno-card.red .val { color: var(--color-uno-red); }
+.uno-card.yellow .val { color: var(--color-uno-yellow); }
+.uno-card.green .val { color: var(--color-uno-green); }
+.uno-card.blue .val { color: var(--color-uno-blue); }
+.uno-card .motif {
+  width: 56%; height: 74%; border-radius: 5px; transform: rotate(22deg);
+  background: conic-gradient(from 45deg,
+    var(--color-uno-red) 0 25%, var(--color-uno-blue) 0 50%,
+    var(--color-uno-yellow) 0 75%, var(--color-uno-green) 0);
+}
+.uno-card .mini-motif {
+  display: inline-block; width: 11px; height: 11px; border-radius: 50%;
+  background: conic-gradient(from 45deg,
+    var(--color-uno-red) 0 25%, var(--color-uno-blue) 0 50%,
+    var(--color-uno-yellow) 0 75%, var(--color-uno-green) 0);
 }
 .uno-card small { font-size: 11px; font-weight: 600; }
 .uno-card.red { background: var(--color-uno-red); }
 .uno-card.yellow { background: var(--color-uno-yellow); }
 .uno-card.green { background: var(--color-uno-green); }
 .uno-card.blue { background: var(--color-uno-blue); }
-.uno-card.wild { background: linear-gradient(135deg, var(--color-uno-red) 25%, var(--color-uno-yellow) 25%, var(--color-uno-yellow) 50%, var(--color-uno-green) 50%, var(--color-uno-green) 75%, var(--color-uno-blue) 75%); }
+.uno-card.wild { background: #1c1c1e; }
 .uno-card.deck { background: #3a3f4d; cursor: pointer; }
+.uno-card.deck small { position: absolute; bottom: 4px; left: 0; right: 0; text-align: center; }
 .uno-card.playable { outline: 3px solid var(--color-success); }
 .color-badge {
   width: 34px; height: 34px; border-radius: 50%;
@@ -244,8 +275,21 @@ input:focus { outline: none; border-color: var(--color-primary); }
 }
 .uno-actions { display: flex; gap: 8px; justify-content: center; margin-bottom: 6px; }
 .uno-actions .btn.armed { background: var(--color-success); color: #fff; }
-.uno-hand { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 10px; }
-.uno-hand .uno-card { width: 64px; height: 92px; font-size: 22px; }
+/* hand: flat side-overlapping row, left to right, no fan/tilt
+   (Sensei's request, 2026-10-21) */
+.uno-hand {
+  display: flex; flex-wrap: nowrap; justify-content: flex-start;
+  overflow-x: auto; scrollbar-width: thin;
+  padding: 16px 8px 8px; margin-bottom: 2px;
+}
+.uno-hand .uno-card {
+  width: 62px; height: 90px; font-size: 21px;
+  flex: 0 0 auto; margin-left: -24px;
+  transition: transform .12s ease;
+}
+.uno-hand .uno-card:first-child { margin-left: auto; }
+.uno-hand .uno-card:last-child { margin-right: auto; }
+.uno-hand .uno-card:hover { transform: translateY(-12px); z-index: 6; }
 .uno-hand .uno-card:not(.playable) { filter: saturate(.55); }
 
 /* modal & toast */

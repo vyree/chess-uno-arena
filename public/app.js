@@ -122,6 +122,7 @@ function route(m) {
     case 'game_over': onGameOver(m); break;
     case 'chat': addChat(m.from, m.text); break;
     case 'left_room':
+      hideModal();
       S.roomCode = null; clearSession(); showScreen('screen-landing'); refreshRooms();
       break;
     case 'error':
@@ -299,6 +300,22 @@ function cardClass(c) {
   return c.color || '';
 }
 
+// Classic card face (Sensei's reference, 2026-10-21): white tilted oval in
+// the middle with the big value, small values in the top-left and the
+// bottom-right (flipped) corners; wilds carry the 4-color motif instead.
+function cardHTML(c) {
+  const label = cardLabel(c);
+  if (c.kind === 'wild' || c.kind === 'wild4') {
+    const corner = c.kind === 'wild4' ? '+4' : '<span class="mini-motif"></span>';
+    return `<i class="cnr tl">${corner}</i>`
+      + '<span class="oval"><span class="motif"></span></span>'
+      + `<i class="cnr br">${corner}</i>`;
+  }
+  return `<i class="cnr tl">${label}</i>`
+    + `<span class="oval"><span class="val">${label}</span></span>`
+    + `<i class="cnr br">${label}</i>`;
+}
+
 function renderUno(m) {
   const st = m.state;
   const me = m.players.find((p) => p.id === m.you);
@@ -318,7 +335,7 @@ function renderUno(m) {
   // table
   const disc = $('uno-discard');
   disc.className = 'uno-card ' + cardClass(st.top);
-  disc.innerHTML = `<span>${cardLabel(st.top)}</span><small>${UNO_COLORS[st.currentColor] || ''}</small>`;
+  disc.innerHTML = cardHTML(st.top);
   $('deck-count').textContent = st.deckCount + ' kartu';
   $('uno-color-badge').style.background = colorHex(st.currentColor);
   const dirEl = $('uno-dir');
@@ -334,7 +351,7 @@ function renderUno(m) {
   myHand.forEach((c, i) => {
     const el = document.createElement('div');
     el.className = 'uno-card ' + cardClass(c) + (st.playable && st.playable[i] ? ' playable' : '');
-    el.innerHTML = `<span>${cardLabel(c)}</span>`;
+    el.innerHTML = cardHTML(c);
     el.onclick = () => onUnoCardClick(c);
     hand.appendChild(el);
   });
@@ -346,7 +363,7 @@ function renderUno(m) {
 }
 
 function colorHex(c) {
-  return { red: '#e05c5c', yellow: '#f2c14e', green: '#3fae6a', blue: '#5b8def' }[c] || '#999';
+  return { red: '#d92323', yellow: '#e69c00', green: '#159947', blue: '#2266b8' }[c] || '#999';
 }
 
 function onUnoCardClick(card) {
@@ -489,7 +506,7 @@ function flyCard(fromEl, toEl, card, back) {
   const b = toEl.getBoundingClientRect();
   const ghost = document.createElement('div');
   ghost.className = 'uno-card fly ' + (back ? 'deck' : cardClass(card || {}));
-  ghost.innerHTML = `<span>${back ? '🎴' : (card ? cardLabel(card) : '?')}</span>`;
+  ghost.innerHTML = back ? '<span class="oval"><span class="val">🎴</span></span>' : (card ? cardHTML(card) : '?');
   ghost.style.left = (a.left + a.width / 2 - 24) + 'px';
   ghost.style.top = (a.top + a.height / 2 - 34) + 'px';
   document.body.appendChild(ghost);

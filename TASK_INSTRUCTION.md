@@ -210,3 +210,16 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
   Chromium (kontrol terkunci, nick-block tersembunyi, nol exception JS).
   Yang belum bisa dibuktikan dari sandbox: login Google + Firestore
   sungguhan (egress browser sandbox memblokir gstatic; DB belum ada).
+
+## Update pasca-rilis (21 Okt 2026, permintaan Sensei)
+
+- [x] Bug Keluar stuck: jalur leave_room saat status 'playing' (forfeit)
+  tidak pernah mengirim left_room — direstrukturasi: SEMUA jalur keluar
+  kini membersihkan pemain & selalu membalas left_room; client juga
+  menyembunyikan modal saat left_room tiba. Terverifikasi skrip repro
+  (bot room ✓, room teman tengah main: false → true).
+- [x] Hand UNO: kartu ditumpuk menyamping RATA kiri→kanan (overlap -24px,
+  tanpa miring/melingkar), hover terangkat; bisa scroll menyamping.
+- [x] Desain kartu gaya klasik (referensi Sensei): oval putih miring di
+  tengah + angka besar sewarna kartu, angka kecil pojok kiri-atas &
+  kanan-bawah (terbalik), wild hitam bermotif 4 warna, palet warna klasik.

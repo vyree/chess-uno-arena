@@ -525,25 +525,23 @@ async function route(ws, type, data) {
       const room = needRoom(); if (!room) return;
       if (room.isBotRoom) {
         teardownBotRoom(room);
-        player.roomCode = null;
         players.delete(player.id);
-        ws._playerId = null;
-        send(ws, { type: 'left_room' });
-        return;
-      }
-      if (room.status === 'playing') {
+      } else if (room.status === 'playing') {
         // anggap forfeit langsung
         const t = room.forfeitTimers.get(player.id);
         if (t) { clearTimeout(t); room.forfeitTimers.delete(player.id); }
         forfeitPlayer(room, player.id);
       } else {
         rooms.removePlayer(room, player.id);
-        player.roomCode = null;
         players.delete(player.id);
-        ws._playerId = null;
         if (rooms.get(room.code)) sendLobby(room);
-        send(ws, { type: 'left_room' });
       }
+      // EVERY path releases the leaver and confirms it, so the client can
+      // always return to the main menu (bug fix 2026-10-21: the forfeit
+      // path previously never sent left_room and the player got stuck).
+      player.roomCode = null;
+      ws._playerId = null;
+      send(ws, { type: 'left_room' });
       return;
     }
     case 'start_game': {
