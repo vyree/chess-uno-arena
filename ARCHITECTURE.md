@@ -11,9 +11,9 @@
 | Language | JavaScript (Node.js, CommonJS) | Node 24 |
 | Realtime | `ws` (WebSocket) | pinned in package.json |
 | Frontend | HTML + CSS + vanilla JS (no framework) | — |
-| Database | none (in-memory rooms; auto-delete saat kosong) | — |
-| Auth | none (nickname saja, tanpa login — sesuai PRD) | — |
-| Hosting | localhost (belum ada VPS — JANGAN deploy publik) | — |
+| Database | Realtime Database (Firebase) — HANYA profil/nickname/statistik; state game tetap in-memory | — |
+| Auth | Firebase Auth (Google) + verifikasi ID token di server (`game/auth.js`, tanpa dependensi baru) | — |
+| Hosting | Firebase Hosting (client) + Railway (server WebSocket) — keputusan Sensei 2026-10-21 | — |
 | Test | `node:test` bawaan Node (tanpa dependensi tambahan) | — |
 
 ## 2. Folder Structure
@@ -28,7 +28,9 @@
 │   ├── chess.js          # engine catur: state, legal moves, validasi, status
 │   ├── uno.js            # engine UNO: deck, giliran, aksi, skor
 │   ├── rooms.js          # RoomManager: buat/gabung/keluar, kode, cleanup
-│   └── validate.js       # validasi skema pesan + sanitasi (satu pintu)
+│   ├── validate.js       # validasi skema pesan + sanitasi (satu pintu)
+│   ├── bot.js            # AI bot UNO server-side (Misi 2 Fase 2)
+│   └── auth.js           # verifikasi ID token Firebase manual (Misi 2 Fase 4)
 ├── public/
 │   ├── index.html        # semua layar (landing/lobby/catur/uno)
 │   ├── style.css         # design tokens sbg CSS variables
@@ -47,7 +49,18 @@
 
 ## 3. Database Schema
 
-Tidak ada database. State in-memory:
+State permainan live: in-memory server (rooms auto-delete saat kosong).
+
+Profil persisten di Realtime Database (ditulis client terautentikasi,
+dijaga `database.rules.json`):
+
+```
+users/{uid}
+├── nickname: string (1–16)
+├── stats: { played, won, points }   # angka non-negatif, update via increment
+├── createdAt: server timestamp
+└── lastPlayedAt: server timestamp
+```
 
 | Struktur | Isi | Lifecycle |
 |---|---|---|

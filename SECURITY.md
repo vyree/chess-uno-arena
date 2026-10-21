@@ -1,13 +1,18 @@
 # SECURITY.md — Protection Protocols
 
 > Security rules the AI must NEVER violate under any circumstance.
-> Disesuaikan untuk proyek ini: tanpa auth/DB/pembayaran (out of scope PRD).
+> Scope diperbarui oleh Misi 2 (keputusan Sensei, 2026-10-21): login
+> Google + database profil + deploy publik kini IN scope.
 
 ## 1. Credentials & Secrets
 
 - **STRICTLY FORBIDDEN**: API key/password/token di kode, komentar, atau file commit.
-- Proyek ini tidak butuh secret sama sekali; satu-satunya env var adalah `PORT`.
-- Sediakan `.env.example` (hanya `PORT=3000`).
+- Proyek ini tetap TIDAK punya secret server-side. Env var: `PORT` dan
+  `FIREBASE_PROJECT_ID` (pengenal project publik, bukan secret — mengaktifkan
+  verifikasi token login di server).
+- `public/firebase-config.js` berisi konfigurasi web Firebase (apiKey web
+  adalah identifier publik bawaan Firebase, BUKAN secret) — keamanan data
+  dijaga oleh rules database, bukan dengan menyembunyikan config ini.
 - FORBIDDEN me-log isi pesan sensitif; log hanya event (bukan isi chat penuh bila tidak perlu).
 
 ## 2. Input Validation
@@ -18,7 +23,16 @@
 
 ## 3. Authentication & Authorization
 
-- Tanpa login sesuai PRD. Otorisasi berbasis `playerId` (UUID server-side) + kepemilikan room:
+- **Login Google wajib** (Firebase Auth) sebagai gerbang semua game.
+  Server memverifikasi ID token Firebase secara kriptografis
+  (`game/auth.js`: tanda tangan RS256 vs sertifikat x509 Google, cek
+  issuer/audience/expiry) — aktif bila env `FIREBASE_PROJECT_ID` terisi;
+  tanpa env server berjalan mode dev TERBUKA (khusus lokal) + peringatan log.
+- **Identitas in-game HANYA nickname buatan sendiri.** Nama, email, dan
+  foto Google DILARANG ditampilkan/dikirim ke pemain lain dalam bentuk
+  apa pun. Server mengikat nickname dari klaim token terverifikasi.
+- Rejoin kursi di mode auth wajib membuktikan uid yang sama dengan pemilik kursi.
+- Otorisasi aksi berbasis `playerId` (UUID server-side) + kepemilikan room:
   - Pemain hanya bisa aksi di room-nya sendiri.
   - Hanya giliran pemain yang bersangkutan yang diterima (cek `state.turn`).
   - Aksi host (mulai game) hanya dari pembuat room.
@@ -32,7 +46,14 @@
 
 ## 5. Database & Queries
 
-- Tidak ada database. Tidak ada query string.
+- **Realtime Database** (Firebase) hanya menyimpan profil: `users/{uid}`
+  (nickname + statistik). State permainan live TIDAK disimpan di database —
+  tetap di memori server.
+- Server TIDAK PERNAH menyentuh database. Client menulis profilnya sendiri
+  di bawah `database.rules.json`: cabang `users/{uid}` hanya bisa dibaca &
+  ditulis pemilik uid tersebut; nickname terverifikasi string 1–16 karakter;
+  statistik angka non-negatif; semua akses lain ditolak (terverifikasi:
+  akses anonim → "Permission denied").
 
 ## 6. Pre-Merge Checklist
 
