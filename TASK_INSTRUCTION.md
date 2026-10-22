@@ -269,7 +269,9 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
    di bagian Sistem Reaksi & Penghargaan di bawah).
 4. **Jatah PASS**: tiap pemain 1x per game melewati pertanyaan tanpa
    hukuman (jaga kenyamanan; soal dikurasi sopan, tidak vulgar).
-5. **Akhir game**: 2 putaran penuh (atau setting host) → podium gelar
+5. **Akhir game**: total pertanyaan habis — **10 untuk room 2–5 pemain,
+   16 untuk room 6–8 pemain** (keputusan Sensei 22 Okt 2026; BUKAN lagi
+   pemain × putaran, host tidak memilih jumlah putaran) → podium gelar
    seru-seruan: Paling Greget, Paling Ngakak, Paling Deep (berdasarkan
    reaksi terbanyak per jenis). Statistik (main + gelar) masuk progres
    lokal localStorage.
@@ -307,7 +309,8 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
 
 ## Asumsi terbuka (boleh dikoreksi Sensei kapan pun)
 
-- Timer jawaban 2 menit; 1 game = 2 putaran; reaksi 4 jenis;
+- Timer jawaban 2 menit; 1 game = 10 pertanyaan (room 2–5 pemain) atau
+  16 pertanyaan (room 6–8 pemain); reaksi 4 jenis;
   jatah PASS 1x per pemain per game; gelar dihitung dari reaksi.
 
 ## Mekanik ASK + Notifikasi (keputusan Sensei, 22 Okt 2026 — dari sketsa UI Sensei)
@@ -358,7 +361,9 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
   untuk: giliran siapa, kartu dibuka, ASK diklaim, waktu habis, gelar di
   podium. (Pola toast/banner mengikuti sistem notifikasi arena.)
 - Elemen sketsa Sensei yang dibaca Arona (22 Okt): indikator "PUTARAN KE
-  1/16" = giliran berjalan dari total (jumlah pemain × putaran); pemain
+  1/16" = pertanyaan berjalan dari total game (total dikunci Sensei
+  22 Okt: 16 HANYA untuk room 6–8 pemain; room 2–5 pemain totalnya 10,
+  tampil "1/10"); pemain
   divisualkan duduk melingkar + jarum penunjuk di tengah; tumpukan kartu
   menampilkan sisa soal (100/100); panel reaksi 4 wajah ekspresi.
 - **Lingkaran roda ADAPTIF (Sensei, 22 Okt)**: tata letak pemain di

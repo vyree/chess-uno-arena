@@ -17,7 +17,8 @@
 
 const MIN_PLAYERS_TRUTH = 2;
 const MAX_PLAYERS_TRUTH = 8;
-const DEFAULT_ROUNDS = 2;
+const QUESTIONS_TOTAL_SMALL = 10; // rooms of 2-5 players (Sensei)
+const QUESTIONS_TOTAL_LARGE = 16; // rooms of 6-8 players (Sensei)
 const ASK_PER_GAME = 2;
 const PASS_PER_GAME = 1;
 const REACT_MAX_PER_ANSWER = 2;
@@ -61,10 +62,10 @@ function createGame(opts) {
   if (questions.length < ids.length) {
     return { ok: false, error: 'bank soal terlalu sedikit' };
   }
-  const rounds = o.rounds === undefined ? DEFAULT_ROUNDS : o.rounds;
-  if (!Number.isInteger(rounds) || rounds < 1 || rounds > 5) {
-    return { ok: false, error: 'putaran harus 1-5' };
-  }
+  // Total questions are fixed by room size (Sensei, 22 Okt): 2-5
+  // players -> 10 questions, 6-8 players -> 16. No host round setting.
+  const totalTurns = ids.length <= 5
+    ? QUESTIONS_TOTAL_SMALL : QUESTIONS_TOTAL_LARGE;
   const rand = typeof o.rand === 'function' ? o.rand : Math.random;
   const state = {
     phase: 'ask_window', // ask_window -> answering -> reacting -> ... -> finished
@@ -72,11 +73,10 @@ function createGame(opts) {
       id, points: 0, askLeft: ASK_PER_GAME, passLeft: PASS_PER_GAME,
       askedCount: 0, // hidden fairness counter — never leaves the server
     })),
-    rounds,
     round: 1,
     lastAnswererId: null,
     turnNumber: 1,
-    totalTurns: ids.length * rounds,
+    totalTurns,
     deck: shuffle(questions, rand),
     deckDrawn: 0,
     current: blankCurrent(),
@@ -192,7 +192,7 @@ function closeTurn(state, passed) {
     return { ok: true, events: [{ type: 'game_over', awards: state.awards }] };
   }
   state.turnNumber += 1;
-  state.round = Math.floor((state.turnNumber - 1) / state.players.length) + 1;
+  state.round = state.turnNumber; // each spin IS a "putaran" (Sensei)
   state.current = blankCurrent();
   const next = pickAnswerer(state);
   if (next === null) { // everyone hit the hidden cap: end the game early
@@ -312,7 +312,8 @@ function snapshot(state) {
 }
 
 module.exports = {
-  MIN_PLAYERS_TRUTH, MAX_PLAYERS_TRUTH, DEFAULT_ROUNDS,
+  MIN_PLAYERS_TRUTH, MAX_PLAYERS_TRUTH,
+  QUESTIONS_TOTAL_SMALL, QUESTIONS_TOTAL_LARGE,
   ASK_PER_GAME, PASS_PER_GAME, REACT_MAX_PER_ANSWER,
   REACTIONS, REACTION_POINTS, KURANG_GREGET_PENALTY, MAX_QUESTIONS_PER_PLAYER,
   SPIN_MS, ASK_WINDOW_MS, ANSWER_MS,

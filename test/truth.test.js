@@ -40,7 +40,10 @@ test('createGame menolak jumlah pemain di luar 2-8', () => {
   assert.equal(T.createGame({ playerIds: ['a', 'a'], questions: BANK }).ok, false);
   assert.equal(T.createGame({ playerIds: ['a', 'b'], questions: ['satu?'] }).ok, false);
   const s = newGame(['a', 'b']);
-  assert.equal(s.totalTurns, 4); // 2 pemain x 2 putaran
+  assert.equal(s.totalTurns, 10); // 2-5 pemain -> 10 pertanyaan (Sensei)
+  assert.equal(newGame(['a', 'b', 'c', 'd', 'e']).totalTurns, 10);
+  assert.equal(newGame(['a', 'b', 'c', 'd', 'e', 'f']).totalTurns, 16);
+  assert.equal(newGame(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']).totalTurns, 16);
   assert.equal(T.snapshot(s).deckLeft, BANK.length);
   assert.equal(s.phase, 'ask_window');
 });
@@ -48,7 +51,7 @@ test('createGame menolak jumlah pemain di luar 2-8', () => {
 test('roda acak + cooldown: penjawab tidak pernah sama dua giliran berurutan', () => {
   const s = newGame(['a', 'b', 'c', 'd']);
   let prev = null;
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 10; i++) {
     const cur = T.snapshot(s).current.answererId;
     assert.notEqual(cur, prev); // yang baru menjawab duduk dulu 1 putaran
     prev = cur;
@@ -56,7 +59,7 @@ test('roda acak + cooldown: penjawab tidak pernah sama dua giliran berurutan', (
   }
   assert.equal(s.phase, 'finished');
   assert.ok(s.awards);
-  assert.equal(s.history.length, 8);
+  assert.equal(s.history.length, 10);
 });
 
 test('roda 2 pemain: cooldown memaksa bergantian', () => {
@@ -74,12 +77,16 @@ test('roda 2 pemain: cooldown memaksa bergantian', () => {
 test('batas tersembunyi: maksimal 5 pertanyaan per pemain per sesi', () => {
   // rand selalu 0 -> selalu ambil kandidat pertama yang memenuhi syarat
   const r = T.createGame({ playerIds: ['a', 'b', 'c'],
-    questions: BANK, rounds: 5, rand: () => 0 });
+    questions: BANK, rand: () => 0 });
   assert.equal(r.ok, true);
   const s = r.state;
   while (s.phase !== 'finished') playSimpleTurn(s);
-  assert.equal(s.history.length, 15);
-  for (const p of s.players) assert.equal(p.askedCount, 5); // tidak lebih
+  assert.equal(s.history.length, 10); // 3 pemain -> total 10 pertanyaan
+  // a & b bergantian sampai menyentuh batas 5x; c tidak pernah terpilih
+  // karena rand kaku — yang penting: TIDAK ADA yang melewati 5x
+  const counts = Object.fromEntries(s.players.map((p) => [p.id, p.askedCount]));
+  assert.deepEqual(counts, { a: 5, b: 5, c: 0 });
+  for (const p of s.players) assert.ok(p.askedCount <= 5);
   // aturan ini rahasia: snapshot ke client TIDAK memuat askedCount
   for (const p of T.snapshot(s).players) {
     assert.equal('askedCount' in p, false);
@@ -103,7 +110,7 @@ test('ASK: eksklusif, mengunci kartu, hanya penanya yang bisa kirim soal', () =>
 });
 
 test('ASK: jatah 2x per pemain per game', () => {
-  const s = newGame(['a', 'b', 'c'], { rounds: 3 });
+  const s = newGame(['a', 'b', 'c']);
   let attempts = 0;
   while (s.phase !== 'finished') {
     const ans = T.snapshot(s).current.answererId;
@@ -142,7 +149,7 @@ test('kartu: soal tidak berulang dan sisa tumpukan berkurang', () => {
 });
 
 test('PASS memakai jatah; timeout dianggap pass tanpa memakan jatah', () => {
-  const s = newGame(['a', 'b'], { rounds: 2 });
+  const s = newGame(['a', 'b']);
   // giliran 1: pass manual
   let ans = T.snapshot(s).current.answererId;
   assert.equal(T.openCard(s).ok, true);
@@ -151,7 +158,7 @@ test('PASS memakai jatah; timeout dianggap pass tanpa memakan jatah', () => {
   assert.equal(T.snapshot(s).players.find((p) => p.id === ans).passLeft, 0);
   // jalan terus sampai pemain yang sama kena lagi & mencoba pass lagi
   let guard = 0;
-  while (s.phase !== 'finished' && guard++ < 8) {
+  while (s.phase !== 'finished' && guard++ < 20) {
     const cur = T.snapshot(s).current.answererId;
     assert.equal(T.openCard(s).ok, true);
     if (cur === ans) {
@@ -192,7 +199,7 @@ test('reaksi: batas 2 per pemain, poin benar, kurang greget -5 sekali saja', () 
 });
 
 test('penghargaan akhir: top scorer + jawaban terbaik per kategori', () => {
-  const s = newGame(['a', 'b', 'c'], { rounds: 1 });
+  const s = newGame(['a', 'b', 'c']);
   const script = [
     (ans, o) => { T.react(s, o[0], 'lucu'); T.react(s, o[1], 'lucu'); },
     (ans, o) => { T.react(s, o[0], 'nangis'); T.react(s, o[1], 'nangis'); },
@@ -207,6 +214,10 @@ test('penghargaan akhir: top scorer + jawaban terbaik per kategori', () => {
     script[i](ans, others(s, ans));
     assert.equal(T.endTurn(s).ok, true);
   }
+  // sisa giliran (total 10) dimainkan polos tanpa reaksi: penghargaan
+  // dari 3 jawaban pertama tidak berubah
+  while (s.phase !== 'finished') playSimpleTurn(s);
+  assert.equal(s.history.length, 10);
   assert.equal(s.phase, 'finished');
   assert.equal(s.awards.funniest.playerId, answerers[0]);
   assert.equal(s.awards.funniest.count, 2);
