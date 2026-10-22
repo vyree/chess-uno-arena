@@ -187,9 +187,16 @@ test('UNO: kursi diambil alih bot, bot main, manusia klaim balik LEWAT masa teng
     assert.ok(botTurnDone, 'giliran kursi bot harus selesai dimainkan bot');
     assert.strictEqual(zeroSeen, false, 'kartu kursi yang diambil alih tidak boleh jadi 0');
 
-    // 3) manusia kembali SETELAH grace (1500ms) habis: rejoin diterima
-    const wait = tDrop + 2200 - Date.now();
+    // 3) manusia kembali SETELAH grace (1500ms) habis: rejoin diterima.
+    // 1700ms, bukan lebih lama: dengan jeda mikir bot 50ms satu ronde
+    // penuh ~300ms, jadi sebelum ~2,1 detik TIDAK ada tangan yang bisa
+    // habis (7 kartu = 7 giliran) — ronde dijamin masih berjalan dan
+    // kursi hantu belum dilepas fase keputusan. (Di atas itu tes ini
+    // balapan dengan akhir ronde yang sah.)
+    const wait = tDrop + 1700 - Date.now();
     if (wait > 0) await sleep(wait);
+    assert.ok(!a.msgs.some((m) => m.type === 'game_over'),
+      'prasyarat tes: ronde harus masih berjalan saat rejoin');
     const b2 = new Client('Beta');
     await b2.connect();
     const markA = a.mark();

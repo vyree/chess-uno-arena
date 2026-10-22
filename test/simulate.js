@@ -166,7 +166,9 @@ async function scenarioUno() {
   }
   check('ronde UNO selesai', !!winner, `moves=${moves} guard=${guard}`);
   check('ada pemenang', !!winner && winner.winner >= 0, JSON.stringify(winner));
-  ps[0].send('uno_new_round');
+  // Misi 9: ronde berikutnya di room multiplayer diputuskan bersama
+  // lewat fase keputusan (bukan lagi uno_new_round sepihak dari host)
+  for (const p of ps) p.send('decide', { play: true });
   const ng = await ps[0].next('game_state').catch(() => null);
   check('ronde baru dimulai (round 2)', !!ng && ng.round === 2, ng && `round=${ng.round}`);
   for (const p of ps) p.close();

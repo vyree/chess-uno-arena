@@ -836,3 +836,68 @@ klien sehat tidak diputus, soket mati diterminasi); simulate +
 sim_truth lolos; tes racun Chrome diulang pada build ter-fix: 33x
 setItem melempar tertelan, render terus hidup; soket yang dibungkam
 paksa reconnect + rejoin sendiri tanpa refresh.
+
+## MISI 9 — Room & Session (Sensei, 23 Okt 2026 — ACC penuh incl. saran tonton live + timer keputusan 60 dtk — SELESAI BUILD, deploy ditahan)
+
+Model dua lapis yang dipisah tegas:
+- **Room** = wadah persisten berisi ANGGOTA (maks 8 per room, semua
+  game). Room SELALU bisa dimasuki — termasuk saat game berjalan.
+- **Session** = satu kali permainan di dalam room, dimainkan sebagian
+  atau semua anggota. Session lahir saat game mulai, HANCUR saat game
+  selesai. Main lagi = session baru.
+
+Aturan main:
+- Anggota yang masuk saat session berjalan TIDAK ikut bermain; ia
+  menjadi PENONTON (mode tonton live: papan & progres terlihat
+  read-only, tangan pemain lain tetap angka; chat room tetap bisa).
+  Room menampilkan status "game sedang berlangsung" / "game sudah
+  selesai" untuk semua anggota.
+- **Fase keputusan** seusai game (room status 'decision', timer
+  **60 detik** — env DECISION_MS untuk tes): setiap pemain session
+  wajib memutuskan LANJUT atau TIDAK. Session berikutnya tidak mulai
+  sebelum semua memutuskan. Memilih tidak / klik keluar / tutup tab /
+  putus koneksi / diam sampai timer habis = TIDAK LANJUT (keputusan
+  dianggap selesai, tidak menahan orang lain selamanya).
+- Session baru berisi pemain yang LANJUT + anggota room (penonton)
+  yang menekan tombol Join Game selama fase keputusan. Bila jumlahnya
+  kurang dari minimum game (2), session tidak terbentuk dan room
+  kembali ke lobby (semua tetap anggota).
+- **Keluar game != keluar room.** Keluar game (di tengah session atau
+  di fase keputusan) = berhenti bermain, lalu duduk sebagai penonton/
+  anggota di lobby room. Keluar room = langkah terpisah yang melepas
+  keanggotaan sepenuhnya.
+- Start dari lobby: semua anggota ikut session, kecuali Catur yang
+  session-nya selalu 2 orang (dua anggota pertama; sisanya penonton).
+- Room bot solo (VS AI / lawan bot) TIDAK ikut model ini — alur
+  Main Lagi lamanya dipertahankan.
+
+Implementasi (mengikat):
+- room.players tetap daftar pemain session (kontrak engine & seat
+  tidak berubah); daftar baru room.spectators untuk anggota penonton.
+  Kapasitas room = players + spectators <= 8 untuk semua game.
+- Pemain punya flag inSession; semua handler aksi game menolak
+  non-pemain session ("sedang menonton"). Penonton menerima snapshot
+  spectate (UNO: toClient seat -1 — semua tangan berupa angka).
+- Pesan baru: 'decide' {play:boolean} (pemain session: lanjut/tidak;
+  penonton: ikut/tidak) dan 'leave_game'. Server menyiarkan
+  'decision_update' {endsAt, roster:[{id,nickname,state}], canJoin}
+  selama fase keputusan; payload game_over room multiplayer membawa
+  flag decision:true agar klien menampilkan panel keputusan, bukan
+  modal lama.
+- Putus koneksi di fase keputusan = TIDAK LANJUT seketika + keanggotaan
+  dilepas. Putus di tengah session tetap jalur lama (grace + Fase C);
+  kursi hantu yang masih dipegang bot saat game selesai otomatis
+  TIDAK LANJUT di fase keputusan.
+- Daftar room publik kini menyertakan room yang sedang bermain
+  (dengan statusnya) agar bisa dimasuki untuk menonton.
+
+Status Misi 9: SELESAI BUILD (23 Okt 2026). Verifikasi: suite 128/128
+(termasuk test/session.test.js baru: gabung tengah game = penonton
+read-only, keputusan bersama menahan start, penonton opt-in masuk
+sesi baru, keluar game tetap anggota -> balik lobby, timer diam =
+tidak lanjut, UNO ronde -> keputusan -> ronde 2); simulate +
+sim_chess_only + sim_truth lolos (skenario UNO sim diperbarui ke alur
+keputusan); tes takeover UNO distabilkan (rejoin 1700ms — di atas
+2,1 detik ronde sah bisa berakhir lebih dulu); screenshot Chrome:
+18-spectate.png (badge menonton + papan live), 19-decision-panel.png
+(panel + roster + hitung mundur), 20-back-to-lobby.png.

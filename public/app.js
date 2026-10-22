@@ -9,6 +9,7 @@ const S = {
   saidUnoArmed: false, deadline: null, helloSent: false,
   welcomed: false, queue: [], // Misi 4B: outbound queue gated on 'welcome'
   lastFrameAt: 0, lastPingAt: 0, // Bug 1 fix B: heartbeat bookkeeping
+  spectating: false, decision: null, lastResult: '', // Misi 9
   authMode: false, // login PARKED (Sensei, 2026-10-21): nickname-only, local progress
   fbUser: null, profileNickname: null,
 };
@@ -138,7 +139,15 @@ document.addEventListener('visibilitychange', () => {
     try { S.ws.close(); } catch { /* already gone */ }
   }
 });
+// Misi 9: while spectating, game actions are blocked client-side too
+// (the server rejects them as well) — watching is watch-only.
+const SPECTATE_BLOCKED = ['chess_move', 'chess_resign', 'chess_moves_for',
+  'uno_play', 'uno_draw', 'uno_pass', 'truth_answer', 'uno_new_round', 'chess_new_round'];
 function send(type, data) {
+  if (S.spectating && SPECTATE_BLOCKED.includes(type)) {
+    toast('Kamu sedang menonton 👀 — ikut game berikutnya lewat panel keputusan ya');
+    return;
+  }
   // Misi 4B: identity first. Until this socket is welcomed, game messages
   // wait in a queue — no action can ever outrun the hello/rejoin, so the
   // server can never reject one with 'Kirim hello dulu ya'.
@@ -205,9 +214,13 @@ function route(m) {
     case 'truth_event': handleTruthEvents(m.events); break;
     case 'chess_legal': onChessLegal(m); break;
     case 'game_over': onGameOver(m); break;
+    case 'decision_update': onDecision(m); break;
+    case 'left_game': toast('Kamu keluar dari game — sekarang menonton dari lobby room 👀'); break;
     case 'chat': addChat(m.from, m.text); break;
     case 'left_room':
       hideModal();
+      hideDecisionPanel();
+      S.spectating = false;
       S.roomCode = null; clearSession();
       // Misi 4A: never trust that the server still knows us after a leave —
       // drop queued room intents and re-hello at once, so the next
@@ -328,7 +341,10 @@ function renderRoomList(rooms) {
     const div = document.createElement('div');
     div.className = 'room-item';
     const label = GAME_LABEL[r.game] || r.game;
-    div.innerHTML = `<span><span class="code">${r.code}</span> · ${label} · ${r.players.length}/${r.maxPlayers}</span>`;
+    // Misi 9: rooms mid-game stay joinable — as a spectator seat
+    const statusLabel = r.status === 'playing' ? ' · 🔴 sedang bermain (bisa menonton)'
+      : r.status === 'decision' ? ' · 🟡 fase keputusan' : '';
+    div.innerHTML = `<span><span class="code">${r.code}</span> · ${label} · ${r.players.length}/${r.maxPlayers}${statusLabel}</span>`;
     const b = document.createElement('button');
     b.className = 'btn secondary small'; b.textContent = 'Gabung';
     b.onclick = () => { if (ensureHello()) send('join_room', { code: r.code }); };
@@ -340,6 +356,9 @@ function renderRoomList(rooms) {
 // ---------- lobby ----------
 function onLobby(m) {
   S.roomCode = m.code; S.players = m.players; S.hostId = m.hostId; S.game = m.game;
+  S.spectating = false;
+  $('spectate-badge').classList.add('hidden');
+  hideDecisionPanel();
   saveSession();
   showScreen('screen-lobby');
   $('lobby-code').textContent = m.code;
@@ -382,6 +401,16 @@ function onGameState(m) {
   hideModal();
   S.roomCode = m.code; S.players = m.players; S.hostId = m.hostId;
   S.deadline = m.deadline; saveSession();
+  // Misi 9: spectate mode + decision panel lifecycle
+  S.spectating = !!m.spectating;
+  $('spectate-badge').classList.toggle('hidden', !(S.spectating && m.status === 'playing'));
+  if (m.status === 'playing') hideDecisionPanel();
+  const canLeaveGame = !S.spectating && !m.players.some((p) => p.isBot);
+  for (const id of ['btn-leavegame-chess', 'btn-leavegame-uno', 'btn-leavegame-truth']) {
+    const b = $(id); if (b) b.classList.toggle('hidden', !canLeaveGame);
+  }
+  const resignBtn = $('btn-resign');
+  if (resignBtn) resignBtn.classList.toggle('hidden', S.spectating);
   if (m.game === 'chess') {
     S.chess = m.state; S.game = 'chess';
     showScreen('screen-chess');
@@ -516,16 +545,19 @@ function cardHTML(c) {
 function renderUno(m) {
   const st = m.state;
   const me = m.players.find((p) => p.id === m.you);
-  const mySeat = me ? me.seat : 0;
-  const isMyTurn = st.turn === mySeat && !st.over;
+  const spectating = !!m.spectating;
+  const mySeat = me ? me.seat : -1;
+  const isMyTurn = !spectating && st.turn === mySeat && !st.over;
 
   // seat ring: every player in seat order, you at the bottom
-  renderUnoRing(m, mySeat);
+  // (spectators anchor the ring on seat 0 — they have no seat)
+  renderUnoRing(m, spectating ? 0 : mySeat);
 
   let status = '';
   const turnPlayer = m.players[st.turn];
   const botThinking = !st.over && !isMyTurn && turnPlayer && (turnPlayer.isBot || turnPlayer.takenOver);
-  if (st.over) status = 'Ronde selesai!';
+  if (spectating && !st.over) status = `👀 Menonton — giliran ${turnPlayer ? turnPlayer.nickname : ''}`;
+  else if (st.over) status = 'Ronde selesai!';
   else if (st.pendingDraw > 0 && isMyTurn) status = `Kamu kena +${st.pendingDraw}! Ambil kartunya`;
   else if (isMyTurn) status = st.drewThisTurn ? 'Kartu diambil — mainkan atau lewati' : 'Giliranmu!';
   else if (botThinking) status = `${turnPlayer.nickname} is thinking`;
@@ -551,8 +583,11 @@ function renderUno(m) {
   // hand
   const hand = $('uno-hand');
   hand.innerHTML = '';
-  const myHand = st.hands[mySeat] || [];
+  const myHand = spectating ? [] : (st.hands[mySeat] || []);
   $('hand-count').textContent = myHand.length;
+  if (spectating) {
+    hand.innerHTML = '<p class="muted">👀 Kamu menonton game ini — kartu pemain hanya terlihat sebagai angka di ring.</p>';
+  }
   myHand.forEach((c, i) => {
     const el = document.createElement('div');
     el.className = 'uno-card ' + cardClass(c) + (st.playable && st.playable[i] ? ' playable' : '');
@@ -564,6 +599,7 @@ function renderUno(m) {
   // uno button auto-arm at 2 cards
   if (myHand.length === 2) S.saidUnoArmed = true;
   $('btn-uno-say').classList.toggle('armed', S.saidUnoArmed);
+  $('btn-uno-say').classList.toggle('hidden', spectating);
   $('btn-uno-pass').classList.toggle('hidden', !(isMyTurn && st.drewThisTurn));
 }
 
@@ -782,6 +818,86 @@ const REASONS_ID = {
   forfeit: 'Lawan keluar dari permainan', habis: 'Kartu habis! 🎉', semua_keluar: 'Semua lawan keluar',
 };
 
+// ---------- Misi 9: decision panel ----------
+function hideDecisionPanel() {
+  S.decision = null;
+  const p = $('decision-panel');
+  if (p) p.classList.add('hidden');
+}
+
+function onDecision(m) {
+  S.decision = m;
+  hideModal();
+  $('decision-result').innerHTML = S.lastResult || '';
+  $('decision-panel').classList.remove('hidden');
+  renderDecision();
+}
+
+function renderDecision() {
+  const m = S.decision;
+  if (!m) return;
+  const rosterBox = $('decision-roster');
+  rosterBox.innerHTML = '';
+  if (m.roster.length) {
+    const head = document.createElement('p');
+    head.className = 'muted'; head.style.margin = '4px 0';
+    head.innerHTML = '<strong>Pemain sesi ini:</strong>';
+    rosterBox.appendChild(head);
+    for (const r of m.roster) {
+      const row = document.createElement('div');
+      row.className = 'decision-row';
+      const chip = r.state === 'in' ? '<span class="decision-chip in">✅ Lanjut</span>'
+        : r.state === 'out' ? '<span class="decision-chip out">❌ Tidak lanjut</span>'
+        : '<span class="decision-chip">⏳ Menunggu…</span>';
+      row.innerHTML = `<span>${r.nickname}${r.id === S.playerId ? ' (kamu)' : ''}</span>${chip}`;
+      rosterBox.appendChild(row);
+    }
+  }
+  const specBox = $('decision-spectators');
+  specBox.innerHTML = '';
+  if (m.spectators.length) {
+    const head = document.createElement('p');
+    head.className = 'muted'; head.style.margin = '4px 0';
+    head.innerHTML = '<strong>Menonton di room ini:</strong>';
+    specBox.appendChild(head);
+    for (const s of m.spectators) {
+      const row = document.createElement('div');
+      row.className = 'decision-row';
+      const chip = s.optedIn ? '<span class="decision-chip in">🎮 Ikut main</span>'
+        : '<span class="decision-chip">👀 Menonton</span>';
+      row.innerHTML = `<span>${s.nickname}${s.id === S.playerId ? ' (kamu)' : ''}</span>${chip}`;
+      specBox.appendChild(row);
+    }
+  }
+  const act = $('decision-actions');
+  act.innerHTML = '';
+  const addBtn = (label, cls, fn) => {
+    const b = document.createElement('button');
+    b.className = 'btn ' + cls; b.textContent = label; b.onclick = fn;
+    act.appendChild(b);
+  };
+  const addNote = (text) => {
+    const p = document.createElement('p');
+    p.className = 'muted'; p.textContent = text;
+    act.appendChild(p);
+  };
+  const me = m.roster.find((r) => r.id === S.playerId);
+  const mySpec = m.spectators.find((s) => s.id === S.playerId);
+  if (me && me.state === 'pending') {
+    addBtn('✅ Main Lagi', 'primary', () => send('decide', { play: true }));
+    addBtn('Keluar ke Lobby Room', 'ghost', () => send('leave_game'));
+  } else if (me && me.state === 'in') {
+    addNote('Kamu memilih LANJUT — menunggu pemain lain…');
+    addBtn('Ubah: Tidak Lanjut', 'ghost', () => send('decide', { play: false }));
+  } else if (mySpec && mySpec.optedIn) {
+    addNote('Kamu ikut game berikutnya 🎮');
+    addBtn('Batal Ikut', 'ghost', () => send('decide', { play: false }));
+  } else if (mySpec) {
+    addBtn('🎮 Ikut Game Berikutnya', 'primary', () => send('decide', { play: true }));
+  }
+  addBtn('🚪 Keluar Room', 'danger', () => { hideDecisionPanel(); send('leave_room'); });
+}
+
 function onGameOver(m) {
   if (m.game === 'truth') { onTruthGameOver(m); return; }
   S.deadline = null;
@@ -796,6 +912,14 @@ function onGameOver(m) {
   if (m.scores && m.scores.length) {
     body += '<table class="score-table">' + m.scores
       .map((s) => `<tr><td>${s.nickname}</td><td><strong>${s.points}</strong></td></tr>`).join('') + '</table>';
+  }
+  // Misi 9: multiplayer rooms continue into the decision phase — the
+  // decision_update that follows opens the panel with this summary.
+  if (m.decision) {
+    S.lastResult = body;
+    hideModal();
+    toast('Game selesai! Semua pemain memutuskan dulu ya…');
+    return;
   }
   const actions = [];
   if (m.game === 'uno') {
@@ -833,6 +957,11 @@ function addChat(from, text) {
 
 // ---------- timer ----------
 setInterval(() => {
+  // Misi 9: decision-phase countdown
+  const dc = $('decision-countdown');
+  if (dc && S.decision && S.decision.endsAt) {
+    dc.textContent = Math.max(0, Math.ceil((S.decision.endsAt - Date.now()) / 1000));
+  }
   for (const id of ['chess-timer', 'uno-timer', 'truth-timer']) {
     const el = $(id);
     if (!el) continue;
@@ -1257,6 +1386,13 @@ function onTruthGameOver(m) {
     body += '<table class="score-table">' + sorted
       .map((x) => `<tr><td>${x.nickname}</td><td><strong>${x.points}</strong></td></tr>`).join('') + '</table>';
   }
+  // Misi 9: multiplayer truth rooms also flow into the decision phase
+  if (m.decision) {
+    S.lastResult = body;
+    hideModal();
+    toast('Game selesai! Semua pemain memutuskan dulu ya…');
+    return;
+  }
   showModal('🎡 Truth or Truth Selesai!', body,
     [{ label: '🚪 Keluar Room', cls: 'primary', onClick: () => send('leave_room') }]);
 }
@@ -1338,6 +1474,11 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn-leave-lobby').onclick = () => { if (confirm('Keluar dari room?')) send('leave_room'); };
   $('btn-leave-chess').onclick = () => { if (confirm('Keluar? Kamu dianggap menyerah.')) send('leave_room'); };
   $('btn-leave-uno').onclick = () => { if (confirm('Keluar dari room?')) send('leave_room'); };
+  // Misi 9: keluar GAME (ke lobby room) is a different act from keluar ROOM
+  for (const id of ['btn-leavegame-chess', 'btn-leavegame-uno', 'btn-leavegame-truth']) {
+    const b = $(id);
+    if (b) b.onclick = () => { if (confirm('Keluar dari game ini? Kamu tetap di room sebagai penonton.')) send('leave_game'); };
+  }
   $('btn-resign').onclick = () => { if (confirm('Menyerah?')) send('chess_resign'); };
   $('uno-deck').onclick = () => send('uno_draw');
   $('btn-uno-pass').onclick = () => send('uno_pass');

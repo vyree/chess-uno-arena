@@ -58,6 +58,10 @@ const RECONNECT_GRACE_MS = parseInt(process.env.RECONNECT_GRACE_MS, 10) || 60 * 
 // over by a bot until the human returns or the game ends. The env
 // override exists only so tests can run fast.
 const TAKEOVER_MS = parseInt(process.env.BOT_TAKEOVER_MS, 10) || 18 * 1000;
+// Misi 9 (Sensei): after a multiplayer game ends, the room gets this
+// long to decide the next session before undecided players count as
+// "not continuing". The env override exists only for tests.
+const DECISION_MS = parseInt(process.env.DECISION_MS, 10) || 60 * 1000;
 const MSG_PER_SEC = 20;
 
 const rooms = new RoomManager();
@@ -99,7 +103,11 @@ function lobbySnapshot(room, forPlayer) {
     hostId: room.hostId,
     maxPlayers: MAX_PLAYERS[room.game],
     truthSettings: room.game === 'truth' ? room.truthSettings : undefined,
-    players: room.players.map((p) => ({ id: p.id, nickname: dispName(p), seat: p.seat, isBot: !!p.isBot, takenOver: !!p.takenOver })),
+    // Misi 9: the lobby lists ALL room members; spectators are flagged
+    players: [...room.players, ...room.spectators].map((p) => ({
+      id: p.id, nickname: dispName(p), seat: p.seat, isBot: !!p.isBot,
+      takenOver: !!p.takenOver, spectating: p.inSession === false,
+    })),
   };
 }
 
@@ -109,6 +117,8 @@ function gameSnapshot(room, player) {
   const base = {
     type: 'game_state', code: room.code, game: room.game, status: room.status,
     you: player.id, hostId: room.hostId, deadline: room.deadline,
+    // Misi 9: spectators get the same board with a watch-only flag
+    spectating: player.inSession === false,
     players: room.players.map((p) => ({
       id: p.id, nickname: dispName(p), seat: p.seat, isBot: !!p.isBot,
       takenOver: !!p.takenOver,
@@ -134,13 +144,21 @@ function gameSnapshot(room, player) {
 }
 
 function sendLobby(room) {
-  for (const p of room.players) {
+  for (const p of [...room.players, ...room.spectators]) {
     if (p.connected && p.socket) send(p.socket, lobbySnapshot(room, p));
   }
 }
 function sendGameState(room) {
   for (const p of room.players) {
-    if (p.connected && p.socket && p.active !== false) send(p.socket, gameSnapshot(room, p));
+    if (!p.connected || !p.socket) continue;
+    if (p.active !== false) send(p.socket, gameSnapshot(room, p));
+    // a player who quit mid-session keeps a seat placeholder in the
+    // roster but watches as a spectator (Misi 9)
+    else if (p.inSession === false) send(p.socket, gameSnapshot(room, p));
+  }
+  // Misi 9: spectators watch the same session live
+  for (const p of room.spectators) {
+    if (p.connected && p.socket) send(p.socket, gameSnapshot(room, p));
   }
 }
 
@@ -148,6 +166,9 @@ function gameOverPayload(room, result) {
   const payload = {
     type: 'game_over', game: room.game,
     result, reasonText: REASONS[result.reason] || result.reason,
+    // Misi 9: multiplayer rooms continue into the decision phase —
+    // the client shows the decision panel instead of the old modal.
+    decision: !room.isBotRoom,
   };
   if (room.game === 'chess' && result.winnerColor) {
     const w = room.players.find((p) => chessColor(p.seat) === result.winnerColor);
@@ -192,7 +213,7 @@ function onTurnTimeout(room) {
     clearTurnTimer(room);
     const payload = gameOverPayload(room, { ...room.chess.over, winnerColor });
     broadcast(room, payload);
-    cleanupGhostSeats(room);
+    enterDecision(room);
   } else {
     const u = room.uno;
     if (!u || u.st.over) return;
@@ -236,7 +257,7 @@ function forfeitPlayer(room, playerId, keepIdentity = false) {
     room.status = 'over';
     clearTurnTimer(room);
     broadcast(room, gameOverPayload(room, { ...room.chess.over, winnerColor }));
-    cleanupGhostSeats(room);
+    enterDecision(room);
   } else if (room.game === 'truth') {
     // Truth survives a departure: the engine keeps the seat and the
     // turn timers auto-pass a ghost answerer, so the game plays out
@@ -260,7 +281,7 @@ function forfeitPlayer(room, playerId, keepIdentity = false) {
         room.status = 'over';
         clearTurnTimer(room);
         broadcast(room, gameOverPayload(room, u.st.over));
-        cleanupGhostSeats(room);
+        enterDecision(room);
       } else {
         sendGameState(room);
       }
@@ -285,6 +306,13 @@ function handleDisconnect(player) {
   // are torn down at grace expiry instead.
   if (room.status === 'playing') armTakeover(room, player);
   if (room.status === 'lobby') sendLobby(room); else sendGameState(room);
+  // Misi 9: dropping during the decision phase counts as "not
+  // continuing" at once (Sensei) — membership itself is kept (as a
+  // spectator) unless the grace also expires.
+  if (room.status === 'decision' && room.decision) {
+    if (room.players.some((p) => p.id === player.id)) moveToSpectators(room, player);
+    noteDecisionOut(room, player.id);
+  }
 }
 
 function expireGrace(room, playerId) {
@@ -295,6 +323,22 @@ function expireGrace(room, playerId) {
     // bot room is a solo table: it ends together with its human
     teardownBotRoom(room);
     players.delete(playerId);
+    return;
+  }
+  if (room.status === 'decision') {
+    // Misi 9: never came back during the decision window — membership
+    // is released (their "out" was already recorded at disconnect).
+    rooms.removePlayer(room, playerId);
+    players.delete(playerId);
+    if (rooms.get(room.code)) sendDecision(room);
+    return;
+  }
+  if (room.status === 'playing' && !room.players.some((p) => p.id === playerId)) {
+    // Misi 9: a SPECTATOR who never returns holds no seat — release
+    // the membership instead of engaging any session machinery.
+    rooms.removePlayer(room, playerId);
+    players.delete(playerId);
+    if (rooms.get(room.code)) sendGameState(room);
     return;
   }
   if (room.status === 'playing') {
@@ -349,21 +393,190 @@ function releaseTakeover(room, player) {
   if (player.takenOver) player.takenOver = false;
 }
 
-// After a game ends in a multiplayer room, seats whose humans never
-// came back are released and a room with nobody connected is closed,
-// so ghost seats never linger into the next game.
-function cleanupGhostSeats(room) {
-  if (room.isBotRoom) return;
+// ---------------- Misi 9: room membership & sessions ----------------
+// room.players is the SESSION roster (seat order — the engine contract
+// never changes); room.spectators holds members who watch. Moving
+// between the lists is how "keluar game" (to the room lobby) differs
+// from "keluar room" (membership released, see leave_room).
+function moveToSpectators(room, player) {
+  const i = room.players.findIndex((p) => p.id === player.id);
+  if (i < 0) return;
+  room.players.splice(i, 1);
+  room.players.forEach((p, idx) => { p.seat = idx; });
+  player.seat = -1;
+  player.inSession = false;
+  room.spectators.push(player);
+}
+
+function moveToPlayers(room, player) {
+  const i = room.spectators.findIndex((p) => p.id === player.id);
+  if (i < 0) return;
+  room.spectators.splice(i, 1);
+  player.seat = room.players.length;
+  player.inSession = true;
+  room.players.push(player);
+}
+
+function decisionSnapshot(room) {
+  const d = room.decision;
+  return {
+    type: 'decision_update', code: room.code, game: room.game,
+    endsAt: d ? d.endsAt : null,
+    roster: d ? [...d.roster.entries()].map(([id, r]) => ({ id, nickname: r.nickname, state: r.state })) : [],
+    spectators: room.spectators.map((p) => ({
+      id: p.id, nickname: dispName(p), optedIn: d ? d.optIns.has(p.id) : false,
+    })),
+  };
+}
+
+function sendDecision(room) {
+  if (!room.decision) return;
+  const snap = decisionSnapshot(room);
+  for (const p of [...room.players, ...room.spectators]) {
+    if (p.connected && p.socket) send(p.socket, snap);
+  }
+}
+
+function decisionComplete(room) {
+  if (!room.decision) return true;
+  for (const r of room.decision.roster.values()) if (r.state === 'pending') return false;
+  return true;
+}
+
+// A session player is gone for decision purposes (voted out, left the
+// game, disconnected, left the room): mark the roster, tell everyone,
+// and resolve early when nobody is left undecided.
+function noteDecisionOut(room, playerId) {
+  if (!room.decision) return;
+  const r = room.decision.roster.get(playerId);
+  if (r && r.state === 'pending') r.state = 'out';
+  sendDecision(room);
+  if (decisionComplete(room)) resolveDecision(room);
+}
+
+// The game just ended in a multiplayer room: open the decision phase.
+// Ghost seats (Misi 4C — taken over, human never returned) and stale
+// entries (players who already left the room mid-game) are released
+// first; they never enter the roster.
+function enterDecision(room) {
+  if (room.isBotRoom || room.status === 'decision') return;
+  if (!rooms.get(room.code)) return;
   for (const p of [...room.players]) {
-    if (p.takenOver && !p.connected) {
+    if ((p.takenOver && !p.connected) || p.roomCode !== room.code) {
       rooms.removePlayer(room, p.id);
       if (p.roomCode === room.code) { p.roomCode = null; players.delete(p.id); }
       p.takenOver = false;
     }
   }
-  if (rooms.get(room.code) && !room.players.some((p) => p.connected)) {
-    rooms.destroy(room.code);
+  if (!rooms.get(room.code)) return;
+  const roster = new Map();
+  for (const p of room.players) {
+    // players who already quit the game mid-session sit this out as
+    // spectators — they are not owed a vote in the next session
+    if (p.inSession === false) continue;
+    roster.set(p.id, { nickname: p.nickname, state: 'pending' });
   }
+  room.decision = { endsAt: Date.now() + DECISION_MS, roster, optIns: new Set() };
+  room.status = 'decision';
+  clearTurnTimer(room);
+  room.decisionTimer = setTimeout(() => resolveDecision(room), DECISION_MS);
+  sendDecision(room);
+  // a room where every session player is already gone resolves at once
+  if (!room.players.some((p) => p.connected)) resolveDecision(room);
+}
+
+// The decision window closed (everyone decided, or the timer fired):
+// build the next session from "in" voters + opted-in spectators, or
+// dissolve back to the room lobby when too few remain.
+function resolveDecision(room) {
+  if (room.decisionTimer) { clearTimeout(room.decisionTimer); room.decisionTimer = null; }
+  const d = room.decision;
+  if (!d) return;
+  room.decision = null;
+  const stayIds = new Set();
+  for (const [id, r] of d.roster) if (r.state === 'in') stayIds.add(id);
+  for (const id of d.optIns) stayIds.add(id);
+  for (const p of [...room.players]) if (!stayIds.has(p.id)) moveToSpectators(room, p);
+  for (const p of [...room.spectators]) if (stayIds.has(p.id)) moveToPlayers(room, p);
+  if (room.players.length >= 2) startSession(room);
+  else backToLobby(room);
+}
+
+// No new session: the room returns to its lobby with every member a
+// plain member again (spectators merge back into the players list).
+function backToLobby(room) {
+  for (const p of [...room.spectators]) moveToPlayers(room, p);
+  for (const p of room.players) p.inSession = true;
+  room.uno = null;
+  room.chess = null;
+  room.truth = null;
+  room.truthStage = null;
+  room.status = 'lobby';
+  clearTurnTimer(room);
+  if (room.players.length === 0) { rooms.destroy(room.code); return; }
+  if (!room.players.some((p) => p.id === room.hostId)) room.hostId = room.players[0].id;
+  sendLobby(room);
+}
+
+// Start a session with exactly the current room.players as the roster.
+function startSession(room) {
+  if (room.game === 'uno') {
+    rooms.shuffleSeats(room);
+    const prevRound = room.uno ? room.uno.round : 0;
+    const n = room.players.length;
+    room.uno = { st: uno.newGame(n, { mode: room.unoMode || 'normal' }), active: new Array(n).fill(true), round: prevRound + 1 };
+    if (!room.scoreBoard) room.scoreBoard = {};
+    for (const p of room.players) {
+      if (room.scoreBoard[p.id] === undefined) room.scoreBoard[p.id] = 0;
+      p.inSession = true;
+      armTakeover(room, p);
+    }
+    room.status = 'playing';
+    startTurnTimer(room);
+    sendGameState(room);
+    scheduleBotIfNeeded(room);
+  } else if (room.game === 'chess') {
+    while (room.players.length > 2) moveToSpectators(room, room.players[room.players.length - 1]);
+    room.chess = chess.newGame();
+    room.status = 'playing';
+    for (const p of room.players) { p.inSession = true; armTakeover(room, p); }
+    startTurnTimer(room);
+    sendGameState(room);
+  } else if (room.game === 'truth') {
+    for (const p of room.players) p.inSession = true;
+    const started = startTruthGame(room);
+    if (!started.ok) backToLobby(room);
+  }
+}
+
+// Misi 9: "keluar game" mid-session — the player stops playing but
+// STAYS a room member (keluar room is a separate act, see leave_room).
+function quitSessionToSpectator(room, player) {
+  releaseTakeover(room, player);
+  player.inSession = false;
+  if (room.game === 'uno') {
+    // The seat must stay in the roster until the session ends (engine
+    // indexes are seat-based), so the UNO forfeit mechanics apply —
+    // but membership and identity survive, unlike a room departure.
+    forfeitPlayer(room, player.id, true);
+    if (rooms.get(room.code) && room.status === 'playing') sendGameState(room);
+  } else if (room.game === 'chess') {
+    forfeitPlayer(room, player.id, true); // ends the game -> decision phase
+  } else if (room.game === 'truth') {
+    // the truth engine ghosts a departed answerer on its own timers;
+    // the member simply steps out of the session roster
+    moveToSpectators(room, player);
+    if (rooms.get(room.code)) sendGameState(room);
+  }
+}
+
+// Misi 9: spectators watch; they never act inside the session.
+function mustBePlaying(player) {
+  if (player.inSession === false) {
+    sendError(player.socket, 'Kamu sedang menonton — ikut game berikutnya lewat panel keputusan ya');
+    return false;
+  }
+  return true;
 }
 
 // ---------------- game actions ----------------
@@ -372,6 +585,9 @@ function handleStartGame(player, room, data) {
   if (room.status !== 'lobby') { sendError(player.socket, 'Game sudah berjalan'); return; }
   if (room.game === 'chess') {
     if (room.players.length < 2) { sendError(player.socket, 'Tunggu lawan masuk dulu'); return; }
+    // Misi 9: a chess session is always exactly 2 — extra room members
+    // watch this session and can rotate in at the next decision phase.
+    while (room.players.length > 2) moveToSpectators(room, room.players[room.players.length - 1]);
     room.chess = chess.newGame();
     room.status = 'playing';
   } else if (room.game === 'truth') {
@@ -415,6 +631,7 @@ function chessMoveMeta(room, from, to, moverIsBot) {
 }
 
 function handleChessMove(player, room, data) {
+  if (!mustBePlaying(player)) return;
   if (room.status !== 'playing' || !room.chess) { sendError(player.socket, 'Game belum berjalan'); return; }
   if (chessColor(player.seat) !== room.chess.turn) { sendError(player.socket, 'Bukan giliranmu'); return; }
   const from = chess.parseSq(data.from);
@@ -438,7 +655,7 @@ function afterChessMove(room, r, meta) {
     sendGameState(room);
     broadcast(room, gameOverPayload(room, { ...r.status, winnerColor }));
     personaResultLine(room, winnerColor);
-    cleanupGhostSeats(room);
+    enterDecision(room);
   } else {
     startTurnTimer(room);
     sendGameState(room);
@@ -671,7 +888,7 @@ function afterUnoPlay(room, player, r) {
     if (note) payload.note = note;
     if (r.events && r.events.length) payload.events = r.events;
     broadcast(room, payload);
-    cleanupGhostSeats(room);
+    enterDecision(room);
     return;
   }
   unoFixTurn(room);
@@ -683,6 +900,7 @@ function afterUnoPlay(room, player, r) {
 }
 
 function handleUnoPlay(player, room, data) {
+  if (!mustBePlaying(player)) return;
   const u = room.uno;
   if (room.status !== 'playing' || !u) { sendError(player.socket, 'Game belum berjalan'); return; }
   if (u.st.turn !== player.seat) { sendError(player.socket, 'Bukan giliranmu'); return; }
@@ -698,6 +916,7 @@ function handleUnoPlay(player, room, data) {
 }
 
 function handleUnoDraw(player, room) {
+  if (!mustBePlaying(player)) return;
   const u = room.uno;
   if (room.status !== 'playing' || !u) { sendError(player.socket, 'Game belum berjalan'); return; }
   const r = uno.drawCard(u.st, player.seat);
@@ -715,6 +934,7 @@ function handleUnoDraw(player, room) {
 }
 
 function handleUnoPass(player, room) {
+  if (!mustBePlaying(player)) return;
   const u = room.uno;
   if (room.status !== 'playing' || !u) { sendError(player.socket, 'Game belum berjalan'); return; }
   const r = uno.passTurn(u.st, player.seat);
@@ -729,6 +949,11 @@ function handleUnoPass(player, room) {
 function handleUnoNewRound(player, room) {
   if (room.game !== 'uno' || room.status !== 'over' || !room.uno) {
     sendError(player.socket, 'Belum ada ronde yang selesai'); return;
+  }
+  // Misi 9: multiplayer rooms decide the next round together instead
+  if (!room.isBotRoom) {
+    sendError(player.socket, 'Ronde berikutnya diputuskan lewat panel keputusan ya');
+    return;
   }
   // keluarkan pemain yang sudah tidak aktif, rapatkan seat
   // (Misi 4C: kursi hantu yang masih dipegang bot & manusianya tidak
@@ -867,7 +1092,7 @@ function truthOnTurnClosed(room, events) {
   emitTruthEvents(room, events);
   if (finished) {
     broadcast(room, gameOverPayload(room, { awards: room.truth.st.awards }));
-    cleanupGhostSeats(room);
+    enterDecision(room);
     return;
   }
   truthSetTimer(room, TRUTH_TIMING.spin, () => truthOpenAsk(room));
@@ -878,7 +1103,7 @@ function truthGuard(player, room) {
     sendError(player.socket, 'Game Truth belum berjalan');
     return false;
   }
-  return true;
+  return mustBePlaying(player);
 }
 
 function handleTruthSetRules(player, room, data) {
@@ -1099,7 +1324,7 @@ async function route(ws, type, data) {
     if (!p) {
       const uid = await checkToken(ws, data.idToken);
       if (uid === null) return;
-      p = { id: crypto.randomUUID(), uid, nickname: data.nickname, socket: ws, roomCode: null, seat: 0, connected: true, active: true };
+      p = { id: crypto.randomUUID(), uid, nickname: data.nickname, socket: ws, roomCode: null, seat: 0, connected: true, active: true, inSession: true };
       players.set(p.id, p);
       ws._playerId = p.id;
     } else {
@@ -1130,7 +1355,12 @@ async function route(ws, type, data) {
     // Refresh the room's view of the rejoined player, phase-correctly:
     // sendGameState on a lobby room crashes (no game state exists yet).
     if (room.status === 'lobby') { send(ws, lobbySnapshot(room, p)); sendLobby(room); }
-    else { send(ws, gameSnapshot(room, p)); sendGameState(room); }
+    else {
+      send(ws, gameSnapshot(room, p));
+      sendGameState(room);
+      // Misi 9: rejoining into the decision phase also gets the panel
+      if (room.status === 'decision' && room.decision) send(ws, decisionSnapshot(room));
+    }
     return;
   }
 
@@ -1210,9 +1440,52 @@ async function route(ws, type, data) {
       if (player.roomCode) { sendError(ws, 'Keluar dari room sekarang dulu'); return; }
       const room = rooms.get(data.code);
       if (!room) { sendError(ws, 'Kode room tidak ditemukan'); return; }
-      const r = rooms.addPlayer(room, player);
+      if (room.isBotRoom) { sendError(ws, 'Room sudah mulai main'); return; }
+      // Misi 9 (Sensei): a room can ALWAYS be entered (max 8 members).
+      // Joining mid-session makes you a spectator of the running game;
+      // you can join the NEXT session from the decision phase.
+      const asSpectator = room.status !== 'lobby';
+      const r = rooms.addPlayer(room, player, asSpectator);
       if (!r.ok) { sendError(ws, r.error === 'room penuh' ? 'Room sudah penuh' : r.error); return; }
-      sendLobby(room);
+      if (room.status === 'lobby') { sendLobby(room); return; }
+      send(ws, gameSnapshot(room, player));
+      sendGameState(room);
+      if (room.status === 'decision') sendDecision(room);
+      return;
+    }
+    case 'decide': {
+      const room = needRoom(); if (!room) return;
+      if (room.status !== 'decision' || !room.decision) { sendError(ws, 'Belum waktunya memutuskan'); return; }
+      const d = room.decision;
+      if (room.players.some((p) => p.id === player.id)) {
+        const r = d.roster.get(player.id);
+        if (r) r.state = data.play ? 'in' : 'out';
+        // choosing "out" IS leaving the game: become a room spectator
+        if (!data.play) moveToSpectators(room, player);
+      } else if (room.spectators.some((p) => p.id === player.id)) {
+        if (data.play) d.optIns.add(player.id); else d.optIns.delete(player.id);
+      } else return;
+      sendDecision(room);
+      if (decisionComplete(room)) resolveDecision(room);
+      return;
+    }
+    case 'leave_game': {
+      const room = needRoom(); if (!room) return;
+      if (room.isBotRoom) { sendError(ws, 'Di room solo, pakai Keluar Room saja ya'); return; }
+      if (room.status === 'decision' && room.decision) {
+        const r = room.decision.roster.get(player.id);
+        if (r && r.state === 'pending') r.state = 'out';
+        if (room.players.some((p) => p.id === player.id)) moveToSpectators(room, player);
+        sendDecision(room);
+        if (room.decision && decisionComplete(room)) resolveDecision(room);
+        send(ws, { type: 'left_game' });
+        return;
+      }
+      if (room.status !== 'playing' || player.inSession === false) {
+        sendError(ws, 'Kamu tidak sedang di dalam game'); return;
+      }
+      quitSessionToSpectator(room, player);
+      send(ws, { type: 'left_game' });
       return;
     }
     case 'leave_room': {
@@ -1226,7 +1499,11 @@ async function route(ws, type, data) {
         forfeitPlayer(room, player.id, true);
       } else {
         rooms.removePlayer(room, player.id);
-        if (rooms.get(room.code)) sendLobby(room);
+        if (rooms.get(room.code)) {
+          // Misi 9: leaving the ROOM mid-decision settles the vote too
+          if (room.status === 'decision') noteDecisionOut(room, player.id);
+          else sendLobby(room);
+        }
       }
       // EVERY path releases the leaver and confirms it, so the client can
       // always return to the main menu (bug fix 2026-10-21: the forfeit
@@ -1259,6 +1536,7 @@ async function route(ws, type, data) {
     }
     case 'chess_moves_for': {
       const room = needRoom(); if (!room) return;
+      if (!mustBePlaying(player)) return;
       if (room.game !== 'chess' || room.status !== 'playing') { sendError(ws, 'Game catur belum berjalan'); return; }
       const sq = chess.parseSq(data.square);
       const moves = chess.legalMoves(room.chess, sq).map((m) => ({
@@ -1275,13 +1553,14 @@ async function route(ws, type, data) {
     }
     case 'chess_resign': {
       const room = needRoom(); if (!room) return;
+      if (!mustBePlaying(player)) return;
       if (room.game !== 'chess' || room.status !== 'playing') { sendError(ws, 'Game belum berjalan'); return; }
       const winnerColor = chessColor(player.seat) === 'w' ? 'b' : 'w';
       room.chess.over = { result: winnerColor === 'w' ? '1-0' : '0-1', reason: 'resign' };
       room.status = 'over';
       clearTurnTimer(room);
       broadcast(room, gameOverPayload(room, { ...room.chess.over, winnerColor }));
-      cleanupGhostSeats(room);
+      enterDecision(room);
       return;
     }
     case 'uno_play': {

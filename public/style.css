@@ -346,6 +346,26 @@ input:focus { outline: none; border-color: var(--color-primary); }
 }
 .chat-card { margin-top: 12px; }
 
+/* Misi 9: decision panel & spectate badge */
+.decision-list { margin: 10px 0; text-align: left; }
+.decision-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 10px; border-bottom: 1px solid #eef;
+}
+.decision-chip {
+  font-size: 12px; font-weight: 700; padding: 2px 10px;
+  border-radius: var(--radius-full); background: #eef; white-space: nowrap;
+}
+.decision-chip.in { background: #d9f7e3; color: #157347; }
+.decision-chip.out { background: #fde3e3; color: #b02a37; }
+.spectate-badge {
+  position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+  background: var(--color-plum); color: #fff; padding: 8px 16px;
+  border-radius: var(--radius-full); font-size: 13px; z-index: 40;
+  box-shadow: 0 6px 18px rgba(56, 40, 110, .35);
+  max-width: 92vw; text-align: center;
+}
+
 /* Bot table controls (Misi 2, Fase 2) */
 .bot-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; justify-content: center; margin: 6px 0; }
 .bot-row select { padding: 8px; border-radius: 8px; font-size: 1rem; }

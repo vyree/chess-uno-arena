@@ -126,6 +126,13 @@ const VALIDATORS = {
     return { ok: true, data: { code: c.value } };
   },
   leave_room() { return { ok: true, data: {} }; },
+  // Misi 9: post-game decision (session player: lanjut/tidak;
+  // spectator: ikut game berikutnya/tidak) and leaving only the game.
+  decide(d) {
+    if (typeof d.play !== 'boolean') return { ok: false, error: 'keputusan tidak valid' };
+    return { ok: true, data: { play: d.play } };
+  },
+  leave_game() { return { ok: true, data: {} }; },
   rejoin(d) {
     if (typeof d.playerId !== 'string' || d.playerId.length > 64) {
       return { ok: false, error: 'playerId tidak valid' };
