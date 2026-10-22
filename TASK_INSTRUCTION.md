@@ -242,7 +242,8 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
 
 ## Konsep
 
-- Room 3–10 pemain, kode room seperti game lain. **TIDAK ADA pilihan
+- Room **2–8 pemain** (keputusan Sensei, 22 Okt 2026: minimal 2, maksimal
+  8), kode room seperti game lain. **TIDAK ADA pilihan
   paket/kategori di awal game** (keputusan Sensei, 22 Okt 2026): semua
   200 soal digabung jadi SATU tumpukan dan diacak. Empat nuansa soal
   (Santai, Nostalgia, Mendalam — tetap sopan, Campuran) hanya keragaman
@@ -352,6 +353,9 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
   1/16" = giliran berjalan dari total (jumlah pemain × putaran); pemain
   divisualkan duduk melingkar + jarum penunjuk di tengah; tumpukan kartu
   menampilkan sisa soal (100/100); panel reaksi 4 wajah ekspresi.
+- **Lingkaran roda ADAPTIF (Sensei, 22 Okt)**: tata letak pemain di
+  lingkaran menyesuaikan jumlah pemain (2–8) — posisi & jarak antar
+  pemain dihitung dari jumlah kursi agar selalu rapi (urusan Fase 3).
 
 ---
 
