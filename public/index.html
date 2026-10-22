@@ -157,6 +157,31 @@
         </label>
         <div id="lobby-extreme-note" class="muted hidden">Hanya host yang bisa mengubah ini</div>
       </div>
+      <div id="truth-rules-row" class="truth-rules hidden">
+        <h3>🎡 Set Aturan Truth</h3>
+        <div class="setting-row">
+          <span>Batas pertanyaan</span>
+          <select id="truth-total" title="Total pertanyaan dalam satu game">
+            <option value="">Otomatis</option>
+            <option value="8">8</option>
+            <option value="10">10</option>
+            <option value="12">12</option>
+            <option value="16">16</option>
+            <option value="20">20</option>
+            <option value="24">24</option>
+          </select>
+        </div>
+        <p class="muted">Otomatis: 10 pertanyaan (room 2–5 pemain) · 16 pertanyaan (room 6–8 pemain).</p>
+        <div class="setting-row">
+          <span>🔞 Mode Eksplisit</span>
+          <label class="switch" title="Soal khusus dewasa keluar acak; tombol ASK mati">
+            <input type="checkbox" id="truth-explicit">
+            <span class="track"></span>
+          </label>
+        </div>
+        <p class="muted">Mode Eksplisit: kartu khusus dewasa, tombol ASK dimatikan total.</p>
+        <div id="truth-rules-note" class="muted hidden">Hanya host yang bisa mengubah aturan</div>
+      </div>
       <div id="chat-box" class="chat-box"></div>
       <div class="chat-row">
         <input id="chat-input" maxlength="200" placeholder="Tulis chat…" autocomplete="off">
@@ -233,13 +258,29 @@
     </div>
   </section>
 
-  <!-- ============ TRUTH (arena lengkap menyusul) ============ -->
+  <!-- ============ TRUTH OR TRUTH ============ -->
   <section id="screen-truth" class="screen hidden">
     <div class="game-bar">
-      <div><strong>🎡 Truth or Truth</strong></div>
-      <button id="btn-leave-truth" class="btn ghost small">Keluar Room</button>
+      <div><strong>🎡 Truth or Truth</strong> <span id="truth-round" class="turn-badge"></span></div>
+      <div class="game-bar-right">
+        <div id="truth-timer" class="timer">⏱️ --</div>
+        <button id="btn-leave-truth" class="btn ghost small">Keluar</button>
+      </div>
     </div>
-    <div id="truth-status" class="status-line"></div>
+    <div id="truth-banner" class="truth-banner">🎡 Rodanya berputar…</div>
+    <div class="truth-wheel-wrap">
+      <div id="truth-disc" class="truth-disc"><span class="wheel-needle"></span></div>
+      <div id="truth-ring"></div>
+    </div>
+    <div id="truth-panel" class="card truth-panel"></div>
+    <div class="card chat-card">
+      <div id="chat-box-truth" class="chat-box small"></div>
+      <div class="chat-row">
+        <input id="chat-input-truth" maxlength="200" placeholder="Chat…" autocomplete="off">
+        <button id="btn-chat-truth" class="btn secondary small">Kirim</button>
+      </div>
+    </div>
+    <div id="truth-popup" class="truth-popup hidden"></div>
   </section>
 
 </div>

@@ -335,8 +335,19 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
       **Spek UI dari Sensei (untuk Fase 3):** pintu masuk uji bot ini
       adalah menu **"( test bot )" di lobby game Truth, diletakkan di
       bagian FOOTER dan agak tersembunyi** — bukan menu utama.
-- [ ] Fase 3 — UI: layar truth, animasi roda nama, kartu soal, reaksi,
+- [x] Fase 3 — UI: layar truth, animasi roda nama, kartu soal, reaksi,
       podium gelar, efek suara; panel "Set Aturan" di layar room
+      **SELESAI 22 Okt 2026** bersama cangkang MABAR.io: lingkaran
+      pemain adaptif 2–8 mengelilingi cakram roda berwarna + jarum
+      (berputar saat fase spin), banner fase, panel per tahap (ASK,
+      pertanyaan, jawaban + PASS, 4 tombol reaksi + Kurang Greget +
+      Lanjut), pop-up peristiwa wajib, podium gelar + tabel skor,
+      chat arena + MC, panel Set Aturan di lobby (host; terverifikasi
+      echo server). Terverifikasi end-to-end via Chromium headless:
+      satu game bot penuh sampai podium (ASK, jawab, reaksi, next),
+      nol error JS; 77/77 unit + sim truth + regresi simulate LOLOS.
+      Suara: Truth memakai chat MC + pop-up visual; sfx khusus Truth
+      belum ditambah (suara UNO/catur tidak berubah).
 - [ ] Fase 4 — Deploy (Railway + Hosting) + uji publik
 
 ## Panel "Set Aturan" (keputusan Sensei, 22 Okt 2026)

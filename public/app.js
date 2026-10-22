@@ -146,6 +146,7 @@ function route(m) {
     case 'lobby_update': onLobby(m); break;
     case 'game_state': onGameState(m); break;
     case 'uno_events': handleUnoEvents(m.events); break;
+    case 'truth_event': handleTruthEvents(m.events); break;
     case 'chess_legal': onChessLegal(m); break;
     case 'game_over': onGameOver(m); break;
     case 'chat': addChat(m.from, m.text); break;
@@ -286,6 +287,16 @@ function onLobby(m) {
   if (m.game === 'uno') {
     $('lobby-extreme').disabled = !isHost;
     $('lobby-extreme-note').classList.toggle('hidden', isHost);
+  }
+  // Truth only: the host's Set Aturan panel (Sensei's spec, 2026-10-22)
+  $('truth-rules-row').classList.toggle('hidden', m.game !== 'truth');
+  if (m.game === 'truth' && m.truthSettings) {
+    $('truth-total').value = m.truthSettings.totalQuestions == null
+      ? '' : String(m.truthSettings.totalQuestions);
+    $('truth-explicit').checked = !!m.truthSettings.explicitMode;
+    $('truth-total').disabled = !isHost;
+    $('truth-explicit').disabled = !isHost;
+    $('truth-rules-note').classList.toggle('hidden', isHost);
   }
 }
 
@@ -671,6 +682,7 @@ const REASONS_ID = {
 };
 
 function onGameOver(m) {
+  if (m.game === 'truth') { onTruthGameOver(m); return; }
   S.deadline = null;
   recordStats(m);
   if (m.game === 'uno') { handleUnoEvents(m.events); sfx('win'); }
@@ -704,7 +716,7 @@ function wireChat(inputId, btnId, boxId) {
   $(inputId).onkeydown = (e) => { if (e.key === 'Enter') sendChat(); };
 }
 function addChat(from, text) {
-  for (const id of ['chat-box', 'chat-box-chess', 'chat-box-uno']) {
+  for (const id of ['chat-box', 'chat-box-chess', 'chat-box-uno', 'chat-box-truth']) {
     const box = $(id);
     if (!box) continue;
     const div = document.createElement('div');
@@ -717,7 +729,7 @@ function addChat(from, text) {
 
 // ---------- timer ----------
 setInterval(() => {
-  for (const id of ['chess-timer', 'uno-timer']) {
+  for (const id of ['chess-timer', 'uno-timer', 'truth-timer']) {
     const el = $(id);
     if (!el) continue;
     if (!S.deadline) { el.textContent = '⏱️ --'; el.classList.remove('low'); continue; }
@@ -905,11 +917,244 @@ function saveNickFromProfile() {
   renderProfile();
 }
 
-// ---------- truth arena (full screen lands in the next step) ----------
+// ---------- truth or truth arena ----------
+const REACT_DEFS = [
+  ['lucu', '😆', 'Lucu', 10], ['nangis', '😭', 'Nangis', 15],
+  ['lovely', '🥰', 'Lovely', 10], ['marah', '😤', 'Marah', 15],
+];
+const WHEEL_COLORS = ['#ff8f6b', '#ffd29d', '#a6c1ee', '#9fd3a8', '#fbc2eb', '#fddb92', '#b3a1e0', '#ff9fb2'];
+let truthUi = { turn: -1, myReacts: 0, greget: false };
+
+function truthNick(id) {
+  const p = S.players.find((x) => x.id === id);
+  return p ? p.nickname : '?';
+}
+
 function renderTruth(m) {
-  S.truthState = m.state;
-  const el = $('truth-status');
-  if (el) el.textContent = '🎡 Truth or Truth — layar arena sedang disiapkan.';
+  const st = m.state;
+  S.truth = st;
+  S.truthStage = m.truthStage;
+  if (truthUi.turn !== st.turnNumber) truthUi = { turn: st.turnNumber, myReacts: 0, greget: false };
+  $('truth-round').textContent = `PUTARAN ${st.round}/${st.totalTurns}`;
+  $('truth-banner').textContent = {
+    spin: '🎡 Rodanya berputar… siapa yang kena?',
+    ask: st.explicitMode ? '🔞 Mode Eksplisit — pertanyaan keluar acak' : '✋ Jendela ASK terbuka!',
+    answer: '💬 Saatnya menjawab!',
+    react: '🎭 Beri reaksi!',
+  }[S.truthStage] || '🎡 Truth or Truth';
+  renderTruthWheel(m, st);
+  renderTruthPanel(m, st);
+}
+
+// Player chips sit around a segmented disc (Sensei's sketch: an adaptive
+// 2–8 player circle with a needle on top); the disc spins during 'spin'.
+function renderTruthWheel(m, st) {
+  const n = m.players.length;
+  const seg = 360 / n;
+  const stops = m.players.map((p, i) =>
+    `${WHEEL_COLORS[p.seat % WHEEL_COLORS.length]} ${(i * seg).toFixed(1)}deg ${((i + 1) * seg).toFixed(1)}deg`).join(', ');
+  const disc = $('truth-disc');
+  disc.style.background = `conic-gradient(${stops})`;
+  disc.classList.toggle('spinning', S.truthStage === 'spin');
+  const ring = $('truth-ring');
+  ring.innerHTML = '';
+  const me = m.players.find((p) => p.id === m.you);
+  const mySeat = me ? me.seat : 0;
+  const pointsOf = (id) => {
+    const sp = st.players.find((x) => x.id === id);
+    return sp ? sp.points : 0;
+  };
+  for (let k = 0; k < n; k++) {
+    const seat = (mySeat + k) % n;
+    const p = m.players[seat];
+    const ang = (90 + (k * 360) / n) * Math.PI / 180;
+    const chip = document.createElement('div');
+    chip.className = 'seat-chip'
+      + (p.id === m.you ? ' me' : '')
+      + (st.current.answererId === p.id ? ' turn' : '')
+      + (p.connected === false ? ' offline' : '');
+    chip.style.left = (50 + 44 * Math.cos(ang)).toFixed(1) + '%';
+    chip.style.top = (50 + 44 * Math.sin(ang)).toFixed(1) + '%';
+    const nick = document.createElement('span');
+    nick.className = 'nick';
+    nick.textContent = (p.connected === false ? '💤 ' : '') + p.nickname + (p.isBot ? ' 🤖' : '');
+    const pts = document.createElement('span');
+    pts.className = 'cnt';
+    pts.textContent = `⭐ ${pointsOf(p.id)}`;
+    chip.appendChild(nick);
+    chip.appendChild(pts);
+    ring.appendChild(chip);
+  }
+}
+
+function renderTruthPanel(m, st) {
+  const panel = $('truth-panel');
+  const cur = st.current;
+  const me = st.players.find((p) => p.id === m.you);
+  const iAmAnswerer = cur.answererId === m.you;
+  const answererNick = truthNick(cur.answererId);
+  const deckLine = `<p class="muted">🃏 Sisa kartu: ${st.deckLeft} · yang menjawab: <strong>${answererNick}</strong></p>`;
+
+  if (S.truthStage === 'spin' || !cur.answererId) {
+    panel.innerHTML = `<p class="truth-big">🎡 Rodanya berputar…</p>${deckLine}`;
+    return;
+  }
+  if (S.truthStage === 'ask') {
+    if (st.explicitMode) {
+      panel.innerHTML = `<p class="truth-big">🔞 Pertanyaan eksplisit akan keluar secara acak…</p>${deckLine}`;
+      return;
+    }
+    if (cur.askerId === m.you) {
+      panel.innerHTML = `<p class="truth-big">✋ Kamu yang bertanya!</p>
+        <input id="ask-q-input" maxlength="200" placeholder="Tulis pertanyaanmu…" autocomplete="off">
+        <button id="btn-ask-send" class="btn primary big">Kirim Pertanyaan</button>
+        <p class="muted">Cepat ya — kalau kelamaan, pertanyaanmu hangus!</p>`;
+      $('btn-ask-send').onclick = () => {
+        const q = $('ask-q-input').value.trim();
+        if (q) send('truth_ask_question', { question: q });
+      };
+      $('ask-q-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-ask-send').click(); });
+      $('ask-q-input').focus();
+      return;
+    }
+    if (cur.askerId) {
+      panel.innerHTML = `<p class="truth-big">✋ ${truthNick(cur.askerId)} sedang menyiapkan pertanyaan…</p>${deckLine}`;
+      return;
+    }
+    let html = `<p class="truth-big">✋ Siapa mau bertanya ke ${answererNick}?</p>`;
+    if (!iAmAnswerer && me && me.askLeft > 0) {
+      html += `<button id="btn-ask" class="btn primary big">✋ ASK! (sisa ${me.askLeft}x)</button>`;
+    } else if (iAmAnswerer) {
+      html += '<p class="muted">Kamu yang menjawab putaran ini — bersiap ya!</p>';
+    } else {
+      html += '<p class="muted">Jatah ASK kamu habis — kartu akan terbuka otomatis.</p>';
+    }
+    panel.innerHTML = html + deckLine;
+    const b = $('btn-ask');
+    if (b) b.onclick = () => send('truth_ask');
+    return;
+  }
+  if (S.truthStage === 'answer') {
+    const srcLabel = cur.source === 'ask'
+      ? `❓ Pertanyaan dari ${truthNick(cur.askerId)}` : '🃏 Kartu pertanyaan';
+    let html = `<p class="muted">${srcLabel}</p><p class="truth-question">${cur.question || ''}</p>`;
+    if (iAmAnswerer) {
+      html += `<textarea id="ans-input" maxlength="500" rows="3" placeholder="Tulis jawaban jujurmu…"></textarea>
+        <div class="row"><button id="btn-ans-send" class="btn primary big">Kirim Jawaban</button>
+        ${me && me.passLeft > 0 ? `<button id="btn-pass" class="btn warning">⏭️ PASS (sisa ${me.passLeft}x)</button>` : ''}</div>`;
+    } else {
+      html += `<p class="muted">⏳ Menunggu ${answererNick} menjawab…</p>`;
+    }
+    panel.innerHTML = html;
+    const sendBtn = $('btn-ans-send');
+    if (sendBtn) sendBtn.onclick = () => {
+      const t = $('ans-input').value.trim();
+      if (t) send('truth_answer', { text: t });
+    };
+    const passBtn = $('btn-pass');
+    if (passBtn) passBtn.onclick = () => {
+      if (confirm('Pakai jatah PASS untuk pertanyaan ini?')) send('truth_pass');
+    };
+    return;
+  }
+  if (S.truthStage === 'react') {
+    let html = `<p class="muted">🃏 ${cur.question || ''}</p>`;
+    if (cur.passed) html += `<p class="truth-big">⏭️ ${answererNick} skip pertanyaan ini!</p>`;
+    else html += `<p class="truth-answer">💬 “${cur.answer || ''}”</p>`;
+    html += '<div class="react-row">' + REACT_DEFS.map(([kind, emoji, label, pts]) =>
+      `<button class="react-btn" data-kind="${kind}" ${iAmAnswerer || cur.passed ? 'disabled' : ''}>` +
+      `<span class="react-emoji">${emoji}</span><span>${label}</span>` +
+      `<strong>${cur.reactionCounts[kind]}</strong><small>+${pts}</small></button>`).join('') + '</div>';
+    if (cur.kurangGreget > 0) {
+      html += `<p class="truth-greget">😤 Kurang Greget! ×${cur.kurangGreget} (−${cur.kurangGreget * 5} poin untuk ${answererNick})</p>`;
+    }
+    if (!iAmAnswerer && !cur.passed && !truthUi.greget) {
+      html += '<div class="row"><button id="btn-greget" class="btn danger small">😤 Kurang Greget! −5</button></div>';
+    }
+    if (truthUi.myReacts > 0 && !iAmAnswerer) {
+      html += `<p class="muted">Reaksimu terkirim: ${truthUi.myReacts}/2</p>`;
+    }
+    if (iAmAnswerer) html += '<button id="btn-next" class="btn primary big">⏭️ Lanjut Putaran</button>';
+    panel.innerHTML = html;
+    panel.querySelectorAll('.react-btn').forEach((b) => {
+      b.onclick = () => {
+        if (truthUi.myReacts >= 2) { toast('Maksimal 2 reaksi per jawaban'); return; }
+        truthUi.myReacts += 1;
+        send('truth_react', { kind: b.dataset.kind });
+        if (truthUi.myReacts >= 2) {
+          panel.querySelectorAll('.react-btn').forEach((x) => { x.disabled = true; });
+        }
+      };
+    });
+    const g = $('btn-greget');
+    if (g) g.onclick = () => { truthUi.greget = true; send('truth_kurang_greget'); };
+    const nx = $('btn-next');
+    if (nx) nx.onclick = () => send('truth_next');
+    return;
+  }
+  panel.innerHTML = '<p class="truth-big">🎉 Permainan selesai!</p>';
+}
+
+// Mandatory on-screen popups for game events (Sensei's spec).
+const TRUTH_POPUPS = {
+  ask_claimed: (e) => `✋ ${truthNick(e.playerId)} bertanya!`,
+  question_ready: (e) => `❓ Pertanyaan dari ${truthNick(e.playerId)} sudah siap!`,
+  card_opened: () => '🃏 Kartu pertanyaan terbuka!',
+  answer_submitted: (e) => `💬 ${truthNick(e.playerId)} sudah menjawab!`,
+  passed: (e) => `⏭️ ${truthNick(e.playerId)} skip!!`,
+  ask_expired: (e) => `⌛ ${truthNick(e.playerId)} kelamaan — pertanyaannya hangus!`,
+  answer_timeout: (e) => `⌛ Waktu habis — ${truthNick(e.playerId)} dianggap skip`,
+  kurang_greget: (e) => `😤 ${truthNick(e.playerId)}: “Kurang Greget!”`,
+};
+let popupTimer = null;
+function truthPopup(text) {
+  const el = $('truth-popup');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.remove('hidden', 'pop');
+  void el.offsetWidth; // restart the animation
+  el.classList.add('pop');
+  clearTimeout(popupTimer);
+  popupTimer = setTimeout(() => el.classList.add('hidden'), 2100);
+}
+function handleTruthEvents(events) {
+  if (!events) return;
+  for (const e of events) {
+    if (e.type === 'turn_started') {
+      truthPopup(`🎡 Putaran ke ${e.round} — giliran ${truthNick(e.playerId)} menjawab!`);
+    } else if (TRUTH_POPUPS[e.type]) {
+      truthPopup(TRUTH_POPUPS[e.type](e));
+    }
+  }
+}
+
+function onTruthGameOver(m) {
+  S.deadline = null;
+  const s = loadLocalStats();
+  const myScore = (m.scores || []).find((x) => x.playerId === S.playerId);
+  const top = m.awards && m.awards.topScorer;
+  s.played += 1;
+  if (top && top.playerId === S.playerId) s.won += 1;
+  if (myScore) s.points += myScore.points;
+  try { localStorage.setItem(STATS_KEY, JSON.stringify(s)); } catch { /* private mode */ }
+  renderLocalStats();
+  let body = '';
+  if (top) body += `<p style="font-size:18px">🏆 Juara Poin: <strong>${truthNick(top.playerId)}</strong> (${top.points} poin)</p>`;
+  const awardLines = [
+    ['funniest', '😆 Paling Lucu'], ['saddest', '😭 Paling Sedih'],
+    ['loveliest', '🥰 Paling Lovely'], ['mostEmotional', '😤 Paling Emosional'],
+  ];
+  for (const [key, label] of awardLines) {
+    const a = m.awards && m.awards[key];
+    if (a) body += `<p>${label}: <strong>${truthNick(a.playerId)}</strong> (${a.count} reaksi)<br><span class="muted">“${a.answer}”</span></p>`;
+  }
+  if (m.scores && m.scores.length) {
+    const sorted = [...m.scores].sort((a, b) => b.points - a.points);
+    body += '<table class="score-table">' + sorted
+      .map((x) => `<tr><td>${x.nickname}</td><td><strong>${x.points}</strong></td></tr>`).join('') + '</table>';
+  }
+  showModal('🎡 Truth or Truth Selesai!', body,
+    [{ label: '🚪 Keluar Room', cls: 'primary', onClick: () => send('leave_room') }]);
 }
 
 // ---------- wire up ----------
@@ -997,6 +1242,16 @@ document.addEventListener('DOMContentLoaded', () => {
   wireChat('chat-input', 'btn-chat', 'chat-box');
   wireChat('chat-input-chess', 'btn-chat-chess', 'chat-box-chess');
   wireChat('chat-input-uno', 'btn-chat-uno', 'chat-box-uno');
+  wireChat('chat-input-truth', 'btn-chat-truth', 'chat-box-truth');
+  const sendTruthRules = () => {
+    if (S.playerId !== S.hostId) return;
+    send('truth_set_rules', {
+      totalQuestions: $('truth-total').value === '' ? null : Number($('truth-total').value),
+      explicitMode: $('truth-explicit').checked,
+    });
+  };
+  $('truth-total').onchange = sendTruthRules;
+  $('truth-explicit').onchange = sendTruthRules;
   prefillLocalNick();
   renderLocalStats();
   applyGfx();

@@ -580,3 +580,65 @@ body.low-gfx * {
   box-shadow: none !important; text-shadow: none !important;
   backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
 }
+
+/* ================= Truth or Truth arena (2026-10-22) ================= */
+.truth-banner {
+  text-align: center; font-weight: 800; font-size: 16.5px; color: var(--color-plum);
+  background: var(--color-lav); border-radius: var(--radius-full);
+  padding: 9px 14px; margin-bottom: 12px;
+}
+.truth-wheel-wrap {
+  position: relative; width: min(320px, 86vw); aspect-ratio: 1; margin: 2px auto 14px;
+}
+.truth-disc {
+  position: absolute; left: 50%; top: 50%; width: 56%; height: 56%;
+  transform: translate(-50%, -50%); border-radius: 50%;
+  border: 5px solid #fff; box-shadow: 0 8px 22px rgba(61, 43, 99, .3);
+}
+.truth-disc::after {
+  content: ''; position: absolute; left: 50%; top: 50%; width: 34px; height: 34px;
+  background: #fff; border-radius: 50%; transform: translate(-50%, -50%);
+  box-shadow: 0 1px 5px rgba(61, 43, 99, .35);
+}
+.truth-disc .wheel-needle { top: -14px; border-top-color: var(--color-plum); z-index: 3; }
+.truth-disc.spinning { animation: truthspin .8s linear infinite; }
+@keyframes truthspin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+#truth-ring { position: absolute; inset: 0; }
+#truth-ring .seat-chip.turn { border-color: var(--color-warning); background: #fff7e0; }
+.truth-panel { min-height: 120px; }
+.truth-big { font-size: 19px; font-weight: 800; color: var(--color-plum); margin: 4px 0 10px; }
+.truth-question { font-size: 19px; font-weight: 700; line-height: 1.45; margin: 6px 0 12px; }
+.truth-answer { font-size: 18.5px; font-weight: 700; line-height: 1.45; color: var(--color-plum); margin: 6px 0 12px; }
+.truth-panel textarea {
+  width: 100%; padding: 12px; font-size: 16px; font-family: inherit; resize: vertical;
+  border: 2px solid #dfe6f2; border-radius: var(--radius-md); margin-bottom: 10px;
+}
+.truth-panel textarea:focus { outline: none; border-color: var(--color-primary); }
+.react-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0; }
+.react-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  background: var(--color-bg); border: 2px solid var(--color-lav-2); border-radius: var(--radius-md);
+  padding: 9px 2px 7px; cursor: pointer; font-family: inherit; color: var(--color-text);
+  font-size: 12px; transition: transform .08s, border-color .15s;
+}
+.react-btn:active { transform: scale(.94); }
+.react-btn:disabled { opacity: .55; cursor: default; }
+.react-btn .react-emoji { font-size: 23px; }
+.react-btn strong { font-size: 16px; color: var(--color-plum); }
+.react-btn small { color: var(--color-text-muted); font-weight: 700; }
+.truth-greget { color: var(--color-danger); font-weight: 700; }
+.truth-popup {
+  position: fixed; left: 50%; top: 64px; transform: translateX(-50%); z-index: 60;
+  background: var(--color-plum); color: #fff; font-weight: 800; font-size: 15.5px;
+  padding: 11px 20px; border-radius: var(--radius-full); max-width: 92vw; text-align: center;
+  box-shadow: 0 10px 26px rgba(61, 43, 99, .45); pointer-events: none;
+}
+.truth-popup.pop { animation: flashPop 2.1s ease forwards; }
+.truth-rules select {
+  padding: 9px 10px; font-size: 15px; font-family: inherit;
+  border: 2px solid #dfe6f2; border-radius: var(--radius-md); background: #fff;
+}
+#truth-round { white-space: nowrap; }
