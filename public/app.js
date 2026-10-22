@@ -7,6 +7,7 @@ const S = {
   chess: null, uno: null, unoMeta: {}, truth: null,
   selected: null, legalMoves: [],
   saidUnoArmed: false, deadline: null, helloSent: false,
+  welcomed: false, queue: [], // Misi 4B: outbound queue gated on 'welcome'
   authMode: false, // login PARKED (Sensei, 2026-10-21): nickname-only, local progress
   fbUser: null, profileNickname: null,
 };
@@ -80,7 +81,7 @@ function connect() {
   ws.onopen = async () => {
     // A fresh socket knows nobody yet: hello must be re-sent unless we
     // rejoin an existing room session (helloSent from a dead socket lies).
-    S.helloSent = false;
+    S.helloSent = false; S.welcomed = false;
     const sess = loadSession();
     if (sess && sess.playerId && sess.code) {
       send('rejoin', { playerId: sess.playerId, code: sess.code });
@@ -100,22 +101,38 @@ function connect() {
     route(m);
   };
   ws.onclose = () => {
+    S.welcomed = false; // queued messages wait for the next socket's welcome
     toast('Koneksi putus — mencoba ulang…');
     setTimeout(connect, 2500);
   };
 }
 function send(type, data) {
+  // Misi 4B: identity first. Until this socket is welcomed, game messages
+  // wait in a queue — no action can ever outrun the hello/rejoin, so the
+  // server can never reject one with 'Kirim hello dulu ya'.
+  if (type !== 'hello' && type !== 'rejoin' && !S.welcomed) {
+    S.queue.push({ type, data: data || {} });
+    return;
+  }
   if (S.ws && S.ws.readyState === 1) S.ws.send(JSON.stringify({ type, data: data || {} }));
 }
+function flushQueue() {
+  const pending = S.queue;
+  S.queue = [];
+  for (const m of pending) send(m.type, m.data);
+}
+// Misi 4B: localStorage, not sessionStorage — the session must survive a
+// closed tab or a killed browser so reopening the app rejoins the game.
+// A session whose room is gone self-heals via the 'error' route below.
 function saveSession() {
-  sessionStorage.setItem('cua', JSON.stringify({
+  localStorage.setItem('cua', JSON.stringify({
     playerId: S.playerId, code: S.roomCode, nickname: S.nickname,
   }));
 }
 function loadSession() {
-  try { return JSON.parse(sessionStorage.getItem('cua')); } catch { return null; }
+  try { return JSON.parse(localStorage.getItem('cua')); } catch { return null; }
 }
-function clearSession() { sessionStorage.removeItem('cua'); }
+function clearSession() { localStorage.removeItem('cua'); }
 
 // The nickname lives in localStorage (cua-nick) + S.nickname; the gate
 // modal collects it once, Settings can change it later.
@@ -139,6 +156,7 @@ function route(m) {
   switch (m.type) {
     case 'welcome':
       S.playerId = m.playerId; S.nickname = m.nickname; saveSession(); saveLocalNick();
+      S.welcomed = true; flushQueue();
       if (m.rejoined) toast('Kembali tersambung! 🎉');
       break;
     case 'pong': onPong(); break;
@@ -152,9 +170,25 @@ function route(m) {
     case 'chat': addChat(m.from, m.text); break;
     case 'left_room':
       hideModal();
-      S.roomCode = null; clearSession(); openGameMenu();
+      S.roomCode = null; clearSession();
+      // Misi 4A: never trust that the server still knows us after a leave —
+      // drop queued room intents and re-hello at once, so the next
+      // create/join can never be rejected with 'Kirim hello dulu ya'.
+      S.queue = [];
+      S.helloSent = false;
+      ensureHello();
+      openGameMenu();
       break;
     case 'error':
+      if (/Sesi tidak ditemukan/.test(m.message)) {
+        // Misi 4A: the saved session is genuinely dead (room gone, server
+        // restarted). Drop it, drop its queued intents, and take a fresh
+        // identity — never retry a corpse on every refresh.
+        clearSession();
+        S.queue = [];
+        S.helloSent = false;
+        ensureHelloQuiet();
+      }
       if (/room|kode/i.test(m.message)) $('join-error').textContent = m.message;
       else toast(m.message);
       break;

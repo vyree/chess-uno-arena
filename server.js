@@ -43,7 +43,7 @@ const TRUTH_TIMING = {
   react: parseInt(process.env.TRUTH_REACT_MS, 10) || truth.REACT_MS,
 };
 const BOT_DELAY_MS = 900; // bot "thinking" pause so humans can follow the game
-const RECONNECT_GRACE_MS = 60 * 1000;
+const RECONNECT_GRACE_MS = parseInt(process.env.RECONNECT_GRACE_MS, 10) || 60 * 1000;
 const MSG_PER_SEC = 20;
 
 const rooms = new RoomManager();
@@ -197,11 +197,11 @@ function unoFixTurn(room) {
 }
 
 // ---------------- forfeit / disconnect ----------------
-function forfeitPlayer(room, playerId) {
+function forfeitPlayer(room, playerId, keepIdentity = false) {
   const player = room.players.find((p) => p.id === playerId);
   room.forfeitTimers.delete(playerId);
   if (room.status !== 'playing') {
-    if (player) { rooms.removePlayer(room, playerId); players.delete(playerId); }
+    if (player) { rooms.removePlayer(room, playerId); if (!keepIdentity) players.delete(playerId); }
     if (rooms.get(room.code)) sendLobby(room);
     return;
   }
@@ -237,7 +237,7 @@ function forfeitPlayer(room, playerId) {
       }
     }
   }
-  players.delete(playerId);
+  if (!keepIdentity) players.delete(playerId);
 }
 
 function handleDisconnect(player) {
@@ -245,22 +245,28 @@ function handleDisconnect(player) {
   player.socket = null;
   const room = player.roomCode ? rooms.get(player.roomCode) : null;
   if (!room) { players.delete(player.id); return; }
+  // Misi 4A: EVERY room type gets the same reconnect grace — a refresh or
+  // a dropped connection must never destroy a seat instantly. Room types
+  // differ only in what expireGrace() does when the player never returns.
+  // (Rejoin cancels this timer: route('rejoin') clears forfeitTimers.)
+  const t = setTimeout(() => expireGrace(room, player.id), RECONNECT_GRACE_MS);
+  room.forfeitTimers.set(player.id, t);
+  if (room.status === 'lobby') sendLobby(room); else sendGameState(room);
+}
+
+function expireGrace(room, playerId) {
+  room.forfeitTimers.delete(playerId);
+  const player = players.get(playerId);
+  if (!player || player.connected) return;
   if (room.isBotRoom) {
     // bot room is a solo table: it ends together with its human
     teardownBotRoom(room);
-    players.delete(player.id);
+    players.delete(playerId);
     return;
   }
-  if (room.status === 'lobby') {
-    rooms.removePlayer(room, player.id);
-    players.delete(player.id);
-    if (rooms.get(room.code)) sendLobby(room);
-    return;
-  }
-  // playing/over: 60s grace to rejoin
-  const t = setTimeout(() => forfeitPlayer(room, player.id), RECONNECT_GRACE_MS);
-  room.forfeitTimers.set(player.id, t);
-  sendGameState(room);
+  // lobby: forfeitPlayer's non-playing branch releases the seat;
+  // playing/over: it forfeits the game. Both delete the identity.
+  forfeitPlayer(room, playerId);
 }
 
 // ---------------- game actions ----------------
@@ -390,7 +396,12 @@ function handleUnoNewRound(player, room) {
   }
   // keluarkan pemain yang sudah tidak aktif, rapatkan seat
   for (const p of [...room.players]) {
-    if (p.active === false) { rooms.removePlayer(room, p.id); players.delete(p.id); }
+    if (p.active === false) {
+      rooms.removePlayer(room, p.id);
+      // Reap the identity only while it is still bound to this room; a
+      // leaver who kept theirs (Misi 4B) may already be playing elsewhere.
+      if (p.roomCode === room.code) players.delete(p.id);
+    }
   }
   if (room.players.length < 2) { sendError(player.socket, 'Butuh minimal 2 pemain'); return; }
   // UNO: seats are re-shuffled every new round (Sensei, Misi 2)
@@ -772,9 +783,10 @@ async function route(ws, type, data) {
     if (ft) { clearTimeout(ft); room.forfeitTimers.delete(p.id); }
     p.socket = ws; p.connected = true; ws._playerId = p.id;
     send(ws, { type: 'welcome', playerId: p.id, nickname: p.nickname, rejoined: true });
-    if (room.status === 'lobby') send(ws, lobbySnapshot(room, p));
-    else send(ws, gameSnapshot(room, p));
-    sendGameState(room);
+    // Refresh the room's view of the rejoined player, phase-correctly:
+    // sendGameState on a lobby room crashes (no game state exists yet).
+    if (room.status === 'lobby') { send(ws, lobbySnapshot(room, p)); sendLobby(room); }
+    else { send(ws, gameSnapshot(room, p)); sendGameState(room); }
     return;
   }
 
@@ -863,22 +875,22 @@ async function route(ws, type, data) {
       const room = needRoom(); if (!room) return;
       if (room.isBotRoom) {
         teardownBotRoom(room);
-        players.delete(player.id);
       } else if (room.status === 'playing') {
         // anggap forfeit langsung
         const t = room.forfeitTimers.get(player.id);
         if (t) { clearTimeout(t); room.forfeitTimers.delete(player.id); }
-        forfeitPlayer(room, player.id);
+        forfeitPlayer(room, player.id, true);
       } else {
         rooms.removePlayer(room, player.id);
-        players.delete(player.id);
         if (rooms.get(room.code)) sendLobby(room);
       }
       // EVERY path releases the leaver and confirms it, so the client can
       // always return to the main menu (bug fix 2026-10-21: the forfeit
       // path previously never sent left_room and the player got stuck).
+      // Misi 4B: identity is persistent — leaving detaches the player from
+      // the room only; the record and this socket's binding survive, so
+      // the next create/join never needs a fresh hello first.
       player.roomCode = null;
-      ws._playerId = null;
       send(ws, { type: 'left_room' });
       return;
     }
@@ -1033,10 +1045,17 @@ wss.on('connection', (ws) => {
       ws._times.push(now);
       const v = validateMessage(raw.toString());
       if (!v.ok) { sendError(ws, v.error); return; }
-      Promise.resolve(route(ws, v.type, v.data)).catch((e) => {
-        console.error('route error:', e.message);
-        sendError(ws, 'Terjadi kesalahan, coba lagi.');
-      });
+      // Misi 4B: route strictly in arrival order per socket. route() is
+      // async (hello awaits token verification); without this chain, two
+      // frames sharing one packet interleave and an action can outrun its
+      // own hello — the intermittent 'Kirim hello dulu ya'. The catch is
+      // inside the chain so one bad message never poisons the queue.
+      ws._chain = (ws._chain || Promise.resolve()).then(() =>
+        route(ws, v.type, v.data).catch((e) => {
+          console.error('route error:', e.message);
+          sendError(ws, 'Terjadi kesalahan, coba lagi.');
+        })
+      );
     } catch (e) {
       console.error('message handler error:', e.message);
       sendError(ws, 'Terjadi kesalahan, coba lagi.');
@@ -1045,7 +1064,10 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     try {
       const p = getPlayerBySocket(ws);
-      if (p) handleDisconnect(p);
+      // Misi 4A: only the socket that currently owns the player may run
+      // disconnect handling — a stale close arriving after a rejoin on a
+      // newer socket must not touch the live session.
+      if (p && p.socket === ws) handleDisconnect(p);
     } catch (e) { console.error('close handler error:', e.message); }
   });
   ws.on('error', () => {});

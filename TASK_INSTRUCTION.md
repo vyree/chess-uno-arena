@@ -519,3 +519,46 @@ tampil di layar tab:
   game Truth karena room bot langsung mulai tanpa lobby).
 - Urutan bangun disetujui Sensei: cangkang+Home -> Settings ->
   Profile -> layar Truth.
+
+## MISI 4 — Sesi Tangguh (Sensei, 22 Okt 2026)
+
+Latar: dua bug lapangan — (1) toast "Kirim hello dulu ya" setelah keluar
+room lalu mau main lagi; (2) refresh di tengah game berujung "Sesi tidak
+ditemukan, masuk ulang ya". Diagnosis mode debugger Arona: server menghapus
+identitas pemain saat leave/disconnect tanpa masa tenggang untuk room bot
+& lobby, handler close tidak memeriksa socket pemilik sesi, dan handler
+rejoin memanggil sendGameState tanpa syarat (crash snapshot lobby).
+
+### Bagian A — Perbaikan sesi (DIPUTUSKAN Sensei: kerjakan bersama B)
+- [x] Server: handler close hanya memproses disconnect bila socket yang
+      putus adalah socket aktif pemilik pemain (penjaga close basi).
+- [x] Server: masa tenggang reconnect 60 dtk untuk SEMUA room (bot, lobby,
+      bermain) lewat expireGrace(); pembersihan per tipe room hanya saat
+      tenggang habis tanpa rejoin. RECONNECT_GRACE_MS bisa ditimpa env.
+- [x] Server: ekor handler rejoin menyegarkan sesuai fase (lobby ->
+      sendLobby, bermain -> sendGameState); tidak ada lagi crash snapshot.
+- [x] Client: setelah left_room langsung hello ulang; error "Sesi tidak
+      ditemukan" memulihkan diri (buang sesi mati + hello baru).
+
+### Bagian B — Pengerasan sesi (DIPUTUSKAN Sensei: kerjakan bersama A)
+- [x] Server: identitas pemain persisten — leave_room hanya melepas
+      pemain dari room, rekor identitas & ikatan socket TIDAK dihapus
+      (forfeitPlayer dapat parameter keepIdentity untuk jalur leave).
+- [x] Client: sesi (playerId + kode room) disimpan di localStorage agar
+      selamat dari tab tertutup / browser mati, bukan sessionStorage.
+- [x] Client: antrean pesan keluar bergerbang welcome — tidak ada
+      perintah game yang terkirim sebelum server menyambut socket ini.
+- [x] Server: routing per socket diserialkan (rantai promise) — temuan
+      saat verifikasi: route() async membuat dua frame dalam satu paket
+      bisa saling mendahului (hello dikalahkan create, 9/20 gagal uji
+      loop di kode lama); kini mustahil secara urutan.
+
+### Bagian C — Pengambilalihan Bot (DITAHAN — aturan Sensei 22 Okt 2026)
+Belum dikerjakan; menunggu giliran setelah A+B live. Aturan dari Sensei:
+- Pemain putus koneksi **lebih dari 18 detik** -> kursinya **diambil alih
+  bot** sampai pemain itu kembali masuk ke game.
+- Selama diambil alih, **nama tampilan pemain menjadi nama + "bot"**
+  (mis. "Noir bot") agar pemain lain tahu kursi itu sedang dimainkan bot.
+- Bot memegang kursi sampai pemain kembali atau game selesai.
+- Kesiapan otak: UNO siap (game/bot.js), Truth nyaris siap (driver
+  auto-pass), Catur perlu bot pengisi sederhana (belum ada AI catur).
