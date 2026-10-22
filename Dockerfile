@@ -2,6 +2,10 @@
 FROM node:24-bookworm-slim
 WORKDIR /app
 COPY package.json package-lock.json ./
+# Optional build-only CA override (Arona's sandbox egress proxy MITMs TLS;
+# its CA bundle is mounted at build time and passed via --build-arg).
+# Unset in normal builds -> zero effect on the image.
+ARG NODE_EXTRA_CA_CERTS
 RUN npm ci --omit=dev
 COPY server.js ./
 COPY game ./game

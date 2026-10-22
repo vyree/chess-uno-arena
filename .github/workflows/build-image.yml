@@ -1,13 +1,25 @@
-# Builds the game server image and pushes it to Fly.io's registry.
-# Exists because Arona's sandbox egress proxy blocks Fly's remote builders
-# and Docker Hub CDNs; GitHub's runners have a clean network. Deploy then
-# happens from Arona's side with:
-#   flyctl deploy --image registry.fly.io/ayo-nge:latest
-# Needs one repo secret: FLY_API_TOKEN (a Fly deploy token for this app).
+# FALLBACK image builder (manual dispatch only).
+#
+# PRIMARY pipeline is now Arona's local build (since 2026-10-22): podman/
+# buildah in the sandbox CAN pull base images and build with chroot
+# isolation; the image is pushed with flyctl-authenticated registry login:
+#   buildah --root ~/workspace/.podman-root --runroot ~/workspace/.podman-runroot \
+#     --storage-driver vfs build --isolation chroot \
+#     --build-arg NODE_EXTRA_CA_CERTS=/egress-ca.pem \
+#     --volume /run/hatch/egress-tls/ca-bundle.pem:/egress-ca.pem:ro \
+#     -t registry.fly.io/ayo-nge:latest .
+#   flyctl auth token | buildah login registry.fly.io -u x --password-stdin
+#   buildah --root ~/workspace/.podman-root --runroot ~/workspace/.podman-runroot \
+#     --storage-driver vfs push registry.fly.io/ayo-nge:latest
+#   flyctl deploy --image registry.fly.io/ayo-nge:latest -a ayo-nge
+#
+# This workflow stays as a fallback for when the sandbox route breaks. It
+# is dispatch-only so pushes don't fail noisily: the stored FLY_API_TOKEN
+# secret predates the ayo-nge app and is scoped to the deleted
+# chess-uno-arena app — replace it with an ayo-nge deploy token before
+# dispatching, or the registry push fails with "app repository not found".
 name: build-image
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
