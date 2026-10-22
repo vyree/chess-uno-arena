@@ -348,7 +348,13 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
       nol error JS; 77/77 unit + sim truth + regresi simulate LOLOS.
       Suara: Truth memakai chat MC + pop-up visual; sfx khusus Truth
       belum ditambah (suara UNO/catur tidak berubah).
-- [ ] Fase 4 — Deploy (Railway + Hosting) + uji publik
+- [x] Fase 4 — Deploy + uji publik **SELESAI 22 Okt 2026**:
+      server Fly.io (image dari GitHub Actions build-image, deploy
+      flyctl --image; mesin sin sehat), client Firebase Hosting
+      fir-pro2-d77c3. Uji publik terverifikasi dari luar: situs live
+      berjudul MABAR.io, WebSocket wss://chess-uno-arena.fly.dev
+      membalas pong (kode baru), dan room bot Truth berhasil dibuat
+      di produksi (game_state stage spin).
 
 ## Panel "Set Aturan" (keputusan Sensei, 22 Okt 2026)
 
