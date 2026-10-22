@@ -3,6 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const T = require('../game/truth.js');
 const V = require('../game/validate.js');
+const Q = require('../game/questions.js');
 
 // deterministic RNG for tests (same pattern as uno.test.js)
 function rng(seed) {
@@ -226,6 +227,36 @@ test('penghargaan akhir: top scorer + jawaban terbaik per kategori', () => {
   assert.equal(s.awards.mostEmotional.playerId, answerers[2]);
   assert.equal(s.awards.topScorer.playerId, answerers[1]); // 2x15 = 30
   assert.equal(s.awards.topScorer.points, 30);
+});
+
+test('Set Aturan: host memilih batas pertanyaan dari daftar resmi', () => {
+  for (const c of [8, 10, 12, 16, 20, 24]) {
+    const s = newGame(['a', 'b'], { totalQuestions: c });
+    assert.equal(s.totalTurns, c);
+    assert.equal(T.snapshot(s).explicitMode, false);
+  }
+  assert.equal(T.createGame({ playerIds: ['a', 'b'], questions: BANK,
+    totalQuestions: 7 }).ok, false);
+  assert.equal(T.createGame({ playerIds: ['a', 'b'], questions: BANK,
+    totalQuestions: 15 }).ok, false);
+});
+
+test('Mode Eksplisit: ASK mati total, semua soal murni dari kartu eksplisit', () => {
+  const s = newGame(['a', 'b', 'c'],
+    { questions: Q.EXPLICIT, explicitMode: true });
+  assert.equal(T.snapshot(s).explicitMode, true);
+  const ans = T.snapshot(s).current.answererId;
+  const other = others(s, ans)[0];
+  const claim = T.claimAsk(s, other);
+  assert.equal(claim.ok, false);
+  assert.match(claim.error, /Eksplisit/);
+  while (s.phase !== 'finished') playSimpleTurn(s);
+  assert.equal(s.history.length, 10);
+  const deck = new Set(Q.EXPLICIT);
+  for (const h of s.history) {
+    assert.equal(h.source, 'card');
+    assert.ok(deck.has(h.question), 'soal harus dari bank eksplisit');
+  }
 });
 
 test('validator truth: batas teks ASK, jawaban, dan jenis reaksi', () => {

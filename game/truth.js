@@ -19,6 +19,8 @@ const MIN_PLAYERS_TRUTH = 2;
 const MAX_PLAYERS_TRUTH = 8;
 const QUESTIONS_TOTAL_SMALL = 10; // rooms of 2-5 players (Sensei)
 const QUESTIONS_TOTAL_LARGE = 16; // rooms of 6-8 players (Sensei)
+// Host picks from these in the room's "Set Aturan" panel (Sensei).
+const TOTAL_QUESTION_CHOICES = [8, 10, 12, 16, 20, 24];
 const ASK_PER_GAME = 2;
 const PASS_PER_GAME = 1;
 const REACT_MAX_PER_ANSWER = 2;
@@ -59,13 +61,22 @@ function createGame(opts) {
     return { ok: false, error: 'id pemain tidak valid' };
   }
   const questions = Array.isArray(o.questions) ? o.questions.slice() : [];
-  if (questions.length < ids.length) {
+  // Default total by room size (Sensei, 22 Okt): 2-5 players -> 10,
+  // 6-8 players -> 16. The host may override it from the room's
+  // "Set Aturan" panel with one of TOTAL_QUESTION_CHOICES.
+  let totalTurns = ids.length <= 5
+    ? QUESTIONS_TOTAL_SMALL : QUESTIONS_TOTAL_LARGE;
+  if (o.totalQuestions !== undefined) {
+    if (!TOTAL_QUESTION_CHOICES.includes(o.totalQuestions)) {
+      return { ok: false, error: 'batas pertanyaan tidak valid' };
+    }
+    totalTurns = o.totalQuestions;
+  }
+  if (questions.length < totalTurns) {
     return { ok: false, error: 'bank soal terlalu sedikit' };
   }
-  // Total questions are fixed by room size (Sensei, 22 Okt): 2-5
-  // players -> 10 questions, 6-8 players -> 16. No host round setting.
-  const totalTurns = ids.length <= 5
-    ? QUESTIONS_TOTAL_SMALL : QUESTIONS_TOTAL_LARGE;
+  // Explicit Mode: cards come from the explicit deck only, ASK is off.
+  const explicitMode = o.explicitMode === true;
   const rand = typeof o.rand === 'function' ? o.rand : Math.random;
   const state = {
     phase: 'ask_window', // ask_window -> answering -> reacting -> ... -> finished
@@ -77,6 +88,7 @@ function createGame(opts) {
     lastAnswererId: null,
     turnNumber: 1,
     totalTurns,
+    explicitMode,
     deck: shuffle(questions, rand),
     deckDrawn: 0,
     current: blankCurrent(),
@@ -118,6 +130,9 @@ function turnEvents(state, extra) {
 // Another player claims the right to ask a free-form question this turn.
 // Exclusive: the first claim wins; the card stays locked for the turn.
 function claimAsk(state, playerId) {
+  if (state.explicitMode) {
+    return { ok: false, error: 'ASK nonaktif di Mode Eksplisit' };
+  }
   if (state.phase !== 'ask_window') return { ok: false, error: 'bukan jendela ASK' };
   const p = playerOf(state, playerId);
   if (!p) return { ok: false, error: 'pemain tidak dikenal' };
@@ -299,6 +314,7 @@ function snapshot(state) {
     round: state.round,
     turnNumber: state.turnNumber,
     totalTurns: state.totalTurns,
+    explicitMode: state.explicitMode,
     deckLeft: state.deck.length - state.deckDrawn,
     players: state.players.map((p) => ({ id: p.id, points: p.points,
       askLeft: p.askLeft, passLeft: p.passLeft })),
@@ -313,7 +329,7 @@ function snapshot(state) {
 
 module.exports = {
   MIN_PLAYERS_TRUTH, MAX_PLAYERS_TRUTH,
-  QUESTIONS_TOTAL_SMALL, QUESTIONS_TOTAL_LARGE,
+  QUESTIONS_TOTAL_SMALL, QUESTIONS_TOTAL_LARGE, TOTAL_QUESTION_CHOICES,
   ASK_PER_GAME, PASS_PER_GAME, REACT_MAX_PER_ANSWER,
   REACTIONS, REACTION_POINTS, KURANG_GREGET_PENALTY, MAX_QUESTIONS_PER_PLAYER,
   SPIN_MS, ASK_WINDOW_MS, ANSWER_MS,

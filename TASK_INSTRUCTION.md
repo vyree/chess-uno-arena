@@ -302,10 +302,38 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
       `game/validate.js`; tes total 68/68 hijau (57 lama + 9 engine +
       2 bank)
 - [ ] Fase 2 — Integrasi server: room tipe truth, alur giliran/reaksi/
-      poin/gelar, MC bot, simulasi WS end-to-end
+      poin/gelar, MC bot, simulasi WS end-to-end; room menyimpan
+      pengaturan "Set Aturan" (batas pertanyaan + Mode Eksplisit)
+      yang dipilih host di lobby dan meneruskannya ke engine
 - [ ] Fase 3 — UI: layar truth, animasi roda nama, kartu soal, reaksi,
-      podium gelar, efek suara
+      podium gelar, efek suara; panel "Set Aturan" di layar room
 - [ ] Fase 4 — Deploy (Railway + Hosting) + uji publik
+
+## Panel "Set Aturan" (keputusan Sensei, 22 Okt 2026)
+
+Setelah room terbentuk, ada kolom/panel **"Set Aturan"** (host yang
+mengatur, di lobby sebelum game mulai — asumsi Arona). Isinya:
+
+1. **Batas pertanyaan** — host memilih salah satu: **8, 10, 12, 16,
+   20, 24**. Pilihan ini mengalahkan default otomatis (10 untuk room
+   2–5 pemain, 16 untuk room 6–8 pemain). Engine: opsi
+   `totalQuestions`, divalidasi terhadap daftar resmi itu.
+2. **Toggle Mode Eksplisit** ("Eksplisit Question / Explicit Mode"):
+   - Kartu hanya berisi **50 pertanyaan eksplisit** (`EXPLICIT` di
+     `game/questions.js` — bank terpisah, TIDAK tercampur 200 soal
+     normal; tema dewasa: kebiasaan & pengalaman intim, kesetiaan).
+   - Tombol **ASK dinonaktifkan total** selama mode ini — pertanyaan
+     murni dari kartu (engine menolak klaim ASK).
+   - Notif jeda antar-giliran diganti: bukan lagi ajakan siapa yang
+     mau bertanya, melainkan **"Pertanyaan eksplisit akan keluar
+     secara acak"**.
+   - Dukungan engine SELESAI di Fase 1 (opsi `explicitMode`, flag
+     terbaca di snapshot); panel & plumbing room menyusul Fase 2/3.
+
+Catatan interaksi aturan: batas rahasia 5x per pemain tetap berlaku di
+semua mode — room kecil dengan batas besar (mis. 2 pemain memilih 24)
+akan berhenti sendiri saat semua pemain menyentuh batasnya (2 pemain =
+maks. 10 pertanyaan efektif), lewat mekanisme selesai-dini engine.
 
 ## Asumsi terbuka (boleh dikoreksi Sensei kapan pun)
 

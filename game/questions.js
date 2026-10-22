@@ -5,6 +5,9 @@
  * CAMPURAN). There is NO pack picker in game: the engine shuffles ALL
  * of them into a single deck. Flavors exist only as writing variety.
  * Curated: open-ended, polite, community-safe.
+ * EXPLICIT (50) is a SEPARATE adults-only deck for Explicit Mode
+ * (Sensei, 22 Okt 2026): it is never mixed into ALL; the server uses
+ * it only when the host turns Explicit Mode on (ASK disabled there).
  */
 
 const SANTAI = [
@@ -219,6 +222,59 @@ const CAMPURAN = [
   "Kalau kamu bisa memberi nama untuk robot asisten pribadimu, nama apa yang akan kamu berikan?",
 ];
 
+const EXPLICIT = [
+  "Dalam seminggu, berapa kali biasanya kamu masturbasi?",
+  "Dalam seminggu, berapa kali kamu berhubungan intim dengan pasanganmu?",
+  "Pernahkah kamu selingkuh dari pasanganmu? Ceritakan sejujurnya bagaimana itu terjadi?",
+  "Di usia berapa kamu pertama kali berhubungan intim?",
+  "Apa fantasi terliar yang pernah kamu bayangkan tapi belum pernah kesampaian?",
+  "Pernahkah kamu mengirim foto atau video pribadi yang sensual ke seseorang?",
+  "Di tempat paling tidak biasa mana kamu pernah berhubungan intim?",
+  "Berapa jumlah pasangan intim yang pernah kamu miliki sejauh ini?",
+  "Apa bagian tubuh pasangan yang paling membuatmu bergairah?",
+  "Pernahkah kamu bermimpi basah tentang seseorang yang kamu kenal? Siapa dia?",
+  "Seberapa sering kamu menonton konten dewasa dalam seminggu?",
+  "Pernahkah kamu ketahuan sedang masturbasi oleh orang lain? Bagaimana reaksimu waktu itu?",
+  "Apa posisi favoritmu saat berhubungan intim dan kenapa?",
+  "Pernahkah kamu memakai mainan dewasa? Ceritakan pengalaman pertamamu?",
+  "Berapa lama sesi hubungan intim terlama yang pernah kamu alami?",
+  "Pernahkah kamu berfantasi tentang temanmu sendiri? Ceritakan sejujurnya?",
+  "Apa hal paling berani yang pernah kamu lakukan di ranjang?",
+  "Pernahkah kamu berhubungan intim dengan lebih dari satu orang dalam minggu yang sama?",
+  "Seberapa penting kepuasan di ranjang dalam sebuah hubungan menurutmu?",
+  "Pernahkah kamu berpura-pura mencapai puncak kenikmatan? Kenapa kamu melakukannya?",
+  "Apa kata atau panggilan yang paling membuatmu bergairah saat sedang intim?",
+  "Pernahkah kamu melakukan panggilan video yang sensual dengan seseorang?",
+  "Di tempat umum mana kamu pernah hampir nekat berbuat mesum?",
+  "Berapa rekor terbanyakmu masturbasi dalam satu hari?",
+  "Pernahkah kamu masih menyimpan foto sensual dari mantanmu sampai sekarang?",
+  "Jenis konten dewasa apa yang paling sering kamu cari?",
+  "Pernahkah kamu tertarik pada sesama jenis walaupun hanya sekali? Ceritakan?",
+  "Seberapa mudah kamu bergairah hanya karena pesan teks dari seseorang?",
+  "Pernahkah kamu berhubungan intim tanpa perasaan sama sekali? Dengan siapa waktu itu?",
+  "Apa rahasia ranjangmu yang tidak diketahui pasanganmu sampai sekarang?",
+  "Pernahkah kamu membayangkan orang lain saat sedang bersama pasanganmu?",
+  "Berapa usia termuda dan tertua dari pasangan intim yang pernah kamu miliki?",
+  "Apa pengalaman intim paling memalukan yang pernah kamu alami?",
+  "Pernahkah kamu mencoba hal baru di ranjang gara-gara menonton konten dewasa?",
+  "Seberapa sering kamu memikirkan soal seks dalam sehari? Jujur saja?",
+  "Pernahkah kamu berciuman dengan orang yang baru kamu kenal di hari yang sama?",
+  "Pakaian atau kostum apa yang menurutmu paling menggoda?",
+  "Pernahkah kamu terbangun dalam keadaan bergairah karena mimpi? Mimpi apa itu?",
+  "Berapa lama kamu bisa bertahan tanpa aktivitas seksual sama sekali?",
+  "Pernahkah kamu diam-diam memeriksa ponsel pasanganmu karena cemburu soal orang lain?",
+  "Apa bagian tubuhmu sendiri yang menurutmu paling seksi?",
+  "Pernahkah kamu bertukar pesan sensual dengan orang yang bukan pasanganmu?",
+  "Suara atau desahan seperti apa yang paling membuatmu tidak tahan?",
+  "Pernahkah kamu berhubungan intim di dalam kendaraan? Ceritakan singkat saja?",
+  "Apa kebohongan terbesar yang pernah kamu katakan ke pasanganmu soal urusan ranjang?",
+  "Seberapa besar pengaruh ukuran terhadap kepuasan menurut pengalamanmu?",
+  "Pernahkah kamu membatalkan rencana hanya demi bisa bermesraan dengan seseorang?",
+  "Apa hal pertama yang kamu perhatikan dari lawan jenis yang membuatmu tertarik secara fisik?",
+  "Pernahkah kamu menyimpan kontak khusus hanya untuk teman bermesraan?",
+  "Kalau bisa mengulang satu malam paling panas dalam hidupmu, malam yang mana dan dengan siapa?",
+];
+
 const ALL = SANTAI.concat(NOSTALGIA, MENDALAM, CAMPURAN);
 
-module.exports = { SANTAI, NOSTALGIA, MENDALAM, CAMPURAN, ALL };
+module.exports = { SANTAI, NOSTALGIA, MENDALAM, CAMPURAN, ALL, EXPLICIT };
