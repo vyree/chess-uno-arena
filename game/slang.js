@@ -1,0 +1,126 @@
+'use strict';
+/**
+ * Indonesian chat language data for textbrain (Misi 7): abbreviation
+ * dictionary, the canonical vocabulary used to build consonant
+ * skeletons, and the profanity list for abuse detection. This file is
+ * pure data on purpose — Sensei can grow it ("tambahin kata X artinya
+ * Y") without touching logic. Values may be phrases; expansion emits
+ * every word of the phrase.
+ */
+const SLANG = {
+  ak: 'aku', aq: 'aku', gw: 'aku', gue: 'aku', sy: 'saya', w: 'aku',
+  km: 'kamu', lu: 'kamu', lo: 'kamu', kau: 'kamu', ny: 'nya',
+  gk: 'tidak', ga: 'tidak', ngga: 'tidak', nggak: 'tidak', engga: 'tidak',
+  enggak: 'tidak', kagak: 'tidak', ndak: 'tidak', dak: 'tidak',
+  gatau: 'tidak tahu', gtw: 'tidak tahu', gak: 'tidak',
+  udh: 'sudah', dah: 'sudah', sdh: 'sudah', blm: 'belum',
+  lg: 'lagi', sdg: 'sedang', bgt: 'banget', bngt: 'banget',
+  kl: 'kalau', klo: 'kalau', kalo: 'kalau', knp: 'kenapa', napa: 'kenapa',
+  gmn: 'bagaimana', gimana: 'bagaimana', bgmn: 'bagaimana',
+  yg: 'yang', dn: 'dan', ato: 'atau', utk: 'untuk', dg: 'dengan',
+  dgn: 'dengan', dr: 'dari', krn: 'karena', karna: 'karena',
+  bs: 'bisa', jg: 'juga', aj: 'saja', aja: 'saja', mo: 'mau',
+  maen: 'main', maenin: 'main', mainin: 'main',
+  makasih: 'terima kasih', thx: 'terima kasih', thanks: 'terima kasih',
+  makasi: 'terima kasih', tengkyu: 'terima kasih',
+  ez: 'mudah', gampang: 'mudah', gmpng: 'mudah',
+  pinter: 'pintar', pntr: 'pintar', cupu: 'lemah', noob: 'lemah',
+  wkwk: 'tertawa', wkwkwk: 'tertawa', haha: 'tertawa', hahaha: 'tertawa',
+  kwkw: 'tertawa', xixi: 'tertawa', hehe: 'tertawa', wkkw: 'tertawa',
+  bgus: 'bagus', bgs: 'bagus', mnang: 'menang',
+  gmna: 'bagaimana', dmna: 'di mana', dimna: 'di mana',
+  nm: 'nama', nmku: 'namaku', namamu: 'namamu',
+  bnr: 'benar', bner: 'benar', beneran: 'benar',
+  slmt: 'selamat', slmat: 'selamat',
+  mntp: 'mantap', mntap: 'mantap',
+  keren: 'keren', hebat: 'hebat',
+  bye: 'dadah', dadah: 'dadah',
+  oke: 'oke', ok: 'oke', siap: 'siap',
+  halo: 'halo', hallo: 'halo', hai: 'halo', hei: 'halo', hey: 'halo',
+  hi: 'halo', hello: 'halo', bro: 'kawan', sis: 'kawan',
+  bang: 'kawan', kak: 'kawan', gan: 'kawan',
+  tlg: 'tolong', tolong: 'tolong',
+  bsk: 'besok', nnt: 'nanti', skrg: 'sekarang', skrng: 'sekarang',
+  kmrn: 'kemarin', td: 'tadi', barusan: 'baru',
+  sm: 'sama', ama: 'sama', smua: 'semua',
+  bnyk: 'banyak', dkit: 'sedikit', dikit: 'sedikit',
+  cpt: 'cepat', cpet: 'cepat', lmbt: 'lambat',
+  susah: 'sulit', susa: 'sulit', gampng: 'mudah',
+  ngerti: 'mengerti', paham: 'mengerti', mudeng: 'mengerti',
+  kaga: 'tidak', kaget: 'terkejut',
+  emg: 'memang', emang: 'memang', mmg: 'memang',
+  hrs: 'harus', hrus: 'harus', mesti: 'harus',
+  pengen: 'ingin', pengin: 'ingin', pngn: 'ingin',
+  liat: 'lihat', liatlah: 'lihat', nengok: 'lihat',
+  denger: 'dengar', dngr: 'dengar',
+  blg: 'bilang', ngomong: 'bicara', blang: 'bilang',
+  tau: 'tahu', taw: 'tahu',
+  ktemu: 'bertemu', ktmu: 'bertemu',
+  sgala: 'segala', smw: 'semua',
+  prcuma: 'percuma', percuma: 'percuma',
+  jgn: 'jangan', jngn: 'jangan',
+  ksl: 'kesal', kesel: 'kesal', marah: 'marah',
+  sneng: 'senang', seneng: 'senang',
+  tkt: 'takut', takut: 'takut',
+  bosen: 'bosan', bosan: 'bosan',
+  cape: 'lelah', capek: 'lelah',
+  laper: 'lapar', haus: 'haus',
+  ngantuk: 'mengantuk', tdr: 'tidur',
+};
+
+// Canonical vocabulary: skeleton lookup is built from these words plus
+// every SLANG value, so vowel-stripped guesses land on real words.
+const WORDS = [
+  'aku', 'kamu', 'saya', 'kita', 'dia', 'mereka', 'nama', 'namaku', 'namamu', 'nya',
+  'siapa', 'apa', 'kenapa', 'karena', 'bagaimana', 'kapan', 'berapa', 'apakah',
+  'seperti', 'sepertinya', 'akan', 'sudah', 'belum', 'sedang', 'lagi', 'masih',
+  'tidak', 'bukan', 'jangan', 'harus', 'bisa', 'mau', 'ingin', 'perlu',
+  'kalah', 'menang', 'seri', 'imbang', 'unggul', 'tertinggal',
+  'main', 'bermain', 'langkah', 'giliran', 'bidak', 'raja', 'ratu', 'menteri',
+  'kuda', 'benteng', 'gajah', 'pion', 'catur', 'skak', 'skakmat', 'dimakan',
+  'makan', 'memakan', 'ambil', 'jalan', 'bergerak', 'pikir', 'berpikir',
+  'halo', 'selamat', 'pagi', 'siang', 'sore', 'malam', 'terima', 'kasih',
+  'bagus', 'pintar', 'keren', 'hebat', 'mantap', 'jago', 'kuat', 'lemah',
+  'mudah', 'sulit', 'susah', 'cepat', 'lambat', 'lama', 'sebentar',
+  'benar', 'salah', 'bohong', 'jujur', 'asli', 'palsu', 'robot', 'manusia',
+  'bot', 'mesin', 'program', 'komputer', 'presiden', 'negara', 'dunia',
+  'tertawa', 'lucu', 'senang', 'kesal', 'marah', 'takut', 'bosan', 'lelah',
+  'dadah', 'jumpa', 'pergi', 'datang', 'kembali', 'lagi',
+  'baik', 'buruk', 'hebat', 'luar', 'biasa', 'memang', 'tentu', 'pasti',
+  'mungkin', 'rasanya', 'merasa', 'yakin', 'ragu', 'percaya',
+  'tolong', 'maaf', 'permisi', 'silakan', 'ayo', 'mari',
+  'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan',
+  'pertama', 'kedua', 'terakhir', 'semua', 'banyak', 'sedikit',
+  'besar', 'kecil', 'panjang', 'pendek', 'tinggi', 'rendah',
+  'sekarang', 'nanti', 'besok', 'kemarin', 'tadi', 'hari', 'waktu',
+  'tempat', 'rumah', 'meja', 'papan', 'permainan', 'pertandingan',
+  'lawan', 'teman', 'kawan', 'musuh', 'pemain', 'juara',
+  'strategi', 'serangan', 'bertahan', 'taktik', 'posisi', 'keadaan',
+  'poin', 'materi', 'skor', 'nilai', 'hitung', 'menghitung',
+  'tanya', 'jawab', 'bilang', 'bicara', 'kata', 'sebut', 'sebutkan',
+  'tahu', 'mengerti', 'ingat', 'lupa', 'lihat', 'dengar',
+  'selalu', 'sering', 'kadang', 'pernah', 'jarang',
+  'sangat', 'banget', 'sekali', 'cukup', 'terlalu', 'paling',
+  'kalau', 'ketika', 'saat', 'sebelum', 'sesudah', 'setelah',
+  'untuk', 'dengan', 'tanpa', 'dari', 'kepada', 'tentang', 'soal',
+  'yang', 'dan', 'atau', 'tapi', 'tetapi', 'namun', 'jadi', 'sehingga',
+  'di', 'ke', 'ini', 'itu', 'sini', 'situ', 'sana', 'mana',
+  'sih', 'dong', 'nih', 'deh', 'kok', 'lah', 'kan', 'pun', 'saja',
+  'oke', 'siap', 'ayo', 'yuk', 'baik', 'bagus',
+  'giliranku', 'giliranmu', 'langkahku', 'langkahmu', 'bidakku', 'bidakmu',
+  'rajaku', 'rajamu', 'menyerah', 'nyerah', 'pasrah', 'beruntung', 'sial',
+  'fokus', 'tenang', 'santai', 'serius', 'hati', 'berhati',
+];
+
+// Words that mark a message as abusive. Checked against the original
+// tokens, their slang expansions, and their consonant skeletons, so
+// vowel-stripped spellings are caught too.
+const PROFANITY = [
+  'anjing', 'bangsat', 'kontol', 'memek', 'goblok', 'tolol', 'bego',
+  'bajingan', 'kampret', 'jancok', 'brengsek', 'keparat', 'sialan',
+  'babi', 'monyet', 'asu', 'tai', 'taik', 'idiot', 'bodoh', 'dungu',
+  'fuck', 'shit', 'bitch', 'bastard', 'stupid', 'anjg', 'anj', 'bgst',
+  'kntl', 'gblk', 'tll', 'tololnya', 'anjingnya',
+];
+
+module.exports = { SLANG, WORDS, PROFANITY };

@@ -15,6 +15,7 @@ const truth = require('./game/truth');
 const questions = require('./game/questions');
 const bot = require('./game/bot');
 const chessbot = require('./game/chessbot');
+const personachat = require('./game/personachat');
 const { createVerifier } = require('./game/auth');
 const { RoomManager, MAX_PLAYERS } = require('./game/rooms');
 const { validateMessage } = require('./game/validate');
@@ -298,28 +299,133 @@ function handleStartGame(player, room, data) {
   sendGameState(room);
 }
 
+function countPieces(board) {
+  let n = 0;
+  for (const p of board) if (p) n++;
+  return n;
+}
+
 function handleChessMove(player, room, data) {
   if (room.status !== 'playing' || !room.chess) { sendError(player.socket, 'Game belum berjalan'); return; }
   if (chessColor(player.seat) !== room.chess.turn) { sendError(player.socket, 'Bukan giliranmu'); return; }
+  const before = countPieces(room.chess.board);
   const r = chess.applyMove(room.chess, chess.parseSq(data.from), chess.parseSq(data.to), data.promotion);
   if (!r.ok) { sendError(player.socket, r.error === 'langkah tidak legal' ? 'Langkah tidak legal' : 'Langkah tidak valid'); return; }
-  afterChessMove(room, r);
+  afterChessMove(room, r, { moverIsBot: !!player.isBot, captured: countPieces(room.chess.board) < before });
 }
 
 // Shared tail of a successful chess move (human or the VS AI persona):
 // game over, or next turn + let the AI answer when it is its move.
-function afterChessMove(room, r) {
+// In VS AI rooms the persona also reacts in chat (Misi 7): captures,
+// checks, and the final result get the occasional in-character line.
+function afterChessMove(room, r, meta) {
   clearTurnTimer(room);
   if (r.status) {
     room.status = 'over';
     const winnerColor = r.status.result === '1-0' ? 'w' : r.status.result === '0-1' ? 'b' : null;
     sendGameState(room);
     broadcast(room, gameOverPayload(room, { ...r.status, winnerColor }));
+    personaResultLine(room, winnerColor);
   } else {
     startTurnTimer(room);
     sendGameState(room);
+    personaMoveLine(room, meta);
     scheduleChessAiIfNeeded(room);
   }
+}
+
+// ----- VS AI persona chat (Misi 7) -----
+function personaName(room) {
+  const botPlayer = room.players.find((p) => p.isBot);
+  return botPlayer ? botPlayer.nickname : 'AI';
+}
+
+function broadcastPersonaChat(room, text) {
+  broadcast(room, { type: 'chat', from: personaName(room), text });
+}
+
+function schedulePersonaLine(room, line) {
+  if (!line) return;
+  setTimeout(() => {
+    if (!rooms.get(room.code)) return;
+    broadcastPersonaChat(room, line.text);
+  }, line.delayMs);
+}
+
+// The board truth a persona may quote in chat: player name, who is
+// ahead on material (bot's perspective; the bot is always Black),
+// capture tallies, move number, and who is in check right now.
+function chessFacts(room) {
+  const st = room.chess;
+  const human = room.players.find((p) => !p.isBot);
+  const evalCp = chessbot.evaluate(st); // white perspective
+  const inCheckNow = chess.inCheck(st.board, st.turn);
+  return {
+    name: human ? human.nickname : 'kamu',
+    material: evalCp < -60 ? 'ahead' : evalCp > 60 ? 'behind' : 'even',
+    capturesByBot: room.aiCaptures ? room.aiCaptures.bot : 0,
+    capturesByHuman: room.aiCaptures ? room.aiCaptures.human : 0,
+    moveNumber: st.full,
+    checkSide: inCheckNow ? (st.turn === 'b' ? 'bot' : 'human') : null,
+  };
+}
+
+function personaResultLine(room, winnerColor) {
+  if (!room.isBotRoom || !room.aiChat) return;
+  const category = winnerColor === 'b' ? 'win' : winnerColor === 'w' ? 'lose' : 'draw';
+  const line = personachat.eventLine(room.aiChat, room.aiPersona, category, chessFacts(room), Math.random, Date.now());
+  schedulePersonaLine(room, line);
+}
+
+function personaMoveLine(room, meta) {
+  if (!room.isBotRoom || !room.aiChat || !meta) return;
+  if (meta.captured) {
+    if (meta.moverIsBot) room.aiCaptures.bot += 1;
+    else room.aiCaptures.human += 1;
+  }
+  let category = null;
+  if (meta.captured) category = meta.moverIsBot ? 'botCaptured' : 'humanCaptured';
+  else if (chess.inCheck(room.chess.board, room.chess.turn)) {
+    category = meta.moverIsBot ? 'botGaveCheck' : 'botInCheck';
+  }
+  if (!category) return;
+  const line = personachat.eventLine(room.aiChat, room.aiPersona, category, chessFacts(room), Math.random, Date.now());
+  schedulePersonaLine(room, line);
+}
+
+// A long think deserves an occasional mid-wait remark ("Sebentar,
+// posisi ini menarik…"), fired partway into the scheduled pause and
+// re-checked against the persona's chance/gap rules when it lands.
+function scheduleThinkLine(room, thinkMs) {
+  if (!room.aiChat || thinkMs < 20000) return;
+  room.aiThinkTimer = setTimeout(() => {
+    room.aiThinkTimer = null;
+    if (!rooms.get(room.code) || room.status !== 'playing') return;
+    const line = personachat.eventLine(room.aiChat, room.aiPersona, 'longThink', chessFacts(room), Math.random, Date.now());
+    if (line) broadcastPersonaChat(room, line.text);
+  }, Math.round(thinkMs * 0.4));
+}
+
+// Position facts the thinking-time model needs (Misi 7): which phase
+// of the game we are in, whether the persona is in check, how many
+// legal moves exist, and whether an obvious recapture is available.
+function chessThinkContext(room) {
+  const st = room.chess;
+  const legal = chess.allLegalMoves(st, st.turn);
+  let canRecapture = false;
+  if (st.lastMove) {
+    const target = chess.parseSq(st.lastMove.to);
+    const victim = st.board[target];
+    if (victim && victim.c !== st.turn) {
+      canRecapture = legal.some((m) => m.to === target);
+    }
+  }
+  return {
+    moveNumber: st.full,
+    inCheck: chess.inCheck(st.board, st.turn),
+    legalCount: legal.length,
+    canRecapture,
+  };
 }
 
 // VS AI chess (Misi 6): when the side to move belongs to the persona,
@@ -335,7 +441,8 @@ function scheduleChessAiIfNeeded(room) {
   const fixed = parseInt(process.env.CHESS_AI_THINK_MS || '', 10);
   const thinkMs = Number.isFinite(fixed) && fixed >= 0
     ? fixed
-    : chessbot.pickThinkMs(Math.random, TURN_TIMEOUT_MS);
+    : chessbot.pickThinkMs(Math.random, TURN_TIMEOUT_MS, chessThinkContext(room));
+  scheduleThinkLine(room, thinkMs);
   room.botTimer = setTimeout(() => {
     room.botTimer = null;
     if (!rooms.get(room.code) || room.status !== 'playing') return;
@@ -344,15 +451,17 @@ function scheduleChessAiIfNeeded(room) {
 }
 
 function runChessAiTurn(room) {
+  if (room.aiThinkTimer) { clearTimeout(room.aiThinkTimer); room.aiThinkTimer = null; }
   if (room.status !== 'playing' || !room.chess || room.chess.over) return;
   const seat = room.chess.turn === 'w' ? 0 : 1;
   const p = room.players[seat];
   if (!p || !p.isBot) return;
   const mv = chessbot.chooseMove(room.chess, room.aiPersona);
   if (!mv) return;
+  const before = countPieces(room.chess.board);
   const r = chess.applyMove(room.chess, mv.from, mv.to, mv.promo);
   if (!r.ok) return; // cannot happen: chooseMove returns legal moves only
-  afterChessMove(room, r);
+  afterChessMove(room, r, { moverIsBot: true, captured: countPieces(room.chess.board) < before });
 }
 
 // Shared tail of a successful UNO play (human or bot): scoring on a win,
@@ -946,6 +1055,12 @@ async function route(ws, type, data) {
       if (ws._lastChat && now - ws._lastChat < 2000) { sendError(ws, 'Pelan-pelan chatnya ya 😄'); return; }
       ws._lastChat = now;
       broadcast(room, { type: 'chat', from: player.nickname, text: data.text });
+      // VS AI rooms: the persona may answer (Misi 7) — scripted brain,
+      // typing delay, cooldown and abuse ladder live in personachat.
+      if (room.isBotRoom && room.game === 'chess' && room.aiChat && !player.isBot) {
+        const reply = personachat.respond(room.aiChat, room.aiPersona, data.text, chessFacts(room), Math.random, now);
+        schedulePersonaLine(room, reply);
+      }
       return;
     }
     case 'chess_moves_for': {
@@ -1015,8 +1130,12 @@ async function route(ws, type, data) {
       rooms.addPlayer(room, bp);
       room.chess = chess.newGame();
       room.status = 'playing';
+      room.aiChat = personachat.createState();
+      room.aiCaptures = { bot: 0, human: 0 };
       startTurnTimer(room);
       sendGameState(room);
+      schedulePersonaLine(room, personachat.eventLine(
+        room.aiChat, room.aiPersona, 'start', chessFacts(room), Math.random, Date.now()));
       return;
     }
     case 'chess_new_round': {
@@ -1027,8 +1146,13 @@ async function route(ws, type, data) {
       }
       room.chess = chess.newGame();
       room.status = 'playing';
+      room.aiCaptures = { bot: 0, human: 0 };
       startTurnTimer(room);
       sendGameState(room);
+      if (room.aiChat) {
+        schedulePersonaLine(room, personachat.eventLine(
+          room.aiChat, room.aiPersona, 'start', chessFacts(room), Math.random, Date.now()));
+      }
       return;
     }
     case 'truth_set_rules': {

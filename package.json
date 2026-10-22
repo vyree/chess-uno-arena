@@ -10,11 +10,11 @@
   "main": "server.js",
   "name": "chess-uno-arena",
   "scripts": {
-    "check": "node --check server.js && node --check game/chess.js && node --check game/uno.js && node --check game/bot.js && node --check game/chessbot.js && node --check game/auth.js && node --check game/truth.js && node --check game/questions.js && node --check game/rooms.js && node --check game/validate.js && node --check public/app.js && node --check test/simulate.js && node --check test/sim_truth.js",
+    "check": "node --check server.js && node --check game/chess.js && node --check game/uno.js && node --check game/bot.js && node --check game/chessbot.js && node --check game/slang.js && node --check game/textbrain.js && node --check game/personachat.js && node --check game/auth.js && node --check game/truth.js && node --check game/questions.js && node --check game/rooms.js && node --check game/validate.js && node --check public/app.js && node --check test/simulate.js && node --check test/sim_truth.js",
     "simulate": "node test/simulate.js",
     "sim:truth": "node test/sim_truth.js",
     "start": "node server.js",
-    "test": "node --test test/chess.test.js test/chessbot.test.js test/uno.test.js test/uno_stacking.test.js test/bot.test.js test/auth.test.js test/rooms.test.js test/truth.test.js test/truth_bank.test.js"
+    "test": "node --test test/chess.test.js test/chessbot.test.js test/textbrain.test.js test/personachat.test.js test/uno.test.js test/uno_stacking.test.js test/bot.test.js test/auth.test.js test/rooms.test.js test/truth.test.js test/truth_bank.test.js"
   },
   "version": "1.0.0"
 }

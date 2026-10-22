@@ -664,3 +664,49 @@ Keputusan implementasi (as-built):
 - KOREKSI Sensei (22 Okt 2026 malam): label level (Normal/Hard/Hell)
   DIHAPUS dari tombol persona — tingkat kesulitan adalah RAHASIA;
   pemain hanya melihat nama AI-nya. Resep kekuatan tetap di server.
+
+## MISI 7 — Waktu Mikir v2 + Persona Bisa Chat (Sensei, 22 Okt 2026 malam)
+
+Perintah Sensei: (1) waktu mikir AI dirombak per fase game + kasus
+khusus; (2) kolom chat di room catur VS AI dihidupkan — persona
+membalas chat pemain secara scripted (Jalur A, nol kuota; Jalur B/LLM
+ditolak dulu demi prinsip irit kuota). Cakupan: CATUR DULU; library
+dibuat terpisah & game-agnostic agar game lain bisa memakai nanti.
+
+Waktu mikir v2 (chessbot.pickThinkMs(rand, limitMs, ctx)) — kasus
+khusus mengalahkan fase: 1 langkah legal ≤3 dtk; sedang diskak ≤7 dtk;
+2–3 langkah legal ≤5 dtk; recapture jelas 2–5 dtk. Fase: langkah 1–7
+= 5–10 dtk; 8–30 = bervariasi maks 30 dtk; 31+ = distribusi drama
+lama (boleh sampai zona bel). Cap keras batas −2,5 dtk tetap. Konteks
+dihitung server di chessThinkContext (nomor langkah st.full, inCheck,
+jumlah langkah legal, recapture dari st.lastMove).
+
+Library bahasa (game-agnostic, murni fungsi, nol I/O):
+- game/slang.js — DATA saja: kamus singkatan chat ID (~170 entri),
+  kosakata kanonik (~230 kata) untuk kerangka, daftar kata kasar.
+  File ini yang Sensei tambah saat mau mengajari kata baru.
+- game/textbrain.js — normalisasi (huruf kecil, lipat huruf berulang
+  3+), ekspansi token (kamus → frasa), KERANGKA KONSONAN (buang vokal
+  dari dua sisi: "sprt"≡"seperti", "klh"≡"kalah", "akn"≡"akan"),
+  pencocokan intent (pola token; terpanjang menang), deteksi makian
+  (utuh/singkatan/kerangka), deteksi gibberish (cakupan kata dikenal
+  <34%), flag pertanyaan & emoji-only.
+- game/personachat.js — otak persona: INTENTS (nameAsk & tanya
+  keadaan game didahulukan), bank kalimat 4 persona × 31 kategori
+  (suara: Gemini ceria, GPT sopan, Meta dingin, Claude kalem-smug),
+  mesin kebijakan: tanya pemain/papan selalu dijawab dari FAKTA
+  (nama asli, materi, hitungan tangkapan, nomor langkah, status skak
+  — via chessFacts server), smalltalk 90%, trivia luar papan
+  dihindari berkelas, gibberish 50%, cooldown balasan 5 dtk, jeda
+  event 20 dtk, jeda ngetik 0,7–3,8 dtk. TANGGA MAKIAN: tangkisan
+  lucu → garis batas → MUTE 90 dtk (game tidak terpengaruh). Persona
+  tidak pernah memaki balik & tidak pernah melepas kostum.
+
+Glue server (khusus room VS AI catur): sapaan 'start' saat room
+dibuat & ronde baru; balasan chat dari handler 'chat'; event lines
+dari afterChessMove (tangkapan 30–35%, skak 40–50%, hasil akhir
+selalu); mid-think line bila jeda ≥20 dtk (ditembak di 40% jeda,
+dicek ulang chance/gap saat mendarat); hitungan tangkapan room
+(aiCaptures) dari selisih jumlah bidak sebelum/sesudah langkah.
+Klien TIDAK berubah — chat persona memakai pesan 'chat' biasa dengan
+from = nama persona.

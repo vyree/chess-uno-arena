@@ -64,6 +64,28 @@ test('waktu mikir: selalu di dalam batas aman & bucket sesuai spek', () => {
   assert.ok(samples.some((x) => x > 50000), 'bucket dramatis dekat bel ada');
 });
 
+test('waktu mikir v2: kasus khusus mengalahkan aturan fase', () => {
+  let s = 21;
+  const rng = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  const many = (ctx) => Array.from({ length: 200 }, () => CB.pickThinkMs(rng, 60000, ctx));
+  // forced move: <= 3 s even in the endgame
+  assert.ok(Math.max(...many({ moveNumber: 40, legalCount: 1 })) <= 3000);
+  // in check: <= 7 s
+  assert.ok(Math.max(...many({ moveNumber: 20, inCheck: true, legalCount: 12 })) <= 7000);
+  // few options (2-3 legal): <= 5 s
+  assert.ok(Math.max(...many({ moveNumber: 20, legalCount: 3 })) <= 5000);
+  // obvious recapture: 2-5 s
+  const recap = many({ moveNumber: 20, legalCount: 15, canRecapture: true });
+  assert.ok(Math.max(...recap) <= 5000 && Math.min(...recap) >= 2000);
+  // opening (moves 1-7): 5-10 s
+  const open = many({ moveNumber: 4, legalCount: 20 });
+  assert.ok(Math.max(...open) <= 10000 && Math.min(...open) >= 5000);
+  // middlegame (8-30): never over the 30 s cap
+  assert.ok(Math.max(...many({ moveNumber: 18, legalCount: 30 })) <= 30000);
+  // endgame (31+): the drama bucket (>40 s) exists again
+  assert.ok(Math.max(...many({ moveNumber: 45, legalCount: 12 })) > 40000);
+});
+
 test('game bot lawan bot selesai tanpa langkah ilegal', () => {
   let s = 7;
   const rng = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };

@@ -144,19 +144,43 @@ function chooseMove(st, personaKey, rand) {
   return pool[Math.floor(r() * pool.length)].move;
 }
 
-// Thinking-time theatre (Sensei's spec): most moves 5-10 s, sometimes
-// 10-20 s, sometimes 20-40 s, rarely right up to the buzzer — but the
-// cap keeps a safety margin inside `limitMs` so the AI moves in time.
-function pickThinkMs(rand, limitMs) {
+// Thinking-time theatre v2 (Sensei's spec, Misi 7): the pause follows
+// the shape of a real game. Special cases beat phase rules: a forced
+// move (1 legal) <= 3 s, escaping check <= 7 s, few options (2-3
+// legal) <= 5 s, an obvious recapture 2-5 s. Opening (moves 1-7)
+// stays in the 5-10 s book range; the middlegame (8-30) is capped at
+// 30 s; only the endgame (31+) may drift toward the buzzer. The hard
+// cap (limit - 2.5 s) always applies: timeout is a loss in chess, so
+// the AI is never actually late. ctx: { moveNumber, inCheck,
+// legalCount, canRecapture } — all optional; no ctx = full drama.
+function pickThinkMs(rand, limitMs, ctx) {
   const r = rand || Math.random;
+  const c = ctx || {};
   const cap = Math.max(3000, (limitMs || 60000) - 2500);
-  const roll = r();
   let ms;
-  if (roll < 0.60) ms = 5000 + r() * 5000;
-  else if (roll < 0.80) ms = 10000 + r() * 10000;
-  else if (roll < 0.92) ms = 20000 + r() * 20000;
-  else ms = cap - r() * 2000;
+  if (c.legalCount === 1) ms = 1000 + r() * 2000;
+  else if (c.inCheck) ms = 3000 + r() * 4000;
+  else if (c.legalCount && c.legalCount <= 3) ms = 2000 + r() * 3000;
+  else if (c.canRecapture) ms = 2000 + r() * 3000;
+  else if (c.moveNumber && c.moveNumber <= 7) ms = 5000 + r() * 5000;
+  else if (c.moveNumber && c.moveNumber <= 30) ms = middleThinkMs(r);
+  else ms = dramaThinkMs(r, cap);
   return Math.round(Math.min(ms, cap));
+}
+
+function middleThinkMs(r) {
+  const roll = r();
+  if (roll < 0.60) return 5000 + r() * 7000;
+  if (roll < 0.85) return 12000 + r() * 8000;
+  return 20000 + r() * 10000;
+}
+
+function dramaThinkMs(r, cap) {
+  const roll = r();
+  if (roll < 0.60) return 5000 + r() * 5000;
+  if (roll < 0.80) return 10000 + r() * 10000;
+  if (roll < 0.92) return 20000 + r() * 20000;
+  return cap - r() * 2000;
 }
 
 module.exports = { PERSONAS, evaluate, chooseMove, pickThinkMs };
