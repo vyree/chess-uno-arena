@@ -809,3 +809,30 @@ e7e6 membela kuda tergantung); Greek Gift (Meta d3h7, GPT menolak);
 Penggerus (Claude d1d5 saat unggul, menolak saat tertinggal);
 evaluateFor garpu (Gemini > GPT sebesar >30 cp); bank kalimat skill
 4 kategori. Total suite: 117/117.
+
+## PERBAIKAN BUG 1 — Layar Beku di HP (Sensei, 23 Okt 2026 — SELESAI BUILD, deploy ditahan)
+
+Konteks lapangan: situs LIVE, multiplayer 5–6 orang, di HP — pergerakan
+tidak terlihat setelah 2–3 sesi sampai refresh. Diagnosis mode debugger
+dengan tes Chrome (CDP): kandidat saveSession TERBUKTI (setItem tanpa
+try/catch di jalur render membunuh handler game_state; frame & chat
+tetap hidup, papan beku), kandidat soket half-open prasyaratnya
+terkonfirmasi (nol heartbeat dua arah), kandidat modal basi minor,
+kandidat timer bot GUGUR (room manusia murni).
+
+Tiga perbaikan (ACC Sensei "gas 3-3 nya"):
+1. Klien: saveSession() + clearSession() dibungkus try/catch — simpan
+   sesi best-effort, tidak pernah membunuh render lagi.
+2. Heartbeat dua arah: klien ping app-level tiap 15 dtk; hening total
+   35 dtk -> soket dipaksa tutup -> reconnect + rejoin otomatis (plus
+   cek seketika saat tab terlihat lagi). Server: ws ping tiap 30 dtk
+   (env WS_HEARTBEAT_MS), soket yang melewatkan satu sapuan penuh
+   diterminasi -> jalur disconnect biasa (grace + Fase C) berjalan.
+3. Klien: onGameState selalu hideModal() lebih dulu — state baru tidak
+   pernah ter-render di balik modal basi.
+
+Verifikasi: suite 123/123 (termasuk test/heartbeat.test.js baru:
+klien sehat tidak diputus, soket mati diterminasi); simulate +
+sim_truth lolos; tes racun Chrome diulang pada build ter-fix: 33x
+setItem melempar tertelan, render terus hidup; soket yang dibungkam
+paksa reconnect + rejoin sendiri tanpa refresh.

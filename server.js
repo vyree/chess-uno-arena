@@ -1426,8 +1426,27 @@ const httpServer = http.createServer((req, res) => {
 // ---------------- WebSocket ----------------
 const wss = new WebSocketServer({ server: httpServer, maxPayload: 64 * 1024 });
 
+// Bug 1 fix B (Sensei, 2026-10-23): protocol heartbeat. A client whose
+// network froze without a close frame used to look connected forever —
+// its seat never freed up and the client never knew. Now a socket that
+// misses a whole sweep is terminated, which runs the normal disconnect
+// path (reconnect grace, then the Misi 4C takeover). Healthy clients
+// answer pings automatically at the protocol level. The env override
+// exists only so tests can run fast.
+const WS_HEARTBEAT_MS = parseInt(process.env.WS_HEARTBEAT_MS, 10) || 30 * 1000;
+const heartbeatTimer = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws._alive === false) { ws.terminate(); continue; }
+    ws._alive = false;
+    try { ws.ping(); } catch { /* socket already broken */ }
+  }
+}, WS_HEARTBEAT_MS);
+heartbeatTimer.unref();
+
 wss.on('connection', (ws) => {
   ws._times = [];
+  ws._alive = true;
+  ws.on('pong', () => { ws._alive = true; });
   ws.on('message', (raw) => {
     try {
       // rate limit: 20 msg/detik

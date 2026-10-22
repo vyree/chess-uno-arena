@@ -8,6 +8,7 @@ const S = {
   selected: null, legalMoves: [],
   saidUnoArmed: false, deadline: null, helloSent: false,
   welcomed: false, queue: [], // Misi 4B: outbound queue gated on 'welcome'
+  lastFrameAt: 0, lastPingAt: 0, // Bug 1 fix B: heartbeat bookkeeping
   authMode: false, // login PARKED (Sensei, 2026-10-21): nickname-only, local progress
   fbUser: null, profileNickname: null,
 };
@@ -96,6 +97,7 @@ function connect() {
     }
   };
   ws.onmessage = (ev) => {
+    S.lastFrameAt = Date.now(); // Bug 1 fix B: any frame proves life
     let m;
     try { m = JSON.parse(ev.data); } catch { return; }
     route(m);
@@ -106,6 +108,36 @@ function connect() {
     setTimeout(connect, 2500);
   };
 }
+
+// Bug 1 fix B (Sensei, 2026-10-23): heartbeat. A mobile socket can die
+// silently (frozen tab, network switch) — no close event ever fires and
+// the old client sat deaf until a manual refresh. Now the client pings
+// every 15s (the server's pong, like every inbound frame, refreshes
+// S.lastFrameAt); if nothing at all arrives for 35s the socket is
+// force-closed, which runs the normal reconnect + rejoin path. Waking
+// the tab re-checks at once instead of waiting for the next tick.
+const HEARTBEAT_MS = 15 * 1000;
+const STALE_MS = 35 * 1000;
+function socketStale() {
+  return S.ws && S.ws.readyState === 1 && S.lastFrameAt > 0
+    && Date.now() - S.lastFrameAt > STALE_MS;
+}
+setInterval(() => {
+  if (!S.ws || S.ws.readyState !== 1) return;
+  if (socketStale()) {
+    try { S.ws.close(); } catch { /* already gone */ }
+    return;
+  }
+  if (S.welcomed && Date.now() - S.lastPingAt >= HEARTBEAT_MS) {
+    S.lastPingAt = Date.now();
+    send('ping');
+  }
+}, 5000);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && socketStale()) {
+    try { S.ws.close(); } catch { /* already gone */ }
+  }
+});
 function send(type, data) {
   // Misi 4B: identity first. Until this socket is welcomed, game messages
   // wait in a queue — no action can ever outrun the hello/rejoin, so the
@@ -125,14 +157,20 @@ function flushQueue() {
 // closed tab or a killed browser so reopening the app rejoins the game.
 // A session whose room is gone self-heals via the 'error' route below.
 function saveSession() {
-  localStorage.setItem('cua', JSON.stringify({
-    playerId: S.playerId, code: S.roomCode, nickname: S.nickname,
-  }));
+  // Bug 1 fix (Sensei, 2026-10-23): storage CAN throw (quota, private
+  // mode, WebView) and this runs on the render path — a throw here used
+  // to kill the game_state/welcome handler and freeze the board while
+  // the socket stayed alive. Saving the session is best-effort, always.
+  try {
+    localStorage.setItem('cua', JSON.stringify({
+      playerId: S.playerId, code: S.roomCode, nickname: S.nickname,
+    }));
+  } catch { /* storage unavailable: play on without a saved session */ }
 }
 function loadSession() {
   try { return JSON.parse(localStorage.getItem('cua')); } catch { return null; }
 }
-function clearSession() { localStorage.removeItem('cua'); }
+function clearSession() { try { localStorage.removeItem('cua'); } catch { /* ignore */ } }
 
 // The nickname lives in localStorage (cua-nick) + S.nickname; the gate
 // modal collects it once, Settings can change it later.
@@ -338,6 +376,10 @@ function onLobby(m) {
 
 // ---------- chess ----------
 function onGameState(m) {
+  // Bug 1 hardening (Sensei, 2026-10-23): a fresh game state always
+  // retires any stale modal (e.g. the game-over dialog of the previous
+  // round) — the new round must never render hidden behind it.
+  hideModal();
   S.roomCode = m.code; S.players = m.players; S.hostId = m.hostId;
   S.deadline = m.deadline; saveSession();
   if (m.game === 'chess') {
