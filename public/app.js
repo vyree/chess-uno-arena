@@ -71,7 +71,7 @@ function hideModal() { $('modal').classList.add('hidden'); }
 function serverEndpoint(proto) {
   const pick = new URLSearchParams(location.search).get('server');
   if (pick === 'railway') return 'wss://chess-uno-arena-production.up.railway.app';
-  if (pick === 'fly') return 'wss://chess-uno-arena.fly.dev';
+  if (pick === 'fly') return 'wss://ayo-nge.fly.dev';
   return window.CUA_WS_ENDPOINT || (proto + '://' + location.host);
 }
 function connect() {

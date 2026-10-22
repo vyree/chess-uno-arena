@@ -1,7 +1,8 @@
-# Chess + UNO Arena — Fly.io BACKUP server (Sensei, 2026-10-21).
-# Primary stays on Railway; this mirror exists so the game keeps a spare
-# WebSocket home. Players reach it via https://fir-pro2-d77c3.web.app/?server=fly
-app = "chess-uno-arena"
+# MABAR.io game server on Fly.io — PRIMARY since 2026-10-22 (Railway is
+# the ?server=railway standby). App renamed chess-uno-arena -> ayo-nge on
+# 2026-10-22 at Sensei's request; players reach it via the Firebase
+# client at https://fir-pro2-d77c3.web.app (default WS endpoint).
+app = "ayo-nge"
 primary_region = "sin"
 
 [build]

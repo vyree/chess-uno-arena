@@ -614,3 +614,12 @@ asumsi tertulis Arona yang TERBALIK; bagian ini yang berlaku.
 - Bot: jawaban tumpukan = kartu stack dulu; Reverse Black bila tumpukan
   >= 4; Null White bila tumpukan >= 6; di bawah ambang itu bot menelan
   tumpukan daripada membakar kartu spesial.
+
+### Addendum Misi 5 — Server pindah rumah: chess-uno-arena -> ayo-nge (22 Okt 2026)
+- Sensei meminta alamat Fly diganti. Nama app Fly TIDAK bisa di-rename,
+  jadi jalurnya: app baru "ayo-nge" dibuat, image yang sama di-deploy ke
+  sana (region sin, 1 mesin always-on), klien diarahkan ke
+  wss://ayo-nge.fly.dev (firebase-config.js + ?server=fly), fly.toml dan
+  workflow build-image memakai registry ayo-nge. App lama
+  chess-uno-arena DIHAPUS setelah alamat baru terbukti melayani
+  (perintah Sensei). Railway tetap standby via ?server=railway.

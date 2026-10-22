@@ -2,7 +2,7 @@
 # Exists because Arona's sandbox egress proxy blocks Fly's remote builders
 # and Docker Hub CDNs; GitHub's runners have a clean network. Deploy then
 # happens from Arona's side with:
-#   flyctl deploy --image registry.fly.io/chess-uno-arena:latest
+#   flyctl deploy --image registry.fly.io/ayo-nge:latest
 # Needs one repo secret: FLY_API_TOKEN (a Fly deploy token for this app).
 name: build-image
 on:
@@ -26,4 +26,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: registry.fly.io/chess-uno-arena:latest
+          tags: registry.fly.io/ayo-nge:latest
