@@ -242,9 +242,11 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
 
 ## Konsep
 
-- Room 3–10 pemain, kode room seperti game lain; host memilih **paket
-  soal**: Santai (ice breaking), Nostalgia (kenangan), Mendalam
-  (perasaan/mimpi, tetap sopan), Campuran.
+- Room 3–10 pemain, kode room seperti game lain. **TIDAK ADA pilihan
+  paket/kategori di awal game** (keputusan Sensei, 22 Okt 2026): semua
+  200 soal digabung jadi SATU tumpukan dan diacak. Empat nuansa soal
+  (Santai, Nostalgia, Mendalam — tetap sopan, Campuran) hanya keragaman
+  rasa saat menulis bank soal, bukan pilihan pemain.
 - Inti permainan = bank soal + roda giliran + reaksi. Tidak ada engine
   aturan rumit; kualitas ditentukan kurasi soal.
 
@@ -271,8 +273,10 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
 ## Bank soal
 
 - Format data: daftar soal per paket (file data terpisah, mudah ditambah).
-- Target awal: ±50 soal per paket, bertumbuh ke ±100. Semua soal lolos
-  kurasi: aman, sopan, tidak menyinggung SARA pribadi.
+- Target: **200 soal total** — ditulis sebagai 4 nuansa × 50 soal, lalu
+  DIGABUNG jadi satu tumpukan (keputusan Sensei, 22 Okt 2026). Semua
+  soal lolos kurasi: aman, sopan, tidak menyinggung SARA pribadi.
+  Indikator sisa soal di layar: mulai **200/200**.
 
 ## Arsitektur (mengikuti pola arena)
 
@@ -284,8 +288,8 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
 
 ## Fase pengerjaan (checklist — belum dimulai)
 
-- [ ] Fase 1 — Engine `game/truth.js` + bank soal inti (4 paket × ±50)
-      + validasi + tes unit
+- [ ] Fase 1 — Engine `game/truth.js` + bank soal inti (200 soal
+      gabungan) + validasi + tes unit
 - [ ] Fase 2 — Integrasi server: room tipe truth, alur giliran/reaksi/
       poin/gelar, MC bot, simulasi WS end-to-end
 - [ ] Fase 3 — UI: layar truth, animasi roda nama, kartu soal, reaksi,
@@ -319,6 +323,22 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
   2. Setelah pemain terpilih, **jeda 10 detik** = jendela klaim ASK.
      Bila dalam 10 detik tidak ada yang menekan ASK, **kartu pertanyaan
      terbuka OTOMATIS** dan giliran berjalan normal.
+
+## Sistem Reaksi & Penghargaan (keputusan Sensei, 22 Okt 2026 — MENGGANTIKAN set reaksi & gelar rancangan awal)
+
+- **4 reaksi resmi**: 😆 Lucu, 😭 Nangis, 🥰 Lovely, 😤 Marah.
+  (Wajah ke-4 di sketsa Sensei = 😤 Marah — misteri terjawab.)
+- **Batas: tiap pemain hanya boleh memberi MAKSIMAL 2 reaksi per
+  jawaban** (boleh 2 jenis berbeda atau 2x jenis yang sama — asumsi
+  Arona, koreksi bila salah). Pemain tidak mereaksi jawabannya sendiri.
+- **Poin untuk penjawab**: 😆 Lucu = **+10**, 😭 Nangis = **+15**,
+  🥰 Lovely = **+10**, 😤 Marah = **+15**. Poin diakumulasi per pemain
+  sepanjang game.
+- **Penghargaan akhir game** (ditampilkan di layar penutup):
+  - Pemain dengan total poin terbanyak (juara umum).
+  - Per JAWABAN/cerita: **Paling Lucu** (😆 terbanyak), **Paling Sedih**
+    (😭 terbanyak), **Paling Lovely** (🥰 terbanyak), **Paling
+    Emosional** (😤 terbanyak).
 - **Notifikasi pop-up di layar WAJIB** untuk setiap peristiwa penting,
   agar semua pemain selalu sadar keadaan game. Contoh resmi dari Sensei:
   "Putaran ke 2", "Player 1 bertanya", "Player 2 skip!!". Berlaku juga
