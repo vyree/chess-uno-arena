@@ -11,6 +11,8 @@ const { WebSocketServer } = require('ws');
 
 const chess = require('./game/chess');
 const uno = require('./game/uno');
+const truth = require('./game/truth');
+const questions = require('./game/questions');
 const bot = require('./game/bot');
 const { createVerifier } = require('./game/auth');
 const { RoomManager, MAX_PLAYERS } = require('./game/rooms');
@@ -30,6 +32,16 @@ if (!tokenVerifier) {
   console.warn('[auth] gerbang login MATI — login diparkir (mode nickname terbuka)');
 }
 const TURN_TIMEOUT_MS = 60 * 1000;
+// Truth timing follows the engine contract (game/truth.js). The env
+// overrides exist only so the WS simulation can run fast; production
+// always uses the spec defaults.
+const TRUTH_TIMING = {
+  spin: parseInt(process.env.TRUTH_SPIN_MS, 10) || truth.SPIN_MS,
+  askWindow: parseInt(process.env.TRUTH_ASK_WINDOW_MS, 10) || truth.ASK_WINDOW_MS,
+  askSubmit: parseInt(process.env.TRUTH_ASK_SUBMIT_MS, 10) || truth.ASK_SUBMIT_MS,
+  answer: parseInt(process.env.TRUTH_ANSWER_MS, 10) || truth.ANSWER_MS,
+  react: parseInt(process.env.TRUTH_REACT_MS, 10) || truth.REACT_MS,
+};
 const BOT_DELAY_MS = 900; // bot "thinking" pause so humans can follow the game
 const RECONNECT_GRACE_MS = 60 * 1000;
 const MSG_PER_SEC = 20;
@@ -64,6 +76,7 @@ function lobbySnapshot(room, forPlayer) {
     you: forPlayer ? forPlayer.id : null,
     hostId: room.hostId,
     maxPlayers: MAX_PLAYERS[room.game],
+    truthSettings: room.game === 'truth' ? room.truthSettings : undefined,
     players: room.players.map((p) => ({ id: p.id, nickname: p.nickname, seat: p.seat, isBot: !!p.isBot })),
   };
 }
@@ -82,6 +95,9 @@ function gameSnapshot(room, player) {
   };
   if (room.game === 'chess') {
     base.state = chess.toClient(room.chess);
+  } else if (room.game === 'truth' && room.truth) {
+    base.state = truth.snapshot(room.truth.st);
+    base.truthStage = room.truthStage;
   } else if (room.uno) {
     const u = room.uno;
     base.state = uno.toClient(u.st, player.seat);
@@ -112,6 +128,13 @@ function gameOverPayload(room, result) {
   if (room.game === 'chess' && result.winnerColor) {
     const w = room.players.find((p) => chessColor(p.seat) === result.winnerColor);
     payload.winnerNickname = w ? w.nickname : null;
+  }
+  if (room.game === 'truth') {
+    payload.awards = result.awards;
+    payload.scores = (room.truth ? room.truth.st.players : []).map((p) => {
+      const rp = room.players.find((x) => x.id === p.id);
+      return { playerId: p.id, nickname: rp ? rp.nickname : p.id, points: p.points };
+    });
   }
   if (room.game === 'uno') {
     payload.winnerSeat = result.winner;
@@ -188,6 +211,12 @@ function forfeitPlayer(room, playerId) {
     room.status = 'over';
     clearTurnTimer(room);
     broadcast(room, gameOverPayload(room, { ...room.chess.over, winnerColor }));
+  } else if (room.game === 'truth') {
+    // Truth survives a departure: the engine keeps the seat and the
+    // turn timers auto-pass a ghost answerer, so the game plays out
+    // for everyone who stayed.
+    rooms.removePlayer(room, playerId);
+    if (rooms.get(room.code)) sendGameState(room);
   } else {
     const u = room.uno;
     if (player && u.active[player.seat]) {
@@ -242,6 +271,11 @@ function handleStartGame(player, room, data) {
     if (room.players.length < 2) { sendError(player.socket, 'Tunggu lawan masuk dulu'); return; }
     room.chess = chess.newGame();
     room.status = 'playing';
+  } else if (room.game === 'truth') {
+    if (room.players.length < 2) { sendError(player.socket, 'Truth butuh minimal 2 pemain'); return; }
+    const started = startTruthGame(room);
+    if (!started.ok) sendError(player.socket, started.error);
+    return;
   } else {
     if (room.players.length < 2) { sendError(player.socket, 'UNO butuh minimal 2 pemain'); return; }
     // UNO: seat order is shuffled at every game start (Sensei, Misi 2)
@@ -367,6 +401,210 @@ function handleUnoNewRound(player, room) {
   startTurnTimer(room);
   sendGameState(room);
   scheduleBotIfNeeded(room);
+}
+
+// ---------------- Truth or Truth (Misi 3 Fase 2) ----------------
+// The engine is a pure state machine; this driver owns the clock:
+// spin -> ASK window -> answering -> reacting -> next spin. Every engine
+// event is broadcast as `truth_event` (the mandatory on-screen popups)
+// and mirrored by the MC bot when the room has only 2 humans.
+function nickOf(room, playerId) {
+  const p = room.players.find((x) => x.id === playerId);
+  return p ? p.nickname : 'Pemain';
+}
+
+function truthSetTimer(room, ms, fn) {
+  clearTurnTimer(room);
+  room.deadline = Date.now() + ms;
+  room.timer = setTimeout(() => { room.timer = null; fn(); }, ms);
+}
+
+function mcSay(room, text) { broadcast(room, { type: 'chat', from: 'MC', text }); }
+
+function mcSpeak(room, events) {
+  if (!room.truth || !room.truth.mc) return;
+  for (const e of events) {
+    if (e.type === 'turn_started') {
+      mcSay(room, `🎡 Putaran ke-${e.turnNumber} dari ${e.totalTurns}! Rodanya berhenti di ${nickOf(room, e.playerId)}!`);
+    } else if (e.type === 'ask_claimed') {
+      mcSay(room, `🙋 ${nickOf(room, e.playerId)} mau bertanya!`);
+    } else if (e.type === 'question_ready') {
+      mcSay(room, `❓ ${nickOf(room, e.playerId)} bertanya: ${room.truth.st.current.question}`);
+    } else if (e.type === 'card_opened') {
+      mcSay(room, `📖 Soalnya: ${e.question}`);
+    } else if (e.type === 'passed') {
+      mcSay(room, `⏭️ ${nickOf(room, e.playerId)} skip!!`);
+    } else if (e.type === 'answer_timeout') {
+      mcSay(room, `⌛ Waktu habis! ${nickOf(room, e.playerId)} tidak menjawab.`);
+    } else if (e.type === 'ask_expired') {
+      mcSay(room, `🤔 ${nickOf(room, e.playerId)} kelamaan menyusun pertanyaan — giliran hangus!`);
+    } else if (e.type === 'game_over' && e.awards && e.awards.topScorer) {
+      mcSay(room, `🏆 Selesai! Poin tertinggi: ${nickOf(room, e.awards.topScorer.playerId)} dengan ${e.awards.topScorer.points} poin!`);
+    }
+  }
+}
+
+function emitTruthEvents(room, events) {
+  if (!events || !events.length) return;
+  broadcast(room, { type: 'truth_event', events });
+  mcSpeak(room, events);
+}
+
+function startTruthGame(room) {
+  const s = room.truthSettings || { totalQuestions: null, explicitMode: false };
+  const r = truth.createGame({
+    playerIds: room.players.map((p) => p.id),
+    questions: s.explicitMode ? questions.EXPLICIT : questions.ALL,
+    explicitMode: s.explicitMode,
+    totalQuestions: s.totalQuestions === null ? undefined : s.totalQuestions,
+  });
+  if (!r.ok) return r;
+  room.truth = { st: r.state, mc: room.players.length < 3 };
+  room.status = 'playing';
+  room.truthStage = 'spin';
+  if (room.truth.mc) {
+    mcSay(room, '🎤 Karena pemainnya pas-pasan, MC ikut menemani — aku yang putar rodanya yaa!');
+  }
+  sendGameState(room);
+  emitTruthEvents(room, [{
+    type: 'turn_started', playerId: r.state.current.answererId,
+    turnNumber: 1, totalTurns: r.state.totalTurns, round: 1,
+  }]);
+  truthSetTimer(room, TRUTH_TIMING.spin, () => truthOpenAsk(room));
+  return { ok: true };
+}
+
+function truthOpenAsk(room) {
+  if (!room.truth || room.status !== 'playing') return;
+  room.truthStage = 'ask';
+  sendGameState(room);
+  // The pause notice differs per mode (Sensei): explicit rooms announce
+  // a random explicit question instead of inviting an ASK.
+  broadcast(room, { type: 'truth_event', events: [{
+    type: room.truth.st.explicitMode ? 'explicit_question_incoming' : 'ask_window_open',
+  }] });
+  truthSetTimer(room, TRUTH_TIMING.askWindow, () => {
+    if (!room.truth || room.status !== 'playing') return;
+    const r = truth.openCard(room.truth.st);
+    if (!r.ok) return; // an ASK claim holds the turn; its own timer rules
+    truthAfterQuestion(room, r.events);
+  });
+}
+
+function truthAfterQuestion(room, events) {
+  room.truthStage = 'answer';
+  sendGameState(room);
+  emitTruthEvents(room, events);
+  truthSetTimer(room, TRUTH_TIMING.answer, () => {
+    if (!room.truth || room.status !== 'playing') return;
+    const r = truth.timeoutTurn(room.truth.st);
+    if (r.ok) truthOnTurnClosed(room, r.events);
+  });
+}
+
+function truthOnTurnClosed(room, events) {
+  const finished = room.truth.st.phase === 'finished';
+  if (finished) {
+    room.status = 'over';
+    room.truthStage = null;
+    clearTurnTimer(room);
+  } else {
+    room.truthStage = 'spin';
+  }
+  sendGameState(room);
+  emitTruthEvents(room, events);
+  if (finished) {
+    broadcast(room, gameOverPayload(room, { awards: room.truth.st.awards }));
+    return;
+  }
+  truthSetTimer(room, TRUTH_TIMING.spin, () => truthOpenAsk(room));
+}
+
+function truthGuard(player, room) {
+  if (room.game !== 'truth' || room.status !== 'playing' || !room.truth) {
+    sendError(player.socket, 'Game Truth belum berjalan');
+    return false;
+  }
+  return true;
+}
+
+function handleTruthSetRules(player, room, data) {
+  if (room.game !== 'truth') { sendError(player.socket, 'Ini bukan room Truth'); return; }
+  if (room.hostId !== player.id) { sendError(player.socket, 'Hanya pembuat room yang bisa set aturan'); return; }
+  if (room.status !== 'lobby') { sendError(player.socket, 'Aturan hanya bisa diubah di lobby'); return; }
+  if (data.totalQuestions !== undefined) room.truthSettings.totalQuestions = data.totalQuestions;
+  if (data.explicitMode !== undefined) room.truthSettings.explicitMode = data.explicitMode;
+  sendLobby(room);
+}
+
+function handleTruthAsk(player, room) {
+  if (!truthGuard(player, room)) return;
+  if (room.truthStage !== 'ask') { sendError(player.socket, 'Jendela ASK belum terbuka'); return; }
+  const r = truth.claimAsk(room.truth.st, player.id);
+  if (!r.ok) { sendError(player.socket, r.error); return; }
+  sendGameState(room);
+  emitTruthEvents(room, r.events);
+  // the asker now has ASK_SUBMIT_MS to actually send the question
+  truthSetTimer(room, TRUTH_TIMING.askSubmit, () => {
+    if (!room.truth || room.status !== 'playing') return;
+    const ex = truth.expireAskWindow(room.truth.st);
+    if (ex.ok) truthOnTurnClosed(room, ex.events);
+  });
+}
+
+function handleTruthAskQuestion(player, room, data) {
+  if (!truthGuard(player, room)) return;
+  const r = truth.submitAskQuestion(room.truth.st, player.id, data.question);
+  if (!r.ok) { sendError(player.socket, r.error); return; }
+  truthAfterQuestion(room, r.events);
+}
+
+function handleTruthAnswer(player, room, data) {
+  if (!truthGuard(player, room)) return;
+  const r = truth.submitAnswer(room.truth.st, player.id, data.text);
+  if (!r.ok) { sendError(player.socket, r.error); return; }
+  room.truthStage = 'react';
+  sendGameState(room);
+  emitTruthEvents(room, r.events);
+  truthSetTimer(room, TRUTH_TIMING.react, () => {
+    if (!room.truth || room.status !== 'playing') return;
+    const e = truth.endTurn(room.truth.st);
+    if (e.ok) truthOnTurnClosed(room, e.events);
+  });
+}
+
+function handleTruthPass(player, room) {
+  if (!truthGuard(player, room)) return;
+  const r = truth.passTurn(room.truth.st, player.id);
+  if (!r.ok) { sendError(player.socket, r.error); return; }
+  truthOnTurnClosed(room, r.events);
+}
+
+function handleTruthReact(player, room, data) {
+  if (!truthGuard(player, room)) return;
+  const r = truth.react(room.truth.st, player.id, data.kind);
+  if (!r.ok) { sendError(player.socket, r.error); return; }
+  sendGameState(room);
+  emitTruthEvents(room, r.events);
+}
+
+function handleTruthKurangGreget(player, room) {
+  if (!truthGuard(player, room)) return;
+  const r = truth.kurangGreget(room.truth.st, player.id);
+  if (!r.ok) { sendError(player.socket, r.error); return; }
+  sendGameState(room);
+  emitTruthEvents(room, r.events);
+}
+
+function handleTruthNext(player, room) {
+  if (!truthGuard(player, room)) return;
+  if (room.truth.st.current.answererId !== player.id) {
+    sendError(player.socket, 'Hanya penjawab yang bisa lanjut');
+    return;
+  }
+  const r = truth.endTurn(room.truth.st);
+  if (!r.ok) { sendError(player.socket, r.error); return; }
+  truthOnTurnClosed(room, r.events);
 }
 
 // ---------------- UNO bots ----------------
@@ -609,6 +847,46 @@ async function route(ws, type, data) {
     case 'uno_new_round': {
       const room = needRoom(); if (!room) return;
       handleUnoNewRound(player, room);
+      return;
+    }
+    case 'truth_set_rules': {
+      const room = needRoom(); if (!room) return;
+      handleTruthSetRules(player, room, data);
+      return;
+    }
+    case 'truth_ask': {
+      const room = needRoom(); if (!room) return;
+      handleTruthAsk(player, room);
+      return;
+    }
+    case 'truth_ask_question': {
+      const room = needRoom(); if (!room) return;
+      handleTruthAskQuestion(player, room, data);
+      return;
+    }
+    case 'truth_answer': {
+      const room = needRoom(); if (!room) return;
+      handleTruthAnswer(player, room, data);
+      return;
+    }
+    case 'truth_pass': {
+      const room = needRoom(); if (!room) return;
+      handleTruthPass(player, room);
+      return;
+    }
+    case 'truth_react': {
+      const room = needRoom(); if (!room) return;
+      handleTruthReact(player, room, data);
+      return;
+    }
+    case 'truth_kurang_greget': {
+      const room = needRoom(); if (!room) return;
+      handleTruthKurangGreget(player, room);
+      return;
+    }
+    case 'truth_next': {
+      const room = needRoom(); if (!room) return;
+      handleTruthNext(player, room);
       return;
     }
     default:

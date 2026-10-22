@@ -6,7 +6,7 @@
 const crypto = require('crypto');
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I/L
-const MAX_PLAYERS = { chess: 2, uno: 8 };
+const MAX_PLAYERS = { chess: 2, uno: 8, truth: 8 };
 
 function genCode(existing) {
   let code;
@@ -35,6 +35,10 @@ class RoomManager {
       hostId: host.id,
       chess: null,
       uno: null,        // { st, scores, active, round }
+      truth: null,      // { st } — Truth or Truth engine state (Misi 3)
+      truthStage: null, // spin | ask | answer | react (server driver)
+      // "Set Aturan" panel choices (host, lobby): null total = auto by size
+      truthSettings: { totalQuestions: null, explicitMode: false },
       timer: null,
       deadline: null,
       forfeitTimers: new Map(), // playerId -> timeout

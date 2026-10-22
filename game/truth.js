@@ -32,6 +32,8 @@ const MAX_QUESTIONS_PER_PLAYER = 5; // hidden cap, never shown in game
 const SPIN_MS = 10000;
 const ASK_WINDOW_MS = 10000;
 const ANSWER_MS = 120000;
+const ASK_SUBMIT_MS = 30000; // asker must send the question after claiming
+const REACT_MS = 15000; // reaction window before the next spin
 
 function shuffle(arr, rand) {
   const a = arr.slice();
@@ -234,6 +236,19 @@ function passTurn(state, playerId) {
   return { ok: true, events: [{ type: 'passed', playerId }].concat(done.events) };
 }
 
+// The asker claimed ASK but never sent a question in time: the turn
+// dies as a pass (answerer's PASS token is NOT consumed — not their
+// fault) and the claimed ASK quota stays spent (anti claim-trolling).
+function expireAskWindow(state) {
+  if (state.phase !== 'ask_window' || !state.current.askerId) {
+    return { ok: false, error: 'tidak ada ASK yang menggantung' };
+  }
+  const askerId = state.current.askerId;
+  state.current.passed = true;
+  const done = closeTurn(state, true);
+  return { ok: true, events: [{ type: 'ask_expired', playerId: askerId }].concat(done.events) };
+}
+
 // Answer timer ran out: counts as a pass, but the token is NOT consumed.
 function timeoutTurn(state) {
   if (state.phase !== 'answering') return { ok: false, error: 'belum ada pertanyaan' };
@@ -332,8 +347,8 @@ module.exports = {
   QUESTIONS_TOTAL_SMALL, QUESTIONS_TOTAL_LARGE, TOTAL_QUESTION_CHOICES,
   ASK_PER_GAME, PASS_PER_GAME, REACT_MAX_PER_ANSWER,
   REACTIONS, REACTION_POINTS, KURANG_GREGET_PENALTY, MAX_QUESTIONS_PER_PLAYER,
-  SPIN_MS, ASK_WINDOW_MS, ANSWER_MS,
+  SPIN_MS, ASK_WINDOW_MS, ANSWER_MS, ASK_SUBMIT_MS, REACT_MS,
   createGame, claimAsk, submitAskQuestion, openCard,
-  submitAnswer, passTurn, timeoutTurn, react, kurangGreget,
+  submitAnswer, passTurn, timeoutTurn, expireAskWindow, react, kurangGreget,
   endTurn, computeAwards, snapshot,
 };

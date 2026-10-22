@@ -301,10 +301,25 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
       engine + `game/questions.js` (4 nuansa × 50) + validator truth di
       `game/validate.js`; tes total 68/68 hijau (57 lama + 9 engine +
       2 bank)
-- [ ] Fase 2 — Integrasi server: room tipe truth, alur giliran/reaksi/
+- [x] Fase 2 — Integrasi server: room tipe truth, alur giliran/reaksi/
       poin/gelar, MC bot, simulasi WS end-to-end; room menyimpan
       pengaturan "Set Aturan" (batas pertanyaan + Mode Eksplisit)
       yang dipilih host di lobby dan meneruskannya ke engine
+      — SELESAI 22 Okt 2026: driver timer server (spin 10 dtk →
+      jendela ASK 10 dtk → jawab 2 mnt → reaksi 15 dtk) menggerakkan
+      engine; semua event engine di-broadcast sebagai `truth_event`
+      (bahan notif pop-up Fase 3); MC bot berkomentar via chat bila
+      manusia < 3; pemain keluar di tengah game tidak membekukan
+      room (kursinya tetap, timer meng-auto-pass gilirannya).
+      Asumsi baru (boleh dikoreksi): jendela reaksi 15 detik; penanya
+      ASK punya 30 detik mengirim soal — lewat itu giliran hangus
+      (fungsi engine baru `expireAskWindow`; jatah PASS penjawab
+      tidak ikut terbakar). Timing bisa dioverride via env
+      TRUTH_SPIN_MS/TRUTH_ASK_WINDOW_MS/TRUTH_ASK_SUBMIT_MS/
+      TRUTH_ANSWER_MS/TRUTH_REACT_MS khusus untuk simulasi cepat.
+      Tes: 76/76 unit hijau + sim WS Truth 2 skenario SEMUA LOLOS
+      (Set Aturan, ASK, kartu otomatis, PASS, timeout, poin reaksi,
+      MC, Mode Eksplisit penuh 8 soal) + regresi simulate.js LOLOS.
 - [ ] Fase 3 — UI: layar truth, animasi roda nama, kartu soal, reaksi,
       podium gelar, efek suara; panel "Set Aturan" di layar room
 - [ ] Fase 4 — Deploy (Railway + Hosting) + uji publik

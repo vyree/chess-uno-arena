@@ -259,6 +259,58 @@ test('Mode Eksplisit: ASK mati total, semua soal murni dari kartu eksplisit', ()
   }
 });
 
+test('ASK menggantung: penanya tidak kirim soal -> giliran hangus, PASS penjawab utuh', () => {
+  const s = newGame(['a', 'b', 'c']);
+  const ans = T.snapshot(s).current.answererId;
+  const asker = others(s, ans)[0];
+  assert.equal(T.expireAskWindow(s).ok, false); // belum ada klaim
+  assert.equal(T.claimAsk(s, asker).ok, true);
+  const r = T.expireAskWindow(s);
+  assert.equal(r.ok, true);
+  assert.equal(r.events[0].type, 'ask_expired');
+  assert.equal(s.history.length, 1);
+  assert.equal(s.history[0].passed, true);
+  assert.equal(s.history[0].source, 'ask');
+  assert.equal(s.history[0].askerId, asker);
+  // jatah PASS penjawab tidak ikut terbakar; jatah ASK penanya tetap hangus
+  assert.equal(T.snapshot(s).players.find((p) => p.id === ans).passLeft, 1);
+  assert.equal(T.snapshot(s).players.find((p) => p.id === asker).askLeft, 1);
+  assert.equal(s.phase, 'ask_window'); // giliran berikutnya sudah mulai
+});
+
+test('room truth: maksimal 8 pemain, tipe game dikenal RoomManager', () => {
+  const { RoomManager } = require('../game/rooms.js');
+  const rm = new RoomManager();
+  const mk = (i) => ({ id: 'p' + i, nickname: 'P' + i, socket: null });
+  const host = mk(0);
+  const r = rm.create('truth', host);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.room.truthSettings, { totalQuestions: null, explicitMode: false });
+  for (let i = 1; i < 8; i++) assert.equal(rm.addPlayer(r.room, mk(i)).ok, true);
+  assert.equal(rm.addPlayer(r.room, mk(8)).ok, false); // kursi ke-9 ditolak
+});
+
+test('validator pesan WS truth: rute truth_* terdaftar dan ketat', () => {
+  const vm = (type, data) => V.validateMessage(JSON.stringify({ type, data }));
+  const rules = vm('truth_set_rules', { totalQuestions: 12, explicitMode: true });
+  assert.equal(rules.ok, true);
+  assert.deepEqual(rules.data, { totalQuestions: 12, explicitMode: true });
+  assert.equal(vm('truth_set_rules', { totalQuestions: 13 }).ok, false);
+  assert.equal(vm('truth_set_rules', { totalQuestions: null }).ok, true);
+  assert.equal(vm('truth_ask_question', { question: 'pertanyaan sah?' }).ok, true);
+  assert.equal(vm('truth_ask_question', { question: 'ab' }).ok, false);
+  assert.equal(vm('truth_answer', { text: 'jawaban sah' }).ok, true);
+  assert.equal(vm('truth_answer', { text: '   ' }).ok, false);
+  assert.equal(vm('truth_react', { kind: 'lucu' }).ok, true);
+  assert.equal(vm('truth_react', { kind: 'ngakak' }).ok, false);
+  assert.equal(vm('truth_ask', {}).ok, true);
+  assert.equal(vm('truth_pass', {}).ok, true);
+  assert.equal(vm('truth_kurang_greget', {}).ok, true);
+  assert.equal(vm('truth_next', {}).ok, true);
+  const cr = vm('create_room', { game: 'truth' });
+  assert.equal(cr.ok, true);
+});
+
 test('validator truth: batas teks ASK, jawaban, dan jenis reaksi', () => {
   assert.equal(V.validAskQuestion('ab').ok, false);
   assert.equal(V.validAskQuestion('pertanyaan yang sah?').ok, true);

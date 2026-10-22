@@ -67,8 +67,9 @@ function validColor(c) {
   return { ok: true, value: c };
 }
 
-// Truth or Truth payloads (Misi 3 Fase 1). Registered as truth_* message
-// validators in Fase 2, when the server routes them.
+// Truth or Truth payloads (Misi 3). The truth_* message validators
+// below were registered in Fase 2, when the server started routing them.
+const { TOTAL_QUESTION_CHOICES } = require('./truth');
 const TRUTH_REACTIONS = ['lucu', 'nangis', 'lovely', 'marah'];
 function validAskQuestion(q) {
   if (typeof q !== 'string') return { ok: false, error: 'pertanyaan harus teks' };
@@ -103,7 +104,9 @@ const VALIDATORS = {
     return { ok: true, data: { nickname: n.value, idToken: t.value } };
   },
   create_room(d) {
-    if (!['chess', 'uno'].includes(d.game)) return { ok: false, error: 'game harus chess atau uno' };
+    if (!['chess', 'uno', 'truth'].includes(d.game)) {
+      return { ok: false, error: 'game harus chess, uno, atau truth' };
+    }
     return { ok: true, data: { game: d.game } };
   },
   list_rooms() { return { ok: true, data: {} }; },
@@ -168,6 +171,37 @@ const VALIDATORS = {
   uno_draw() { return { ok: true, data: {} }; },
   uno_pass() { return { ok: true, data: {} }; },
   uno_new_round() { return { ok: true, data: {} }; },
+  // ---- Truth or Truth (Misi 3 Fase 2) ----
+  truth_set_rules(d) {
+    const data = {};
+    if (d.totalQuestions !== undefined) {
+      if (d.totalQuestions !== null && !TOTAL_QUESTION_CHOICES.includes(d.totalQuestions)) {
+        return { ok: false, error: 'batas pertanyaan harus 8/10/12/16/20/24' };
+      }
+      data.totalQuestions = d.totalQuestions;
+    }
+    if (d.explicitMode !== undefined) data.explicitMode = d.explicitMode === true;
+    return { ok: true, data };
+  },
+  truth_ask() { return { ok: true, data: {} }; },
+  truth_ask_question(d) {
+    const q = validAskQuestion(d.question);
+    if (!q.ok) return q;
+    return { ok: true, data: { question: q.value } };
+  },
+  truth_answer(d) {
+    const a = validAnswerText(d.text);
+    if (!a.ok) return a;
+    return { ok: true, data: { text: a.value } };
+  },
+  truth_pass() { return { ok: true, data: {} }; },
+  truth_react(d) {
+    const k = validReactionKind(d.kind);
+    if (!k.ok) return k;
+    return { ok: true, data: { kind: k.value } };
+  },
+  truth_kurang_greget() { return { ok: true, data: {} }; },
+  truth_next() { return { ok: true, data: {} }; },
 };
 
 function validateMessage(raw) {
