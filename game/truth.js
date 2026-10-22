@@ -1,8 +1,13 @@
 'use strict';
 /**
  * Truth or Truth engine (Misi 3, Sensei 2026-10-22).
- * Pure turn state machine: fair wheel (no repeats within a round), ASK
- * claims, card questions, answers, reactions & points, end-game awards.
+ * Pure turn state machine: TRULY RANDOM wheel with two hidden fairness
+ * rules (Sensei): (1) whoever answered the previous spin sits out the
+ * next one (cooldown), then re-enters; (2) a player who has received
+ * MAX_QUESTIONS_PER_PLAYER questions is silently excluded for the rest
+ * of the session. Neither rule is ever exposed to clients (snapshot
+ * hides them) so the wheel feels natural. Plus ASK claims, card
+ * questions, answers, reactions & points, end-game awards.
  * NO timers live here — the server drives time (spin ±10s, ASK window
  * 10s, answer 2 min) and calls the transitions below. Every mutator
  * validates the move and returns { ok, events } or { ok:false, error };
@@ -19,6 +24,7 @@ const REACT_MAX_PER_ANSWER = 2;
 const REACTIONS = ['lucu', 'nangis', 'lovely', 'marah'];
 const REACTION_POINTS = { lucu: 10, nangis: 15, lovely: 10, marah: 15 };
 const KURANG_GREGET_PENALTY = 5;
+const MAX_QUESTIONS_PER_PLAYER = 5; // hidden cap, never shown in game
 // Timing contract for the server layer (Fase 2) — single source of truth.
 const SPIN_MS = 10000;
 const ASK_WINDOW_MS = 10000;
@@ -64,11 +70,11 @@ function createGame(opts) {
     phase: 'ask_window', // ask_window -> answering -> reacting -> ... -> finished
     players: ids.map((id) => ({
       id, points: 0, askLeft: ASK_PER_GAME, passLeft: PASS_PER_GAME,
+      askedCount: 0, // hidden fairness counter — never leaves the server
     })),
     rounds,
     round: 1,
-    order: shuffle(ids, rand),
-    orderPos: 0,
+    lastAnswererId: null,
     turnNumber: 1,
     totalTurns: ids.length * rounds,
     deck: shuffle(questions, rand),
@@ -78,8 +84,25 @@ function createGame(opts) {
     awards: null,
     rand,
   };
-  state.current.answererId = state.order[0];
+  state.current.answererId = pickAnswerer(state);
   return { ok: true, state };
+}
+
+// Truly random pick from the eligible pool. Hidden rules: the previous
+// answerer sits this spin out (cooldown), and anyone who already
+// received MAX_QUESTIONS_PER_PLAYER questions is out for the session.
+// If the cooldown alone would empty the pool, the cooldown is relaxed
+// before the cap is. Returns null only when everyone is capped.
+function pickAnswerer(state) {
+  const underCap = state.players.filter(
+    (p) => p.askedCount < MAX_QUESTIONS_PER_PLAYER);
+  let pool = underCap.filter((p) => p.id !== state.lastAnswererId);
+  if (pool.length === 0) pool = underCap;
+  if (pool.length === 0) return null;
+  const pick = pool[Math.floor(state.rand() * pool.length)];
+  pick.askedCount += 1;
+  state.lastAnswererId = pick.id;
+  return pick.id;
 }
 
 function playerOf(state, playerId) {
@@ -169,14 +192,15 @@ function closeTurn(state, passed) {
     return { ok: true, events: [{ type: 'game_over', awards: state.awards }] };
   }
   state.turnNumber += 1;
-  state.orderPos += 1;
-  if (state.orderPos >= state.order.length) {
-    state.round += 1;
-    state.order = shuffle(state.players.map((p) => p.id), state.rand);
-    state.orderPos = 0;
-  }
+  state.round = Math.floor((state.turnNumber - 1) / state.players.length) + 1;
   state.current = blankCurrent();
-  state.current.answererId = state.order[state.orderPos];
+  const next = pickAnswerer(state);
+  if (next === null) { // everyone hit the hidden cap: end the game early
+    state.phase = 'finished';
+    state.awards = computeAwards(state);
+    return { ok: true, events: [{ type: 'game_over', awards: state.awards }] };
+  }
+  state.current.answererId = next;
   state.phase = 'ask_window';
   return { ok: true, events: turnEvents(state) };
 }
@@ -290,7 +314,7 @@ function snapshot(state) {
 module.exports = {
   MIN_PLAYERS_TRUTH, MAX_PLAYERS_TRUTH, DEFAULT_ROUNDS,
   ASK_PER_GAME, PASS_PER_GAME, REACT_MAX_PER_ANSWER,
-  REACTIONS, REACTION_POINTS, KURANG_GREGET_PENALTY,
+  REACTIONS, REACTION_POINTS, KURANG_GREGET_PENALTY, MAX_QUESTIONS_PER_PLAYER,
   SPIN_MS, ASK_WINDOW_MS, ANSWER_MS,
   createGame, claimAsk, submitAskQuestion, openCard,
   submitAnswer, passTurn, timeoutTurn, react, kurangGreget,

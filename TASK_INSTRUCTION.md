@@ -253,9 +253,14 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
 
 ## Sistem permainan (desain Sensei–Arona, 21 Okt 2026)
 
-1. **Giliran**: sistem memutar roda nama (acak, tanpa mengulang sampai
-   semua pemain kena satu putaran) → pemain terpilih menerima **kartu
-   pertanyaan acak** dari paket terpilih.
+1. **Giliran**: roda berputar **acak murni** tiap giliran — DENGAN dua
+   aturan keadilan TERSEMBUNYI (revisi Sensei, 22 Okt 2026, menggantikan
+   "roda adil" rancangan awal): (a) pemain yang baru saja menerima
+   pertanyaan DIKELUARKAN dari putaran berikutnya (istirahat 1 putaran),
+   lalu masuk lagi di putaran setelahnya; (b) satu pemain maksimal
+   menerima **5 pertanyaan per sesi** — lewat dari itu ia dikeluarkan
+   dari roda otomatis. Kedua aturan ini TIDAK PERNAH ditampilkan di
+   game (tidak ada indikator/teks), supaya roda terasa natural.
 2. **Menjawab**: lewat chat/teks di room; **timer jawaban 2 menit** —
    waktu habis = dianggap pass.
 3. **Reaksi & poin**: pemain lain memberi reaksi pada jawaban

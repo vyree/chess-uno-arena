@@ -45,19 +45,45 @@ test('createGame menolak jumlah pemain di luar 2-8', () => {
   assert.equal(s.phase, 'ask_window');
 });
 
-test('roda adil: tidak ada pengulangan dalam satu putaran, game selesai', () => {
+test('roda acak + cooldown: penjawab tidak pernah sama dua giliran berurutan', () => {
   const s = newGame(['a', 'b', 'c', 'd']);
-  const seenRound1 = [];
-  for (let i = 0; i < 4; i++) {
-    seenRound1.push(T.snapshot(s).current.answererId);
+  let prev = null;
+  for (let i = 0; i < 8; i++) {
+    const cur = T.snapshot(s).current.answererId;
+    assert.notEqual(cur, prev); // yang baru menjawab duduk dulu 1 putaran
+    prev = cur;
     playSimpleTurn(s);
   }
-  assert.equal(new Set(seenRound1).size, 4);
-  assert.equal(s.round, 2);
-  for (let i = 0; i < 4; i++) playSimpleTurn(s);
   assert.equal(s.phase, 'finished');
   assert.ok(s.awards);
   assert.equal(s.history.length, 8);
+});
+
+test('roda 2 pemain: cooldown memaksa bergantian', () => {
+  const s = newGame(['a', 'b']);
+  const seq = [];
+  for (let i = 0; i < 4; i++) {
+    seq.push(T.snapshot(s).current.answererId);
+    playSimpleTurn(s);
+  }
+  assert.notEqual(seq[0], seq[1]);
+  assert.equal(seq[0], seq[2]);
+  assert.equal(seq[1], seq[3]);
+});
+
+test('batas tersembunyi: maksimal 5 pertanyaan per pemain per sesi', () => {
+  // rand selalu 0 -> selalu ambil kandidat pertama yang memenuhi syarat
+  const r = T.createGame({ playerIds: ['a', 'b', 'c'],
+    questions: BANK, rounds: 5, rand: () => 0 });
+  assert.equal(r.ok, true);
+  const s = r.state;
+  while (s.phase !== 'finished') playSimpleTurn(s);
+  assert.equal(s.history.length, 15);
+  for (const p of s.players) assert.equal(p.askedCount, 5); // tidak lebih
+  // aturan ini rahasia: snapshot ke client TIDAK memuat askedCount
+  for (const p of T.snapshot(s).players) {
+    assert.equal('askedCount' in p, false);
+  }
 });
 
 test('ASK: eksklusif, mengunci kartu, hanya penanya yang bisa kirim soal', () => {
