@@ -312,6 +312,13 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
 - Alur giliran jadinya: roda memilih penjawab → jendela singkat: ada yang
   klaim ASK? → bila tidak ada, kartu dibuka seperti biasa → penjawab
   menjawab (timer jalan) → fase reaksi.
+- **Ritme waktu per giliran (keputusan Sensei, 22 Okt 2026):**
+  1. Roda berputar dengan animasi **±10 detik** sebelum berhenti di
+     pemain terpilih (membangun ketegangan; hasil tetap ditentukan
+     server, animasi hanya tampilan).
+  2. Setelah pemain terpilih, **jeda 10 detik** = jendela klaim ASK.
+     Bila dalam 10 detik tidak ada yang menekan ASK, **kartu pertanyaan
+     terbuka OTOMATIS** dan giliran berjalan normal.
 - **Notifikasi pop-up di layar WAJIB** untuk setiap peristiwa penting,
   agar semua pemain selalu sadar keadaan game. Contoh resmi dari Sensei:
   "Putaran ke 2", "Player 1 bertanya", "Player 2 skip!!". Berlaku juga
