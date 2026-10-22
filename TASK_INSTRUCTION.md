@@ -289,8 +289,11 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
 
 ## Fase pengerjaan (checklist — belum dimulai)
 
-- [ ] Fase 1 — Engine `game/truth.js` + bank soal inti (200 soal
-      gabungan) + validasi + tes unit
+- [x] Fase 1 — Engine `game/truth.js` + bank soal inti (200 soal
+      gabungan) + validasi + tes unit — SELESAI 22 Okt 2026:
+      engine + `game/questions.js` (4 nuansa × 50) + validator truth di
+      `game/validate.js`; tes total 68/68 hijau (57 lama + 9 engine +
+      2 bank)
 - [ ] Fase 2 — Integrasi server: room tipe truth, alur giliran/reaksi/
       poin/gelar, MC bot, simulasi WS end-to-end
 - [ ] Fase 3 — UI: layar truth, animasi roda nama, kartu soal, reaksi,

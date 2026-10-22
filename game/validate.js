@@ -67,6 +67,32 @@ function validColor(c) {
   return { ok: true, value: c };
 }
 
+// Truth or Truth payloads (Misi 3 Fase 1). Registered as truth_* message
+// validators in Fase 2, when the server routes them.
+const TRUTH_REACTIONS = ['lucu', 'nangis', 'lovely', 'marah'];
+function validAskQuestion(q) {
+  if (typeof q !== 'string') return { ok: false, error: 'pertanyaan harus teks' };
+  const t = q.trim();
+  if (t.length < 3 || t.length > 200) {
+    return { ok: false, error: 'pertanyaan harus 3-200 karakter' };
+  }
+  return { ok: true, value: escapeHtml(t) };
+}
+function validAnswerText(a) {
+  if (typeof a !== 'string') return { ok: false, error: 'jawaban harus teks' };
+  const t = a.trim();
+  if (t.length < 1 || t.length > 1000) {
+    return { ok: false, error: 'jawaban harus 1-1000 karakter' };
+  }
+  return { ok: true, value: escapeHtml(t) };
+}
+function validReactionKind(k) {
+  if (!TRUTH_REACTIONS.includes(k)) {
+    return { ok: false, error: 'reaksi harus lucu/nangis/lovely/marah' };
+  }
+  return { ok: true, value: k };
+}
+
 // Validators per message type. Each returns {ok, data} or {ok:false, error}.
 const VALIDATORS = {
   hello(d) {
@@ -161,4 +187,5 @@ function validateMessage(raw) {
   return { ok: true, type: msg.type, data: r.data };
 }
 
-module.exports = { validateMessage, escapeHtml, validNickname };
+module.exports = { validateMessage, escapeHtml, validNickname,
+  validAskQuestion, validAnswerText, validReactionKind, TRUTH_REACTIONS };
