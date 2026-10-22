@@ -297,6 +297,31 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
 - Timer jawaban 2 menit; 1 game = 2 putaran; reaksi 4 jenis;
   jatah PASS 1x per pemain per game; gelar dihitung dari reaksi.
 
+## Mekanik ASK + Notifikasi (keputusan Sensei, 22 Okt 2026 — dari sketsa UI Sensei)
+
+- **ASK = pertanyaan bebas dari pemain**, tanpa kartu soal: pemain yang
+  menekan ASK berhak mengajukan pertanyaan buatannya sendiri kepada
+  pemain yang sedang kena giliran.
+- **Jatah ASK: 2x per pemain per game** (sejajar jatah PASS 1x).
+- **Eksklusif per giliran (siapa cepat, dia dapat)**: begitu satu pemain
+  menekan ASK, tombol ASK pemain lain TERKUNCI untuk giliran itu — hanya
+  boleh ada 1 penanya per giliran.
+- **Kartu terkunci saat ASK aktif**: pada giliran yang diklaim ASK,
+  tombol buka kartu pertanyaan terkunci — pertanyaan 100% berasal dari
+  penanya, bukan dari tumpukan kartu.
+- Alur giliran jadinya: roda memilih penjawab → jendela singkat: ada yang
+  klaim ASK? → bila tidak ada, kartu dibuka seperti biasa → penjawab
+  menjawab (timer jalan) → fase reaksi.
+- **Notifikasi pop-up di layar WAJIB** untuk setiap peristiwa penting,
+  agar semua pemain selalu sadar keadaan game. Contoh resmi dari Sensei:
+  "Putaran ke 2", "Player 1 bertanya", "Player 2 skip!!". Berlaku juga
+  untuk: giliran siapa, kartu dibuka, ASK diklaim, waktu habis, gelar di
+  podium. (Pola toast/banner mengikuti sistem notifikasi arena.)
+- Elemen sketsa Sensei yang dibaca Arona (22 Okt): indikator "PUTARAN KE
+  1/16" = giliran berjalan dari total (jumlah pemain × putaran); pemain
+  divisualkan duduk melingkar + jarum penunjuk di tengah; tumpukan kartu
+  menampilkan sisa soal (100/100); panel reaksi 4 wajah ekspresi.
+
 ---
 
 ## MENU UTAMA DUA TINGKAT + TEMA UNGU PASTEL (Sensei, 21 Okt 2026 malam)
