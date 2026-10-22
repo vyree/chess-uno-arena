@@ -402,7 +402,7 @@ select {
 .gc-head { display: flex; flex-direction: column; gap: 3px; position: relative; z-index: 2; }
 .gc-name { font-size: 24px; font-weight: 800; letter-spacing: -.01em; }
 .gc-meta { font-size: 12.5px; font-weight: 600; color: rgba(255, 255, 255, .88); display: inline-flex; align-items: center; gap: 6px; }
-.gc-meta .dot { width: 7px; height: 7px; border-radius: 50%; background: #5eeaa0; box-shadow: 0 0 0 3px rgba(94, 234, 160, .25); }
+.gc-meta .dot { width: 7px; height: 7px; border-radius: 50%; background: #ff2e93; box-shadow: 0 0 0 3px rgba(255, 46, 147, .25); }
 .gc-art { position: relative; flex: 1; display: block; }
 .art-chess .knight { position: absolute; bottom: 10px; font-size: 72px; line-height: 1; }
 .knight-b { left: 6px; color: #2e2157; transform: scaleX(-1); text-shadow: 0 3px 8px rgba(30, 18, 70, .35); }
@@ -644,13 +644,13 @@ body.low-gfx * {
 #truth-round { white-space: nowrap; }
 
 /* ============ Neon contrast lines (Sensei, 2026-10-22) ============ */
-/* A neon-green line system layered over the pastel purple: borders,
+/* A neon-pink line system layered over the pastel purple: borders,
    rules and markers get the neon; surfaces stay calm so it reads as
    contrast, not noise. Lines survive Graphic Low (only glows fade). */
 :root {
-  --color-neon: #2bff88;
-  --color-neon-deep: #00c95f;
-  --neon-glow: 0 0 10px rgba(43, 255, 136, .55), 0 0 26px rgba(43, 255, 136, .25);
+  --color-neon: #ff2e93;
+  --color-neon-deep: #e6007f;
+  --neon-glow: 0 0 10px rgba(255, 46, 147, .55), 0 0 26px rgba(255, 46, 147, .25);
 }
 #app-header { border-bottom: 3px solid var(--color-neon); }
 .logo-io { color: var(--color-neon); }
@@ -660,7 +660,7 @@ body.low-gfx * {
 .game-card { border: 2px solid var(--color-neon-deep); }
 .card-truth {
   border-color: var(--color-neon);
-  box-shadow: 0 0 0 1px var(--color-neon), 0 0 18px rgba(43, 255, 136, .35),
+  box-shadow: 0 0 0 1px var(--color-neon), 0 0 18px rgba(255, 46, 147, .35),
     0 12px 26px rgba(55, 32, 110, .35);
 }
 .card { border-top: 3px solid var(--color-neon-deep); }
@@ -670,11 +670,11 @@ body.low-gfx * {
 .truth-disc .wheel-needle { border-top-color: var(--color-neon); }
 #truth-ring .seat-chip.turn {
   border-color: var(--color-neon-deep);
-  box-shadow: 0 0 0 2px var(--color-neon), 0 0 14px rgba(43, 255, 136, .5);
+  box-shadow: 0 0 0 2px var(--color-neon), 0 0 14px rgba(255, 46, 147, .5);
 }
 .truth-banner { border: 2px solid var(--color-neon-deep); }
 .truth-popup { border: 2px solid var(--color-neon); }
-.btn.primary { box-shadow: inset 0 -3px 0 rgba(0, 201, 95, .9); }
+.btn.primary { box-shadow: inset 0 -3px 0 rgba(230, 0, 127, .9); }
 .xp-bar { background: linear-gradient(90deg, var(--color-neon-deep), var(--color-neon)); }
 .avatar-big { border-color: var(--color-neon-deep); }
 .react-btn strong { color: var(--color-neon-deep); }
