@@ -31,7 +31,7 @@
       <button id="pick-truth" class="game-card card-truth" data-game="truth">
         <span class="gc-head"><span class="gc-name">Truth or Truth</span><span class="gc-meta"><i class="dot"></i>2–8 pemain</span></span>
         <span class="gc-art art-wheel" aria-hidden="true"><span class="wheel"><span class="wheel-needle"></span></span></span>
-        <span class="gc-badge">BARU ✨</span>
+        <span class="gc-badge badge-beta">( Beta Test )</span>
       </button>
     </div>
 
@@ -105,6 +105,7 @@
       <div class="gm-title-box">
         <h2 id="gm-title">UNO</h2>
         <p id="gm-sub" class="muted">2–8 pemain</p>
+        <span id="gm-beta" class="beta-pill hidden">( Beta Test )</span>
       </div>
     </div>
 
@@ -127,6 +128,17 @@
         </label>
       </div>
       <button id="btn-bot" class="btn primary big">▶️ Mulai Lawan Bot</button>
+    </div>
+
+    <div class="card hidden" id="ai-card">
+      <h3 class="card-title">🤖 VS AI</h3>
+      <p class="muted">Pilih lawan AI-mu — kamu bermain sebagai Putih ♔</p>
+      <div class="ai-grid">
+        <button class="ai-btn" data-persona="gemini"><strong>Gemini</strong><small>Level Normal</small></button>
+        <button class="ai-btn" data-persona="gpt"><strong>GPT</strong><small>Level Hard</small></button>
+        <button class="ai-btn" data-persona="meta"><strong>Meta</strong><small>Level Hell 🔥</small></button>
+        <button class="ai-btn" data-persona="claude"><strong>Claude</strong><small>Level Hell 🔥</small></button>
+      </div>
     </div>
 
     <div class="card">

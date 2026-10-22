@@ -623,3 +623,41 @@ asumsi tertulis Arona yang TERBALIK; bagian ini yang berlaku.
   workflow build-image memakai registry ayo-nge. App lama
   chess-uno-arena DIHAPUS setelah alamat baru terbukti melayani
   (perintah Sensei). Railway tetap standby via ?server=railway.
+
+## MISI 6 — Label Beta Truth + Catur VS AI (Sensei, 22 Okt 2026 sore)
+
+Perintah Sensei: (1) Truth or Truth diberi label "( Beta Test )" karena
+belum final. (2) Catur mendapat mode "VS AI" — sebenarnya bot, tapi UI
+TIDAK PERNAH menyebut kata bot di mode ini; lawan ditampilkan sebagai
+persona AI: Gemini (Level Normal), GPT (Level Hard), Meta (Level
+Hell), Claude (Level Hell). (3) AI diberi waktu mikir yang dramatis
+(bukan 1,5 detik): rata-rata 5–10 detik, kadang >10, kadang >20, dan
+sesekali sampai batas waktu hampir habis — dengan tulisan
+"Gemini is thinking…" (nama mengikuti persona) selama ia berpikir.
+
+Keputusan implementasi (as-built):
+- Label Beta: badge di kartu Truth layar utama (menggantikan badge
+  BARU) + pil #gm-beta di header menu game Truth.
+- Engine SATU, empat kostum: game/chessbot.js — negamax alpha-beta +
+  evaluasi material/posisi. Gemini kedalaman 1 + blunder 35%; GPT
+  kedalaman 2 + blunder 8%; Meta kedalaman 3; Claude kedalaman 3 +
+  pencarian tangkapan (quiescence) sehingga ia yang terkuat. Anggaran
+  node 90 ribu/langkah menjaga server tetap ringan.
+- Alur: pesan create_chess_ai_room { persona } membuat room bot catur
+  (manusia = kursi 0 = Putih, persona = kursi 1 = Hitam), game mulai
+  seketika. chess_new_round untuk tombol Main Lagi di layar game over
+  (room VS AI saja, dari status over). Validasi persona di
+  game/validate.js terhadap chessbot.PERSONAS.
+- Waktu mikir: chessbot.pickThinkMs — 60% di 5–10 dtk, 20% di 10–20
+  dtk, 12% di 20–40 dtk, 8% di zona bel (batas − 2,5 dtk − acak
+  0–2 dtk). CAP KERAS batas −2,5 dtk: timeout catur = KALAH, jadi AI
+  tidak pernah benar-benar kehabisan waktu; ia bergerak tepat sebelum
+  bel. Penjadwalan di scheduleChessAiIfNeeded/runChessAiTurn
+  (server.js), berbagi room.botTimer dengan bot UNO. Env
+  CHESS_AI_THINK_MS menimpa jeda (khusus tes/sim; produksi kosong).
+- Indikator: renderChess menampilkan "<Persona> is thinking" +
+  kelas .thinking (animasi titik-titik CSS) pada badge giliran saat
+  lawan adalah seat bot dan bukan giliran pemain; ruang catur
+  multiplayer biasa tetap "Giliran lawan".
+- Batasan jujur: kekuatan mesin ringan ini setara pemain kafe yang
+  kuat di level Hell — bukan Stockfish; itu memang niatnya (kostum).

@@ -14,6 +14,7 @@ const uno = require('./game/uno');
 const truth = require('./game/truth');
 const questions = require('./game/questions');
 const bot = require('./game/bot');
+const chessbot = require('./game/chessbot');
 const { createVerifier } = require('./game/auth');
 const { RoomManager, MAX_PLAYERS } = require('./game/rooms');
 const { validateMessage } = require('./game/validate');
@@ -302,6 +303,12 @@ function handleChessMove(player, room, data) {
   if (chessColor(player.seat) !== room.chess.turn) { sendError(player.socket, 'Bukan giliranmu'); return; }
   const r = chess.applyMove(room.chess, chess.parseSq(data.from), chess.parseSq(data.to), data.promotion);
   if (!r.ok) { sendError(player.socket, r.error === 'langkah tidak legal' ? 'Langkah tidak legal' : 'Langkah tidak valid'); return; }
+  afterChessMove(room, r);
+}
+
+// Shared tail of a successful chess move (human or the VS AI persona):
+// game over, or next turn + let the AI answer when it is its move.
+function afterChessMove(room, r) {
   clearTurnTimer(room);
   if (r.status) {
     room.status = 'over';
@@ -311,7 +318,41 @@ function handleChessMove(player, room, data) {
   } else {
     startTurnTimer(room);
     sendGameState(room);
+    scheduleChessAiIfNeeded(room);
   }
+}
+
+// VS AI chess (Misi 6): when the side to move belongs to the persona,
+// schedule its answer after a dramatic "thinking" pause. pickThinkMs
+// caps the pause inside the turn limit, so the AI never times out.
+// CHESS_AI_THINK_MS (env) pins the pause for tests/simulations.
+function scheduleChessAiIfNeeded(room) {
+  if (room.game !== 'chess' || !room.isBotRoom || room.status !== 'playing' || !room.chess || room.chess.over) return;
+  if (room.botTimer) return;
+  const seat = room.chess.turn === 'w' ? 0 : 1;
+  const p = room.players[seat];
+  if (!p || !p.isBot) return;
+  const fixed = parseInt(process.env.CHESS_AI_THINK_MS || '', 10);
+  const thinkMs = Number.isFinite(fixed) && fixed >= 0
+    ? fixed
+    : chessbot.pickThinkMs(Math.random, TURN_TIMEOUT_MS);
+  room.botTimer = setTimeout(() => {
+    room.botTimer = null;
+    if (!rooms.get(room.code) || room.status !== 'playing') return;
+    runChessAiTurn(room);
+  }, thinkMs);
+}
+
+function runChessAiTurn(room) {
+  if (room.status !== 'playing' || !room.chess || room.chess.over) return;
+  const seat = room.chess.turn === 'w' ? 0 : 1;
+  const p = room.players[seat];
+  if (!p || !p.isBot) return;
+  const mv = chessbot.chooseMove(room.chess, room.aiPersona);
+  if (!mv) return;
+  const r = chess.applyMove(room.chess, mv.from, mv.to, mv.promo);
+  if (!r.ok) return; // cannot happen: chooseMove returns legal moves only
+  afterChessMove(room, r);
 }
 
 // Shared tail of a successful UNO play (human or bot): scoring on a win,
@@ -954,6 +995,40 @@ async function route(ws, type, data) {
     case 'uno_new_round': {
       const room = needRoom(); if (!room) return;
       handleUnoNewRound(player, room);
+      return;
+    }
+    case 'create_chess_ai_room': {
+      // VS AI chess (Misi 6): the human (White) plus one persona seat;
+      // the game starts at once. Internally a bot room — the UI only
+      // ever presents the persona as an AI opponent.
+      if (player.roomCode) { sendError(ws, 'Kamu sudah di sebuah room'); return; }
+      const created = rooms.create('chess', player);
+      if (!created.ok) { sendError(ws, created.error); return; }
+      const room = created.room;
+      room.isBotRoom = true;
+      room.aiPersona = data.persona;
+      const bp = {
+        id: 'bot-' + crypto.randomUUID(), nickname: chessbot.PERSONAS[data.persona].name,
+        isBot: true, socket: null, roomCode: room.code, seat: 0, connected: true, active: true,
+      };
+      players.set(bp.id, bp);
+      rooms.addPlayer(room, bp);
+      room.chess = chess.newGame();
+      room.status = 'playing';
+      startTurnTimer(room);
+      sendGameState(room);
+      return;
+    }
+    case 'chess_new_round': {
+      const room = needRoom(); if (!room) return;
+      if (room.game !== 'chess' || !room.isBotRoom || room.status !== 'over') {
+        sendError(ws, 'Ronde baru hanya untuk VS AI yang sudah selesai');
+        return;
+      }
+      room.chess = chess.newGame();
+      room.status = 'playing';
+      startTurnTimer(room);
+      sendGameState(room);
       return;
     }
     case 'truth_set_rules': {

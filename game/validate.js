@@ -141,6 +141,13 @@ const VALIDATORS = {
     // The Misi 2 boolean `extreme` maps to 'hard' for legacy clients.
     return { ok: true, data: { mode: validMode(d) } };
   },
+  create_chess_ai_room(d) {
+    // VS AI chess (Misi 6): persona picks which "AI" costume the chess
+    // bot wears — gemini | gpt | meta | claude.
+    const { PERSONAS } = require('./chessbot');
+    if (!PERSONAS[d.persona]) return { ok: false, error: 'persona AI tidak dikenal' };
+    return { ok: true, data: { persona: d.persona } };
+  },
   create_bot_room(d) {
     if (![2, 4, 6, 8].includes(d.size)) {
       return { ok: false, error: 'ukuran meja bot harus 2, 4, 6, atau 8 pemain' };
@@ -182,6 +189,7 @@ const VALIDATORS = {
   uno_draw() { return { ok: true, data: {} }; },
   uno_pass() { return { ok: true, data: {} }; },
   uno_new_round() { return { ok: true, data: {} }; },
+  chess_new_round() { return { ok: true, data: {} }; },
   // ---- Truth or Truth (Misi 3 Fase 2) ----
   create_truth_bot_room(d) {
     if (!Number.isInteger(d.size) || d.size < 2 || d.size > 8) {

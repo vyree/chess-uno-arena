@@ -533,6 +533,31 @@ body.on-tabs { padding-bottom: 84px; }
   font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: var(--radius-full);
   letter-spacing: .05em;
 }
+.gc-badge.badge-beta { background: #fff; color: #b3126b; border: 2px solid #ff2e93; }
+.beta-pill {
+  display: inline-block; margin-top: 4px; background: #fff; color: #b3126b;
+  border: 2px solid #ff2e93; font-size: 11px; font-weight: 800;
+  padding: 2px 9px; border-radius: var(--radius-full); letter-spacing: .05em;
+}
+/* VS AI persona picker (Misi 6) */
+.ai-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.ai-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 12px 6px; border-radius: var(--radius-card); cursor: pointer;
+  background: #f4f1fd; color: var(--color-ink); border: 2px solid var(--color-line);
+  font-family: inherit; transition: border-color .15s, transform .1s, background .15s;
+}
+.ai-btn:hover { background: #ece5fc; }
+.ai-btn strong { font-size: 17px; }
+.ai-btn small { color: var(--color-muted); font-weight: 700; }
+.ai-btn:hover, .ai-btn:active { border-color: #ff2e93; transform: translateY(-1px); }
+/* "Gemini is thinking..." animated ellipsis (Misi 6) */
+.turn-badge.thinking::after {
+  content: ''; animation: thinkdots 1.2s steps(4) infinite;
+}
+@keyframes thinkdots {
+  0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; }
+}
 .art-wheel { display: flex; justify-content: center; padding: 4px 0 14px; }
 .wheel {
   position: relative; width: 86px; height: 86px; border-radius: 50%;

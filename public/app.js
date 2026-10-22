@@ -222,6 +222,8 @@ function openGameMenu() {
   $('gm-title').textContent = title;
   $('gm-sub').textContent = sub;
   $('bot-card').classList.toggle('hidden', S.game !== 'uno');
+  $('ai-card').classList.toggle('hidden', S.game !== 'chess');
+  $('gm-beta').classList.toggle('hidden', S.game !== 'truth');
   // Sensei's playtest door (2026-10-22): a quiet "( test bot )" entry in
   // the Truth menu footer — solo Truth against simulated bot answers.
   $('truth-testbot-row').classList.toggle('hidden', S.game !== 'truth');
@@ -367,6 +369,7 @@ function renderChess(m) {
   const badge = $('chess-turn');
   if (st.over) { badge.textContent = 'Selesai'; badge.className = 'turn-badge'; }
   else if (isMyTurn) { badge.textContent = 'Giliranmu!'; badge.className = 'turn-badge mine'; }
+  else if (opp && opp.isBot) { badge.textContent = opp.nickname + ' is thinking'; badge.className = 'turn-badge thinking'; }
   else { badge.textContent = 'Giliran lawan'; badge.className = 'turn-badge'; }
 
   $('chess-status').textContent = st.inCheck && !st.over
@@ -751,6 +754,9 @@ function onGameOver(m) {
   const actions = [];
   if (m.game === 'uno') {
     actions.push({ label: '🔄 Main Lagi', cls: 'primary', onClick: () => send('uno_new_round') });
+  }
+  if (m.game === 'chess' && S.players.some((p) => p.isBot)) {
+    actions.push({ label: '🔄 Main Lagi', cls: 'primary', onClick: () => send('chess_new_round') });
   }
   actions.push({ label: '🚪 Keluar Room', cls: 'ghost', onClick: () => send('leave_room') });
   showModal('Permainan Selesai', body, actions);
@@ -1229,6 +1235,9 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('btn-ping').onclick = runPing;
   $('btn-testbot').onclick = openTestBot;
+  document.querySelectorAll('.ai-btn').forEach((b) => {
+    b.onclick = () => send('create_chess_ai_room', { persona: b.dataset.persona });
+  });
   // profile tab
   $('profile-avatar').onclick = () => {
     $('avatar-picker').classList.toggle('hidden');
