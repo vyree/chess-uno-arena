@@ -16,7 +16,7 @@ const PIECES = {
   wk: '♔', wq: '♕', wr: '♖', wb: '♗', wn: '♘', wp: '♙',
   bk: '♚', bq: '♛', br: '♜', bb: '♝', bn: '♞', bp: '♟',
 };
-const UNO_LABEL = { skip: '⊘', reverse: '⇄', draw2: '+2', wild: 'W', wild4: '+4' };
+const UNO_LABEL = { skip: '⊘', reverse: '⇄', draw2: '+2', wild: 'W', wild4: '+4', reverseBlack: '⇄', nullWhite: '✕' };
 
 const $ = (id) => document.getElementById(id);
 
@@ -316,10 +316,10 @@ function onLobby(m) {
   const isHost = m.you === m.hostId;
   $('btn-start').disabled = !isHost;
   $('btn-start').textContent = isHost ? '▶️ Mulai Main' : '⏳ Menunggu host…';
-  // UNO only: host's Extreme Mode toggle for the upcoming game
+  // UNO only: host's mode picker for the upcoming game (Misi 5)
   $('lobby-extreme-row').classList.toggle('hidden', m.game !== 'uno');
   if (m.game === 'uno') {
-    $('lobby-extreme').disabled = !isHost;
+    $('lobby-mode').disabled = !isHost;
     $('lobby-extreme-note').classList.toggle('hidden', isHost);
   }
   // Truth only: the host's Set Aturan panel (Sensei's spec, 2026-10-22)
@@ -447,6 +447,8 @@ function cardLabel(c) {
 }
 function cardClass(c) {
   if (c.kind === 'wild' || c.kind === 'wild4') return 'wild';
+  if (c.kind === 'reverseBlack') return 'blackrev';
+  if (c.kind === 'nullWhite') return 'nullwhite';
   return c.color || '';
 }
 
@@ -493,7 +495,9 @@ function renderUno(m) {
   const dirEl = $('uno-dir');
   dirEl.classList.toggle('ccw', st.dir === -1);
   dirEl.title = st.dir === -1 ? 'Arah: berlawanan jarum jam' : 'Arah: searah jarum jam';
-  $('uno-extreme-badge').classList.toggle('hidden', !st.extreme);
+  const modeBadge = $('uno-mode-badge');
+  modeBadge.classList.toggle('hidden', !st.mode || st.mode === 'normal');
+  modeBadge.textContent = st.mode === 'hell' ? '🔥 HELL' : 'HARD';
 
   // hand
   const hand = $('uno-hand');
@@ -523,7 +527,7 @@ function onUnoCardClick(card) {
     send('uno_play', { cardId: card.id, saidUno: S.saidUnoArmed, wildColor });
     S.saidUnoArmed = false;
   };
-  if (card.kind === 'wild' || card.kind === 'wild4') {
+  if (card.kind === 'wild' || card.kind === 'wild4' || card.kind === 'nullWhite') {
     showModal('Pilih warna…', '<div class="color-pick">' +
       ['red', 'yellow', 'green', 'blue'].map((c) =>
         `<button data-c="${c}" style="background:${colorHex(c)}" title="${c}"></button>`).join('') +
@@ -704,6 +708,18 @@ function handleUnoEvents(events) {
     } else if (ev.type === 'stack') {
       sfx('stack');
       unoFlash(`STACK +${ev.total}!`);
+    } else if (ev.type === 'bounce') {
+      sfx('stack');
+      unoFlash('↩ PANTUL!');
+    } else if (ev.type === 'nullify') {
+      sfx('penalty');
+      unoFlash('✕ NULL! Semua +2');
+      for (const p of ev.affected || []) {
+        const target = seatAnchor(p);
+        for (let i = 0; i < 2; i++) {
+          setTimeout(() => flyCard($('uno-deck'), target, null, true), i * 95);
+        }
+      }
     } else if (ev.type === 'uno') {
       sfx('uno');
     }
@@ -1239,7 +1255,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!ensureHello()) return;
     send('create_bot_room', {
       size: parseInt($('bot-size').value, 10),
-      extreme: $('bot-extreme').checked,
+      mode: $('bot-mode').value,
     });
   };
   $('btn-join').onclick = () => {
@@ -1254,7 +1270,7 @@ document.addEventListener('DOMContentLoaded', () => {
     toast('Kode disalin! 📋');
   };
   $('btn-start').onclick = () => send('start_game', {
-    extreme: S.game === 'uno' && $('lobby-extreme').checked,
+    mode: S.game === 'uno' ? $('lobby-mode').value : 'normal',
   });
   const btnSound = $('btn-sound');
   btnSound.textContent = soundOn ? '🔊' : '🔇';

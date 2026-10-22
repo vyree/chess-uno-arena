@@ -120,12 +120,52 @@ test('bot-vs-bot: game selesai dengan pemenang valid di semua ukuran meja', () =
   }
 });
 
-test('bot-vs-bot: mode ekstrim juga selesai normal', () => {
-  const st = U.newGame(4, { rand: rng(42), extreme: true });
+test('bot-vs-bot: mode hard juga selesai normal', () => {
+  const st = U.newGame(4, { rand: rng(42), mode: 'hard' });
   let steps = 0;
   while (!st.over && steps < 10000) {
     B.takeTurn(st, st.turn);
     steps++;
   }
   assert.ok(st.over);
+});
+
+test('bot-vs-bot: mode hell selesai normal (bot memakai kartu spesial secara legal)', () => {
+  const st = U.newGame(4, { rand: rng(1234), mode: 'hell' });
+  let steps = 0;
+  while (!st.over && steps < 15000) {
+    const log = B.takeTurn(st, st.turn);
+    for (const step of log) {
+      if (step.r && step.r.ok === false) assert.fail('langkah bot ditolak engine: ' + step.r.error);
+    }
+    steps++;
+  }
+  assert.ok(st.over, 'game hell bot tidak selesai');
+});
+
+test('bot memantulkan tumpukan besar dengan reverse black, menahan diri di tumpukan kecil', () => {
+  const num = (id, color, value) => ({ id, color, kind: 'number', value });
+  const d2 = (id, color) => ({ id, color, kind: 'draw2', value: null });
+  const rbk = (id) => ({ id, color: null, kind: 'reverseBlack', value: null });
+  function hellGame(pile) {
+    const st = U.newGame(4, { rand: rng(31), mode: 'hell' });
+    st.discard = [num('t', 'red', 5)];
+    st.currentColor = 'red';
+    st.hands[0] = [rbk('bb'), num('n1', 'blue', 3), num('n2', 'green', 4), num('n3', 'red', 9)];
+    st.pendingDraw = pile;
+    st.pendingKind = 'draw2';
+    st.turn = 0;
+    return st;
+  }
+  const big = hellGame(6);
+  B.takeTurn(big, 0);
+  assert.equal(big.dir, -1, 'tumpukan 6 harus dipantulkan');
+  assert.equal(big.pendingDraw, 6);
+  const small = hellGame(2);
+  const before = small.hands[0].length;
+  B.takeTurn(small, 0);
+  assert.equal(small.dir, 1, 'tumpukan 2 tidak dipantulkan');
+  assert.equal(small.hands[0].length, before + 2, 'bot menelan tumpukan kecil');
+  assert.equal(small.pendingDraw, 0);
+  void d2;
 });

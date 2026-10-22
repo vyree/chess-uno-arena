@@ -3,9 +3,16 @@
  * UNO engine: standard 108-card rules (simplified per PRD).
  * Simplifications (documented): no wild+4 challenge.
  * UNO declaration via saidUno flag (forget = draw 2 penalty).
- * House rules (Misi 2, Sensei 2026-10-21): 2-8 players; STRICT stacking —
- * +2 stacks only on +2, +4 only on +4 (any color); in extreme mode +4
- * cannot be stacked at all (deadly), only +2 stacks.
+ * House rules (Misi 2, Sensei 2026-10-21): 2-8 players; strict stacking.
+ * Mode rules (Misi 5, Sensei 2026-10-22 — CORRECTS the Misi 2 reading):
+ * - normal: only +2 stacks; a pending +4 can never be answered.
+ * - hard (formerly "ekstrim"): escalation — +2 may be answered by +2 or
+ *   +4; +4 only by +4. Once +4 enters, the chain is locked to +4.
+ * - hell: hard stacking + a fatter deck (+2 x4/color, wild4 x8) and two
+ *   hell-only specials (4 each): Reverse Black (bounce a pending pile to
+ *   the other direction) and Null White (erase the pile, uncounterable;
+ *   EVERY player draws 2; caster picks the color). Both specials are
+ *   dead cards outside a pending pile.
  */
 
 const COLORS = ['red', 'yellow', 'green', 'blue'];
@@ -17,7 +24,7 @@ function mkCard(color, kind, value) {
   return { id: 'c' + (cardSeq++), color, kind, value };
 }
 
-function buildDeck() {
+function buildDeck(mode) {
   const deck = [];
   for (const color of COLORS) {
     deck.push(mkCard(color, 'number', 0));
@@ -34,6 +41,20 @@ function buildDeck() {
     deck.push(mkCard(null, 'wild', null));
     deck.push(mkCard(null, 'wild4', null));
   }
+  if (mode === 'hell') {
+    // Hell-only composition (Misi 5): draw cards doubled so piles ignite
+    // more often (+2 x4 per color = 16 total, wild4 x8), plus the two
+    // hell specials, 4 copies each. Total: 128 cards.
+    for (const color of COLORS) {
+      deck.push(mkCard(color, 'draw2', null));
+      deck.push(mkCard(color, 'draw2', null));
+    }
+    for (let i = 0; i < 4; i++) deck.push(mkCard(null, 'wild4', null));
+    for (let i = 0; i < 4; i++) {
+      deck.push(mkCard(null, 'reverseBlack', null));
+      deck.push(mkCard(null, 'nullWhite', null));
+    }
+  }
   return deck;
 }
 
@@ -46,12 +67,16 @@ function shuffle(arr, rand) {
   return arr;
 }
 
+const MODES = ['normal', 'hard', 'hell'];
+
 function newGame(numPlayers, opts) {
-  // opts: { rand, extreme } — a bare function is treated as rand (legacy calls)
+  // opts: { rand, mode } — a bare function is treated as rand (legacy
+  // calls); the Misi 2 boolean `extreme` maps to 'hard' (legacy calls).
   if (typeof opts === 'function') opts = { rand: opts };
   opts = opts || {};
   if (numPlayers < 2 || numPlayers > 8) throw new Error('pemain harus 2-8');
-  const deck = shuffle(buildDeck(), opts.rand);
+  const mode = MODES.includes(opts.mode) ? opts.mode : (opts.extreme ? 'hard' : 'normal');
+  const deck = shuffle(buildDeck(mode), opts.rand);
   const hands = [];
   for (let p = 0; p < numPlayers; p++) hands.push(deck.splice(0, 7));
   // flip starter: must be a number card (bury action cards back into deck)
@@ -66,8 +91,8 @@ function newGame(numPlayers, opts) {
     turn: 0, dir: 1,
     currentColor: starter.color,
     pendingDraw: 0,       // next player draws this many & loses turn
-    pendingKind: null,    // 'draw2' | 'wild4' — which kind started the pending pile
-    extreme: !!opts.extreme, // extreme mode: +4 cannot be stacked (deadly)
+    pendingKind: null,    // 'draw2' | 'wild4' — kind of the pile's current top answer level
+    mode,                 // 'normal' | 'hard' | 'hell' (Misi 5)
     drawnCard: null,      // card drawn this turn (may be played or passed)
     drewThisTurn: false,
     over: null,
@@ -78,17 +103,33 @@ function newGame(numPlayers, opts) {
 
 function topCard(st) { return st.discard[st.discard.length - 1]; }
 
-// While a draw pile is pending, only a same-kind draw card may answer it
-// (strict stacking, any color). Extreme mode: a pending +4 has no answer.
+// Pile answers by mode (Misi 5):
+// - normal: a +2 pile answers only with +2; a +4 pile has NO answer.
+// - hard/hell: a +2 pile answers with +2 or +4 (escalation); a +4 pile
+//   answers only with +4.
+// The hell specials (Reverse Black / Null White) answer ANY pending pile.
 function isStackCard(st, card) {
-  if (!st.pendingKind || card.kind !== st.pendingKind) return false;
-  if (st.extreme && st.pendingKind === 'wild4') return false;
-  return true;
+  if (!st.pendingKind) return false;
+  if (card.kind === 'reverseBlack' || card.kind === 'nullWhite') return true;
+  if (st.mode === 'normal') return st.pendingKind === 'draw2' && card.kind === 'draw2';
+  if (st.pendingKind === 'draw2') return card.kind === 'draw2' || card.kind === 'wild4';
+  return card.kind === 'wild4';
+}
+
+// Why a would-be stack answer is rejected (user-facing, mapped in server).
+function stackError(st, card) {
+  if (st.pendingKind === 'wild4') {
+    if (st.mode === 'normal') return '+4 tidak bisa ditumpuk di mode normal';
+    if (card.kind === 'draw2') return 'tumpukan +4 hanya bisa dijawab +4';
+  }
+  return 'hanya kartu sejenis yang bisa menumpuk';
 }
 
 function canPlay(st, playerIdx, card) {
   if (st.over || st.turn !== playerIdx || st.drewThisTurn) return false;
   if (st.pendingDraw > 0) return isStackCard(st, card);
+  // hell specials are dead cards outside a pending pile
+  if (card.kind === 'reverseBlack' || card.kind === 'nullWhite') return false;
   const top = topCard(st);
   if (card.kind === 'wild' || card.kind === 'wild4') return true;
   if (card.color === st.currentColor) return true;
@@ -111,7 +152,7 @@ function advanceTurn(st, skip) {
 
 function cardPoints(c) {
   if (c.kind === 'number') return c.value;
-  if (c.kind === 'wild' || c.kind === 'wild4') return 50;
+  if (c.kind === 'wild' || c.kind === 'wild4' || c.kind === 'reverseBlack' || c.kind === 'nullWhite') return 50;
   return 20;
 }
 
@@ -127,24 +168,40 @@ function playCard(st, playerIdx, cardId, opts) {
   const card = hand[hi];
   const stacking = st.pendingDraw > 0;
   if (stacking) {
-    // facing a draw pile: the only legal answer is a same-kind stack card
-    if (st.extreme && st.pendingKind === 'wild4') {
-      return { ok: false, error: 'mode ekstrim: +4 tidak bisa ditumpuk' };
-    }
-    if (card.kind !== st.pendingKind) {
-      return { ok: false, error: 'hanya kartu sejenis yang bisa menumpuk' };
-    }
+    // facing a draw pile: only the mode's stack answers (Misi 5) are legal
+    if (!isStackCard(st, card)) return { ok: false, error: stackError(st, card) };
+  } else if (card.kind === 'reverseBlack' || card.kind === 'nullWhite') {
+    return { ok: false, error: 'kartu spesial hanya bisa dipakai melawan tumpukan' };
   } else if (!canPlay(st, playerIdx, card)) {
     return { ok: false, error: 'kartu tidak cocok' };
   }
-  if ((card.kind === 'wild' || card.kind === 'wild4') && !COLORS.includes(opts.wildColor)) {
+  if ((card.kind === 'wild' || card.kind === 'wild4' || card.kind === 'nullWhite') && !COLORS.includes(opts.wildColor)) {
     return { ok: false, error: 'pilih warna dulu' };
   }
 
   hand.splice(hi, 1);
   st.discard.push(card);
-  st.currentColor = (card.kind === 'wild' || card.kind === 'wild4') ? opts.wildColor : card.color;
+  // wild-class plays set the color; Reverse Black (colorless) preserves it
+  st.currentColor = (card.kind === 'wild' || card.kind === 'wild4' || card.kind === 'nullWhite')
+    ? opts.wildColor : (card.color || st.currentColor);
   const events = [{ type: 'play', player: playerIdx, kind: card.kind }];
+
+  if (card.kind === 'nullWhite') {
+    // Null White (hell): the pile vanishes at once — final, nothing can
+    // counter it — and EVERY player (caster included) draws 2. Resolved
+    // BEFORE the UNO/win checks so the tax is part of the play itself:
+    // you cannot go out by casting Null.
+    const nulled = st.pendingDraw;
+    st.pendingDraw = 0;
+    st.pendingKind = null;
+    const affected = [];
+    for (let p = 0; p < st.hands.length; p++) {
+      replenish(st);
+      for (let i = 0; i < 2 && st.deck.length; i++) st.hands[p].push(st.deck.pop());
+      affected.push(p);
+    }
+    events.push({ type: 'nullify', player: playerIdx, nulled, affected });
+  }
 
   // UNO penalty: forgot to declare with 1 card left
   let penalty = 0;
@@ -167,8 +224,16 @@ function playCard(st, playerIdx, cardId, opts) {
   else if (card.kind === 'reverse') {
     st.dir *= -1;
     skip = st.hands.length === 2 ? 2 : 1; // reverse = skip in 2-player
+  } else if (card.kind === 'reverseBlack') {
+    // Reverse Black (hell): flip direction; the pile itself is untouched
+    // (same amount, same kind) — the player in the NEW direction now
+    // faces it. With 2 players that simply hands the pile back.
+    st.dir *= -1;
+    events.push({ type: 'bounce', player: playerIdx, total: st.pendingDraw });
   } else if (card.kind === 'draw2' || card.kind === 'wild4') {
-    // start a new pile or stack onto the pending one (strict: same kind only)
+    // start a new pile or stack onto the pending one (the played kind
+    // becomes the pile's answer level — this is what locks an escalated
+    // +2 pile to +4-only afterwards)
     st.pendingDraw += card.kind === 'draw2' ? 2 : 4;
     st.pendingKind = card.kind;
     if (stacking) events.push({ type: 'stack', player: playerIdx, total: st.pendingDraw });
@@ -202,6 +267,7 @@ function drawCard(st, playerIdx) {
 
 function canPlayAfterDraw(st, playerIdx, card) {
   const top = topCard(st);
+  if (card.kind === 'reverseBlack' || card.kind === 'nullWhite') return false; // pile-only specials
   if (card.kind === 'wild' || card.kind === 'wild4') return true;
   if (card.color === st.currentColor) return true;
   if (card.kind === 'number' && top.kind === 'number' && card.value === top.value) return true;
@@ -262,7 +328,7 @@ function toClient(st, playerIdx) {
     dir: st.dir,
     pendingDraw: st.pendingDraw,
     pendingKind: st.pendingKind,
-    extreme: st.extreme,
+    mode: st.mode,
     drewThisTurn: st.turn === playerIdx ? st.drewThisTurn : false,
     deckCount: st.deck.length,
     over: st.over,
@@ -272,6 +338,6 @@ function toClient(st, playerIdx) {
 }
 
 module.exports = {
-  COLORS, buildDeck, shuffle, newGame, canPlay, isStackCard, playCard, drawCard,
+  COLORS, MODES, buildDeck, shuffle, newGame, canPlay, isStackCard, playCard, drawCard,
   passTurn, playDrawnCard, scoreRound, cardPoints, toClient, topCard,
 };

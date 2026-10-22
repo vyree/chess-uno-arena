@@ -30,6 +30,24 @@ function nextSeat(st, idx) {
 // - otherwise shed the highest-point non-wild card; wilds are kept for last
 // While a draw pile is pending, `playable` already contains stack cards only.
 function chooseCard(st, idx, playable) {
+  if (st.pendingDraw > 0) {
+    // Pile answers (Misi 5): stack first — it grows the pile for the next
+    // victim. Bounce a big pile back with Reverse Black; Null White only
+    // for a huge pile (it taxes everyone, bot included). Below those
+    // thresholds the bot keeps its specials: return null and takeTurn
+    // takes the pile instead.
+    const stack = playable.find((c) => c.kind === 'draw2' || c.kind === 'wild4');
+    if (stack) return stack;
+    if (st.pendingDraw >= 4) {
+      const rb = playable.find((c) => c.kind === 'reverseBlack');
+      if (rb) return rb;
+    }
+    if (st.pendingDraw >= 6) {
+      const nw = playable.find((c) => c.kind === 'nullWhite');
+      if (nw) return nw;
+    }
+    if (playable.some((c) => c.kind === 'reverseBlack' || c.kind === 'nullWhite')) return null;
+  }
   if (playable.length === 1) return playable[0];
   const isWild = (c) => c.kind === 'wild' || c.kind === 'wild4';
   const nonWild = playable.filter((c) => !isWild(c));
@@ -53,12 +71,15 @@ function takeTurn(st, idx) {
   const playable = hand.filter((c) => uno.canPlay(st, idx, c));
   if (playable.length) {
     const card = chooseCard(st, idx, playable);
-    const r = uno.playCard(st, idx, card.id, {
-      saidUno: hand.length === 2,
-      wildColor: chooseWildColor(st, idx),
-    });
-    log.push({ action: 'play', r });
-    return log;
+    if (card) {
+      const r = uno.playCard(st, idx, card.id, {
+        saidUno: hand.length === 2,
+        wildColor: chooseWildColor(st, idx),
+      });
+      log.push({ action: 'play', r });
+      return log;
+    }
+    // chooseCard passed (only sub-threshold hell specials): draw below.
   }
   const dr = uno.drawCard(st, idx);
   log.push({ action: 'draw', r: dr });

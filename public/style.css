@@ -284,6 +284,14 @@ input:focus { outline: none; border-color: var(--color-primary); }
 .uno-card.green { background: var(--color-uno-green); }
 .uno-card.blue { background: var(--color-uno-blue); }
 .uno-card.wild { background: #1c1c1e; }
+/* Hell specials (Misi 5): Reverse Black = a black card with the classic
+   white oval + dark reverse glyph; Null White = a white card sealed by a
+   dark oval with a white X. */
+.uno-card.blackrev { background: #17171c; }
+.uno-card.blackrev .val { color: #17171c; }
+.uno-card.nullwhite { background: #f4f4f6; color: #1c1c1e; border-color: #cfcfda; }
+.uno-card.nullwhite .oval { background: #1c1c1e; }
+.uno-card.nullwhite .val { color: #fff; }
 .uno-card.deck { background: #3a3f4d; cursor: pointer; }
 .uno-card.deck small { position: absolute; bottom: 4px; left: 0; right: 0; text-align: center; }
 .uno-card.playable { outline: 3px solid var(--color-success); }

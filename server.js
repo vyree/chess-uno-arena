@@ -286,9 +286,9 @@ function handleStartGame(player, room, data) {
     if (room.players.length < 2) { sendError(player.socket, 'UNO butuh minimal 2 pemain'); return; }
     // UNO: seat order is shuffled at every game start (Sensei, Misi 2)
     rooms.shuffleSeats(room);
-    room.unoExtreme = !!(data && data.extreme);
+    room.unoMode = (data && data.mode) || 'normal';
     const n = room.players.length;
-    room.uno = { st: uno.newGame(n, { extreme: room.unoExtreme }), active: new Array(n).fill(true), round: 1 };
+    room.uno = { st: uno.newGame(n, { mode: room.unoMode }), active: new Array(n).fill(true), round: 1 };
     room.scoreBoard = {};
     for (const p of room.players) room.scoreBoard[p.id] = 0;
     room.status = 'playing';
@@ -354,7 +354,7 @@ function handleUnoPlay(player, room, data) {
   const playFn = isDrawn ? uno.playDrawnCard : uno.playCard;
   const r = playFn(u.st, player.seat, data.cardId, { saidUno: data.saidUno, wildColor: data.wildColor });
   if (!r.ok) {
-    const msgs = { 'bukan giliranmu': 'Bukan giliranmu', 'kartu tidak cocok': 'Kartu tidak cocok', 'pilih warna dulu': 'Pilih warna dulu untuk kartu wild', 'kartu tidak ada di tanganmu': 'Kartu tidak ada di tanganmu', 'hanya kartu sejenis yang bisa menumpuk': 'Hanya kartu sejenis yang bisa menumpuk tumpukan ini', 'mode ekstrim: +4 tidak bisa ditumpuk': 'Mode Ekstrim: +4 tidak bisa ditumpuk — ambil kartunya!' };
+    const msgs = { 'bukan giliranmu': 'Bukan giliranmu', 'kartu tidak cocok': 'Kartu tidak cocok', 'pilih warna dulu': 'Pilih warna dulu untuk kartu wild', 'kartu tidak ada di tanganmu': 'Kartu tidak ada di tanganmu', 'hanya kartu sejenis yang bisa menumpuk': 'Hanya kartu sejenis yang bisa menumpuk tumpukan ini', '+4 tidak bisa ditumpuk di mode normal': 'Mode Normal: +4 tidak bisa ditumpuk — ambil kartunya!', 'tumpukan +4 hanya bisa dijawab +4': 'Tumpukan +4 hanya bisa dijawab +4', 'kartu spesial hanya bisa dipakai melawan tumpukan': 'Kartu spesial hanya bisa dipakai melawan tumpukan' };
     sendError(player.socket, msgs[r.error] || 'Langkah tidak valid');
     return;
   }
@@ -407,7 +407,7 @@ function handleUnoNewRound(player, room) {
   // UNO: seats are re-shuffled every new round (Sensei, Misi 2)
   rooms.shuffleSeats(room);
   const n = room.players.length;
-  room.uno = { st: uno.newGame(n, { extreme: room.unoExtreme }), active: new Array(n).fill(true), round: room.uno.round + 1 };
+  room.uno = { st: uno.newGame(n, { mode: room.unoMode || 'normal' }), active: new Array(n).fill(true), round: room.uno.round + 1 };
   room.status = 'playing';
   startTurnTimer(room);
   sendGameState(room);
@@ -814,7 +814,7 @@ async function route(ws, type, data) {
       if (!created.ok) { sendError(ws, created.error); return; }
       const room = created.room;
       room.isBotRoom = true;
-      room.unoExtreme = !!data.extreme;
+      room.unoMode = data.mode || 'normal';
       for (let i = 0; i < data.size - 1; i++) {
         const bp = {
           id: 'bot-' + crypto.randomUUID(), nickname: bot.BOT_NAMES[i % bot.BOT_NAMES.length],
@@ -825,7 +825,7 @@ async function route(ws, type, data) {
       }
       rooms.shuffleSeats(room);
       const n = room.players.length;
-      room.uno = { st: uno.newGame(n, { extreme: room.unoExtreme }), active: new Array(n).fill(true), round: 1 };
+      room.uno = { st: uno.newGame(n, { mode: room.unoMode }), active: new Array(n).fill(true), round: 1 };
       room.scoreBoard = {};
       for (const p of room.players) room.scoreBoard[p.id] = 0;
       room.status = 'playing';

@@ -117,8 +117,13 @@
           <option value="6">6 pemain</option>
           <option value="8">8 pemain</option>
         </select>
-        <label class="extreme-toggle" title="Mode Ekstrim: +4 tidak bisa ditumpuk, hanya +2 yang bisa stack">
-          <input type="checkbox" id="bot-extreme"> Mode Ekstrim
+        <label class="extreme-toggle" title="Normal: hanya +2 bisa ditumpuk, +4 tidak bisa dilawan. Hard: +2 bisa dieskalasi +4. Hell: aturan Hard + kartu Reverse Black & Null White">
+          Mode
+          <select id="bot-mode">
+            <option value="normal" selected>Normal</option>
+            <option value="hard">Hard</option>
+            <option value="hell">Hell 🔥</option>
+          </select>
         </label>
       </div>
       <button id="btn-bot" class="btn primary big">▶️ Mulai Lawan Bot</button>
@@ -151,9 +156,13 @@
       <h3>Pemain (<span id="lobby-count">0</span>)</h3>
       <ul id="lobby-players" class="player-list"></ul>
       <div id="lobby-extreme-row" class="extreme-row hidden">
-        <label class="extreme-toggle" title="Mode Ekstrim: +4 tidak bisa ditumpuk, hanya +2 yang bisa stack">
-          <input type="checkbox" id="lobby-extreme"> 🔥 Mode Ekstrim UNO
-          <small class="muted">(+4 tidak bisa ditumpuk)</small>
+        <label class="extreme-toggle" title="Normal: hanya +2 bisa ditumpuk, +4 tidak bisa dilawan. Hard: +2 bisa dieskalasi +4. Hell: aturan Hard + kartu Reverse Black & Null White">
+          🎛️ Mode UNO
+          <select id="lobby-mode">
+            <option value="normal" selected>Normal</option>
+            <option value="hard">Hard</option>
+            <option value="hell">Hell 🔥</option>
+          </select>
         </label>
         <div id="lobby-extreme-note" class="muted hidden">Hanya host yang bisa mengubah ini</div>
       </div>
@@ -221,7 +230,7 @@
   <!-- ============ UNO ============ -->
   <section id="screen-uno" class="screen hidden">
     <div class="game-bar">
-      <div><strong>🃏 UNO</strong> <span id="uno-extreme-badge" class="extreme-badge hidden">🔥 EKSTRIM</span></div>
+      <div><strong>🃏 UNO</strong> <span id="uno-mode-badge" class="extreme-badge hidden">HARD</span></div>
       <div class="game-bar-right">
         <button id="btn-sound" class="btn ghost small" title="Suara nyala/mati">🔊</button>
         <div id="uno-timer" class="timer">⏱️ 60</div>

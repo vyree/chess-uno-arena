@@ -88,6 +88,8 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
    (kena +4 = langsung ambil, tanpa perlawanan); hanya +2 yang bisa stack.
    [Asumsi tertulis Arona dari kalimat Sensei "+4 aktif, aku mati" —
    dibaca: di mode ekstrim +4 itu mematikan/tidak bisa dilawan.]
+   **[DIGANTIKAN OLEH MISI 5 — 22 Okt 2026: asumsi ini TERBALIK dari
+   maksud Sensei. Aturan yang benar ada di bagian MISI 5 di bawah.]**
 7. **Urutan duduk diacak** saat game mulai DAN diacak lagi tiap game baru.
 8. **Suara**: efek kartu (main/ambil/kocok) + teriakan "Uno!" saat pemain
    sisa 1 kartu. Client-side Web Audio, ada mute.
@@ -562,3 +564,53 @@ Belum dikerjakan; menunggu giliran setelah A+B live. Aturan dari Sensei:
 - Bot memegang kursi sampai pemain kembali atau game selesai.
 - Kesiapan otak: UNO siap (game/bot.js), Truth nyaris siap (driver
   auto-pass), Catur perlu bot pengisi sederhana (belum ada AI catur).
+
+## MISI 5 — Koreksi Stacking + Mode Hell + 2 Kartu Baru (Sensei, 22 Okt 2026)
+
+KOREKSI ATURAN (kata Sensei): "mode ekstrim itu boleh tumpuk +4 — mode
+normal itu hanya +2 boleh tumpuk." Aturan Misi 2 butir 6 di atas adalah
+asumsi tertulis Arona yang TERBALIK; bagian ini yang berlaku.
+
+### Mode (3 pilihan: Normal / Hard / Hell; "Ekstrim" berganti nama "Hard")
+- NORMAL: kena +2 -> hanya boleh dijawab +2. Kena +4 -> TIDAK bisa
+  dilawan sama sekali, wajib ambil 4.
+- HARD: kena +2 -> boleh dijawab +2 ATAU dieskalasi +4. Kena +4 -> hanya
+  boleh dijawab +4. Sekali +4 masuk, rantai terkunci di level +4
+  (pendingKind mengikuti kartu jawaban terakhir).
+- HELL: penumpukan persis seperti Hard + deck khusus + 2 kartu baru.
+
+### Deck
+- Normal & Hard: klasik 108 (per warna: 0 x1, 1-9 x2, skip/reverse/+2 x2;
+  wild x4, wild+4 x4).
+- Hell: 128 — khusus Hell: +2 jadi x4 per warna (total 16), wild+4 jadi
+  x8, ditambah Reverse Black x4 + Null White x4.
+
+### Reverse Black Card (Hell saja, x4)
+- Kartu hitam, logo sama seperti Reverse biasa, nyambung di semua warna.
+- HANYA bisa dimainkan saat menghadapi tumpukan; di luar itu mati total
+  (tidak bisa dipakai sebagai Reverse biasa).
+- Efek: arah putaran berbalik; tumpukan (jumlah + jenis) utuh memantul ke
+  pemain di arah baru; warna berjalan TIDAK berubah; tanpa pilih warna.
+- Nilai sisa di tangan saat ronde selesai: 50 poin.
+
+### Null White Card (Hell saja, x4)
+- Kartu putih, logo X.
+- HANYA bisa dimainkan saat menghadapi tumpukan.
+- Efek: tumpukan langsung NULL — final, TIDAK bisa di-counter (tidak ada
+  jendela respons); SEMUA pemain termasuk pemiliknya ambil +2 rata.
+- Privilege pemilik: memilih warna berjalan berikutnya (seperti Wild).
+- Pajak +2 adalah bagian dari memainkan kartu -> melempar Null sebagai
+  kartu terakhir TIDAK memenangkan ronde (tangan terisi +2 lagi).
+- Nilai sisa di tangan saat ronde selesai: 50 poin.
+
+### Implementasi (mengikat)
+- Payload mode: `mode: 'normal'|'hard'|'hell'` di create_bot_room &
+  start_game (validator memetakan legacy `extreme: true` -> 'hard').
+  Pilihan mode ada di menu bot & lobby (host), badge in-game menampilkan
+  HARD / HELL (Normal tanpa badge).
+- Engine: st.mode; isStackCard mode-aware; playCard menyelesaikan Null
+  SEBELUM cek UNO/menang; Reverse Black tidak menyentuh pendingDraw/
+  pendingKind/currentColor.
+- Bot: jawaban tumpukan = kartu stack dulu; Reverse Black bila tumpukan
+  >= 4; Null White bila tumpukan >= 6; di bawah ambang itu bot menelan
+  tumpukan daripada membakar kartu spesial.

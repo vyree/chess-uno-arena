@@ -59,6 +59,13 @@ function validCardId(id) {
   return { ok: true, value: id };
 }
 
+// UNO mode (Misi 5): 'normal' | 'hard' | 'hell'. Legacy Misi 2 clients
+// send `extreme: true`, which maps to 'hard'; anything else → 'normal'.
+function validMode(d) {
+  if (d && (d.mode === 'normal' || d.mode === 'hard' || d.mode === 'hell')) return d.mode;
+  return d && d.extreme === true ? 'hard' : 'normal';
+}
+
 function validColor(c) {
   if (c === undefined || c === null) return { ok: true, value: undefined };
   if (!['red', 'yellow', 'green', 'blue'].includes(c)) {
@@ -130,14 +137,15 @@ const VALIDATORS = {
     return { ok: true, data: { playerId: d.playerId, code: c.value, idToken: t.value } };
   },
   start_game(d) {
-    // extreme = UNO Mode Ekstrim toggle set by the host (Misi 2)
-    return { ok: true, data: { extreme: d.extreme === true } };
+    // mode = UNO mode chosen by the host (Misi 5): normal | hard | hell.
+    // The Misi 2 boolean `extreme` maps to 'hard' for legacy clients.
+    return { ok: true, data: { mode: validMode(d) } };
   },
   create_bot_room(d) {
     if (![2, 4, 6, 8].includes(d.size)) {
       return { ok: false, error: 'ukuran meja bot harus 2, 4, 6, atau 8 pemain' };
     }
-    return { ok: true, data: { size: d.size, extreme: d.extreme === true } };
+    return { ok: true, data: { size: d.size, mode: validMode(d) } };
   },
   chat(d) {
     if (typeof d.text !== 'string') return { ok: false, error: 'chat harus teks' };
