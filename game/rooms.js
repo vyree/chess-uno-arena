@@ -42,6 +42,7 @@ class RoomManager {
       timer: null,
       deadline: null,
       forfeitTimers: new Map(), // playerId -> timeout
+      takeoverTimers: new Map(), // playerId -> timeout (Misi 4C bot takeover)
       createdAt: Date.now(),
     };
     this.rooms.set(code, room);
@@ -81,6 +82,8 @@ class RoomManager {
     }
     const ft = room.forfeitTimers.get(playerId);
     if (ft) { clearTimeout(ft); room.forfeitTimers.delete(playerId); }
+    const tt = room.takeoverTimers.get(playerId);
+    if (tt) { clearTimeout(tt); room.takeoverTimers.delete(playerId); }
     if (room.players.length === 0) {
       this.destroy(room.code);
       return true;
@@ -106,6 +109,7 @@ class RoomManager {
     if (!room) return;
     if (room.timer) clearTimeout(room.timer);
     for (const t of room.forfeitTimers.values()) clearTimeout(t);
+    for (const t of room.takeoverTimers.values()) clearTimeout(t);
     this.rooms.delete(code);
   }
 

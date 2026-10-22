@@ -369,7 +369,7 @@ function renderChess(m) {
   const badge = $('chess-turn');
   if (st.over) { badge.textContent = 'Selesai'; badge.className = 'turn-badge'; }
   else if (isMyTurn) { badge.textContent = 'Giliranmu!'; badge.className = 'turn-badge mine'; }
-  else if (opp && opp.isBot) { badge.textContent = opp.nickname + ' is thinking'; badge.className = 'turn-badge thinking'; }
+  else if (opp && (opp.isBot || opp.takenOver)) { badge.textContent = opp.nickname + ' is thinking'; badge.className = 'turn-badge thinking'; }
   else { badge.textContent = 'Giliran lawan'; badge.className = 'turn-badge'; }
 
   $('chess-status').textContent = st.inCheck && !st.over
@@ -482,7 +482,7 @@ function renderUno(m) {
 
   let status = '';
   const turnPlayer = m.players[st.turn];
-  const botThinking = !st.over && !isMyTurn && turnPlayer && turnPlayer.isBot;
+  const botThinking = !st.over && !isMyTurn && turnPlayer && (turnPlayer.isBot || turnPlayer.takenOver);
   if (st.over) status = 'Ronde selesai!';
   else if (st.pendingDraw > 0 && isMyTurn) status = `Kamu kena +${st.pendingDraw}! Ambil kartunya`;
   else if (isMyTurn) status = st.drewThisTurn ? 'Kartu diambil — mainkan atau lewati' : 'Giliranmu!';

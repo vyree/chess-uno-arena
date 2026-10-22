@@ -555,8 +555,9 @@ rejoin memanggil sendGameState tanpa syarat (crash snapshot lobby).
       bisa saling mendahului (hello dikalahkan create, 9/20 gagal uji
       loop di kode lama); kini mustahil secara urutan.
 
-### Bagian C — Pengambilalihan Bot (DITAHAN — aturan Sensei 22 Okt 2026)
-Belum dikerjakan; menunggu giliran setelah A+B live. Aturan dari Sensei:
+### Bagian C — Pengambilalihan Bot (SELESAI BUILD 22 Okt 2026 — deploy ditahan Sensei)
+Dikerjakan atas perintah Sensei 22 Okt malam (setelah Misi 8 build),
+deploy menunggu semua pekerjaan kelar. Aturan dari Sensei:
 - Pemain putus koneksi **lebih dari 18 detik** -> kursinya **diambil alih
   bot** sampai pemain itu kembali masuk ke game.
 - Selama diambil alih, **nama tampilan pemain menjadi nama + "bot"**
@@ -564,6 +565,36 @@ Belum dikerjakan; menunggu giliran setelah A+B live. Aturan dari Sensei:
 - Bot memegang kursi sampai pemain kembali atau game selesai.
 - Kesiapan otak: UNO siap (game/bot.js), Truth nyaris siap (driver
   auto-pass), Catur perlu bot pengisi sederhana (belum ada AI catur).
+
+Implementasi (commit setelah e9b5410):
+- Server: `BOT_TAKEOVER_MS` (env, default 18000) — timer per kursi di
+  `armTakeover()` (saat putus di tengah game, dan saat game dimulai
+  untuk kursi yang manusianya sudah pergi). `engageTakeover()` memasang
+  flag `takenOver`; snapshot menampilkan nama via `dispName()` +
+  `takenOver: true` + `connected: true`; klien menampilkan label
+  "is thinking" untuk kursi takenOver (UNO & badge catur).
+- Otak per game: UNO memakai `bot.takeTurn` yang sama dengan bot room
+  (jeda mikir Misi 8 berlaku juga); Truth memperlakukan kursi takenOver
+  seperti bot di `scheduleTruthBots` (jawaban simulasi + reaksi +
+  endTurn dipercepat); Catur memakai bot pengisi netral resep `gpt`
+  dari `chessbot.chooseMove`, jeda mikir dibatasi sisa waktu giliran
+  (`scheduleChessTakeover`).
+- **expireGrace TIDAK lagi forfeit di tengah game**: kursi dipegang bot
+  sampai game selesai; identitas pemain dipertahankan sehingga rejoin
+  SETELAH grace pun bisa mengklaim kembali kursinya (`releaseTakeover`
+  di handler rejoin; langkah bot yang terlanjur terjadwal mundur lewat
+  cek `seatDriven()`). Ini sekaligus menutup dua bug lapangan Sensei:
+  kartu kursi yang putus jadi 0 (forfeit destruktif) dan penolakan
+  "room sudah mulai main" saat kembali setelah putus lama.
+- Pembersihan: `cleanupGhostSeats()` di setiap transisi game-over —
+  kursi hantu (takenOver & tidak terhubung) dilepas, identitas dihapus,
+  room tanpa manusia terhubung ditutup. `handleUnoNewRound` juga
+  membuang kursi hantu sebelum ronde baru.
+- Leave sukarela TIDAK berubah (tetap forfeit langsung); room bot solo
+  tidak berubah (teardown saat grace habis).
+- Tes: `test/takeover.test.js` (4 tes integrasi WS: UNO takeover +
+  klaim balik lewat grace, rejoin cepat tanpa label bot, catur bot
+  pengisi + klaim balik, Truth dijawabkan bot bukan timeout).
 
 ## MISI 5 — Koreksi Stacking + Mode Hell + 2 Kartu Baru (Sensei, 22 Okt 2026)
 

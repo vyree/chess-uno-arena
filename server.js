@@ -54,6 +54,10 @@ function unoBotThinkMs() {
   return 5000 + Math.round(Math.random() * 5000);
 }
 const RECONNECT_GRACE_MS = parseInt(process.env.RECONNECT_GRACE_MS, 10) || 60 * 1000;
+// Misi 4C (Sensei): a seat whose human has been gone this long is taken
+// over by a bot until the human returns or the game ends. The env
+// override exists only so tests can run fast.
+const TAKEOVER_MS = parseInt(process.env.BOT_TAKEOVER_MS, 10) || 18 * 1000;
 const MSG_PER_SEC = 20;
 
 const rooms = new RoomManager();
@@ -72,6 +76,14 @@ function broadcast(room, obj, exceptId) {
 }
 function getPlayerBySocket(ws) { return ws._playerId ? players.get(ws._playerId) : null; }
 
+// Display name (Misi 4C): while a bot holds a disconnected human's
+// seat, everyone sees the name + "bot" (Sensei's rule: "Noir bot").
+function dispName(p) { return p.takenOver ? `${p.nickname} bot` : p.nickname; }
+
+// A seat is bot-driven when it is a real bot seat OR a human seat
+// currently taken over under Misi 4C.
+function seatDriven(p) { return !!p && (!!p.isBot || !!p.takenOver); }
+
 // ---------------- snapshots ----------------
 const REASONS = {
   checkmate: 'Skakmat!', stalemate: 'Remis — stalemate', fifty: 'Remis — aturan 50 langkah',
@@ -87,7 +99,7 @@ function lobbySnapshot(room, forPlayer) {
     hostId: room.hostId,
     maxPlayers: MAX_PLAYERS[room.game],
     truthSettings: room.game === 'truth' ? room.truthSettings : undefined,
-    players: room.players.map((p) => ({ id: p.id, nickname: p.nickname, seat: p.seat, isBot: !!p.isBot })),
+    players: room.players.map((p) => ({ id: p.id, nickname: dispName(p), seat: p.seat, isBot: !!p.isBot, takenOver: !!p.takenOver })),
   };
 }
 
@@ -98,9 +110,11 @@ function gameSnapshot(room, player) {
     type: 'game_state', code: room.code, game: room.game, status: room.status,
     you: player.id, hostId: room.hostId, deadline: room.deadline,
     players: room.players.map((p) => ({
-      id: p.id, nickname: p.nickname, seat: p.seat, isBot: !!p.isBot,
+      id: p.id, nickname: dispName(p), seat: p.seat, isBot: !!p.isBot,
+      takenOver: !!p.takenOver,
       color: room.game === 'chess' ? chessColor(p.seat) : undefined,
-      connected: p.connected,
+      // a taken-over seat is present (the bot plays it), not "offline"
+      connected: p.connected || !!p.takenOver,
     })),
   };
   if (room.game === 'chess') {
@@ -114,7 +128,7 @@ function gameSnapshot(room, player) {
     base.round = u.round;
     base.scores = room.players
       .filter((p) => p.active !== false)
-      .map((p) => ({ nickname: p.nickname, points: room.scoreBoard[p.id] || 0 }));
+      .map((p) => ({ nickname: dispName(p), points: room.scoreBoard[p.id] || 0 }));
   }
   return base;
 }
@@ -137,22 +151,22 @@ function gameOverPayload(room, result) {
   };
   if (room.game === 'chess' && result.winnerColor) {
     const w = room.players.find((p) => chessColor(p.seat) === result.winnerColor);
-    payload.winnerNickname = w ? w.nickname : null;
+    payload.winnerNickname = w ? dispName(w) : null;
   }
   if (room.game === 'truth') {
     payload.awards = result.awards;
     payload.scores = (room.truth ? room.truth.st.players : []).map((p) => {
       const rp = room.players.find((x) => x.id === p.id);
-      return { playerId: p.id, nickname: rp ? rp.nickname : p.id, points: p.points };
+      return { playerId: p.id, nickname: rp ? dispName(rp) : p.id, points: p.points };
     });
   }
   if (room.game === 'uno') {
     payload.winnerSeat = result.winner;
     const w = room.players[result.winner];
-    payload.winnerNickname = w ? w.nickname : null;
+    payload.winnerNickname = w ? dispName(w) : null;
     payload.scores = room.players
       .filter((p) => p.active !== false)
-      .map((p) => ({ nickname: p.nickname, points: room.scoreBoard[p.id] || 0 }));
+      .map((p) => ({ nickname: dispName(p), points: room.scoreBoard[p.id] || 0 }));
   }
   return payload;
 }
@@ -178,6 +192,7 @@ function onTurnTimeout(room) {
     clearTurnTimer(room);
     const payload = gameOverPayload(room, { ...room.chess.over, winnerColor });
     broadcast(room, payload);
+    cleanupGhostSeats(room);
   } else {
     const u = room.uno;
     if (!u || u.st.over) return;
@@ -221,6 +236,7 @@ function forfeitPlayer(room, playerId, keepIdentity = false) {
     room.status = 'over';
     clearTurnTimer(room);
     broadcast(room, gameOverPayload(room, { ...room.chess.over, winnerColor }));
+    cleanupGhostSeats(room);
   } else if (room.game === 'truth') {
     // Truth survives a departure: the engine keeps the seat and the
     // turn timers auto-pass a ghost answerer, so the game plays out
@@ -229,7 +245,9 @@ function forfeitPlayer(room, playerId, keepIdentity = false) {
     if (rooms.get(room.code)) sendGameState(room);
   } else {
     const u = room.uno;
-    if (player && u.active[player.seat]) {
+    // Misi 4C: a taken-over seat is never destroyed by a forfeit —
+    // the bot keeps playing it until the game ends.
+    if (player && u.active[player.seat] && !player.takenOver) {
       u.active[player.seat] = false;
       for (const c of u.st.hands[player.seat]) u.st.deck.push(c);
       u.st.hands[player.seat] = [];
@@ -242,6 +260,7 @@ function forfeitPlayer(room, playerId, keepIdentity = false) {
         room.status = 'over';
         clearTurnTimer(room);
         broadcast(room, gameOverPayload(room, u.st.over));
+        cleanupGhostSeats(room);
       } else {
         sendGameState(room);
       }
@@ -261,6 +280,10 @@ function handleDisconnect(player) {
   // (Rejoin cancels this timer: route('rejoin') clears forfeitTimers.)
   const t = setTimeout(() => expireGrace(room, player.id), RECONNECT_GRACE_MS);
   room.forfeitTimers.set(player.id, t);
+  // Misi 4C: in a multiplayer game in progress, a bot warms up to take
+  // over this seat (engageTakeover). Solo bot rooms skip this — they
+  // are torn down at grace expiry instead.
+  if (room.status === 'playing') armTakeover(room, player);
   if (room.status === 'lobby') sendLobby(room); else sendGameState(room);
 }
 
@@ -274,9 +297,73 @@ function expireGrace(room, playerId) {
     players.delete(playerId);
     return;
   }
-  // lobby: forfeitPlayer's non-playing branch releases the seat;
-  // playing/over: it forfeits the game. Both delete the identity.
+  if (room.status === 'playing') {
+    // Misi 4C: NO mid-game forfeit anymore. The bot holds the seat
+    // until the player returns or the game ends, and the identity
+    // survives so a late rejoin can still reclaim the seat (this is
+    // what fixes the old "kartu jadi 0" destruction and the
+    // "room sudah mulai main" lockout after a long disconnect).
+    engageTakeover(room, playerId);
+    return;
+  }
+  // lobby / over: forfeitPlayer's non-playing branch releases the
+  // seat and deletes the identity, as before.
   forfeitPlayer(room, playerId);
+}
+
+// ---------------- Misi 4C: bot takeover of a disconnected seat ----------------
+// Arm the takeover timer for a disconnected human seat in a game in
+// progress. Called on disconnect, and at game start for seats whose
+// human was already gone (they never got a disconnect event in-game).
+function armTakeover(room, player) {
+  if (room.isBotRoom || player.isBot || player.takenOver || player.connected) return;
+  if (room.takeoverTimers.has(player.id)) return;
+  const tt = setTimeout(() => engageTakeover(room, player.id), TAKEOVER_MS);
+  room.takeoverTimers.set(player.id, tt);
+}
+
+function engageTakeover(room, playerId) {
+  room.takeoverTimers.delete(playerId);
+  const player = room.players.find((p) => p.id === playerId);
+  if (!player || player.connected || player.isBot || player.takenOver) return;
+  if (!rooms.get(room.code) || room.status !== 'playing') return;
+  player.takenOver = true;
+  // the room sees the seat change hands (name + "bot") at once
+  sendGameState(room);
+  driveTakenSeat(room, player);
+}
+
+// Start (or resume) bot play for a taken-over seat, per game type.
+function driveTakenSeat(room, player) {
+  if (room.game === 'uno') scheduleBotIfNeeded(room);
+  else if (room.game === 'chess') scheduleChessTakeover(room);
+  else if (room.game === 'truth') scheduleTruthBots(room);
+}
+
+// The human is back: hand the seat back. Any bot move already
+// scheduled re-checks seatDriven() when it fires, so nothing moves
+// for a reclaimed seat.
+function releaseTakeover(room, player) {
+  const tt = room.takeoverTimers.get(player.id);
+  if (tt) { clearTimeout(tt); room.takeoverTimers.delete(player.id); }
+  if (player.takenOver) player.takenOver = false;
+}
+
+// After a game ends in a multiplayer room, seats whose humans never
+// came back are released and a room with nobody connected is closed,
+// so ghost seats never linger into the next game.
+function cleanupGhostSeats(room) {
+  if (room.isBotRoom) return;
+  for (const p of [...room.players]) {
+    if (p.takenOver && !p.connected) {
+      rooms.removePlayer(room, p.id);
+      if (p.roomCode === room.code) { p.roomCode = null; players.delete(p.id); }
+      p.takenOver = false;
+    }
+  }
+  if (rooms.get(room.code) && !room.players.some((p) => p.connected)) {
+    rooms.destroy(room.code);
+  }
 }
 
 // ---------------- game actions ----------------
@@ -303,6 +390,7 @@ function handleStartGame(player, room, data) {
     for (const p of room.players) room.scoreBoard[p.id] = 0;
     room.status = 'playing';
   }
+  for (const p of room.players) armTakeover(room, p); // Misi 4C
   startTurnTimer(room);
   sendGameState(room);
 }
@@ -350,11 +438,13 @@ function afterChessMove(room, r, meta) {
     sendGameState(room);
     broadcast(room, gameOverPayload(room, { ...r.status, winnerColor }));
     personaResultLine(room, winnerColor);
+    cleanupGhostSeats(room);
   } else {
     startTurnTimer(room);
     sendGameState(room);
     personaMoveLine(room, meta);
     scheduleChessAiIfNeeded(room);
+    scheduleChessTakeover(room);
   }
 }
 
@@ -515,13 +605,57 @@ function runChessAiTurn(room) {
   afterChessMove(room, r, { ...meta, captured: countPieces(room.chess.board) < before });
 }
 
+// ----- Chess filler bot (Misi 4C) -----
+// In a multiplayer room, a taken-over seat is played by a neutral
+// filler (the balanced GPT recipe — no persona, no chat). The think
+// pause is capped by the time LEFT on this turn's clock, which has
+// already been running while the human was away; CHESS_AI_THINK_MS
+// (env) pins the pause for tests/simulations.
+function scheduleChessTakeover(room) {
+  if (room.game !== 'chess' || room.isBotRoom || room.status !== 'playing' || !room.chess || room.chess.over) return;
+  if (room.botTimer) return;
+  const seat = room.chess.turn === 'w' ? 0 : 1;
+  const p = room.players[seat];
+  if (!p || !p.takenOver) return;
+  const fixed = parseInt(process.env.CHESS_AI_THINK_MS || '', 10);
+  let thinkMs;
+  if (Number.isFinite(fixed) && fixed >= 0) {
+    thinkMs = fixed;
+  } else {
+    const remaining = room.deadline ? Math.max(0, room.deadline - Date.now()) : TURN_TIMEOUT_MS;
+    thinkMs = Math.min(
+      chessbot.pickThinkMs(Math.random, Math.max(remaining, 3000), chessThinkContext(room)),
+      Math.max(400, remaining - 1200),
+    );
+  }
+  room.botTimer = setTimeout(() => {
+    room.botTimer = null;
+    if (!rooms.get(room.code) || room.status !== 'playing') return;
+    runChessTakeoverTurn(room);
+  }, thinkMs);
+}
+
+function runChessTakeoverTurn(room) {
+  if (room.status !== 'playing' || !room.chess || room.chess.over) return;
+  const seat = room.chess.turn === 'w' ? 0 : 1;
+  const p = room.players[seat];
+  if (!p || !p.takenOver) return; // reclaimed by its human meanwhile
+  const mv = chessbot.chooseMove(room.chess, 'gpt');
+  if (!mv) return;
+  const meta = chessMoveMeta(room, mv.from, mv.to, true);
+  const before = countPieces(room.chess.board);
+  const r = chess.applyMove(room.chess, mv.from, mv.to, mv.promo);
+  if (!r.ok) return; // cannot happen: chooseMove returns legal moves only
+  afterChessMove(room, r, { ...meta, captured: countPieces(room.chess.board) < before });
+}
+
 // Shared tail of a successful UNO play (human or bot): scoring on a win,
 // otherwise advance the turn and broadcast the new state + engine events.
 function afterUnoPlay(room, player, r) {
   const u = room.uno;
   clearTurnTimer(room);
   let note = null;
-  if (r.penalty) note = `${player.nickname} lupa bilang UNO! Penalti +${r.penalty}`;
+  if (r.penalty) note = `${dispName(player)} lupa bilang UNO! Penalti +${r.penalty}`;
   if (r.won) {
     // hitung poin: jumlah kartu tangan pemain lain
     let gained = 0;
@@ -537,6 +671,7 @@ function afterUnoPlay(room, player, r) {
     if (note) payload.note = note;
     if (r.events && r.events.length) payload.events = r.events;
     broadcast(room, payload);
+    cleanupGhostSeats(room);
     return;
   }
   unoFixTurn(room);
@@ -596,8 +731,10 @@ function handleUnoNewRound(player, room) {
     sendError(player.socket, 'Belum ada ronde yang selesai'); return;
   }
   // keluarkan pemain yang sudah tidak aktif, rapatkan seat
+  // (Misi 4C: kursi hantu yang masih dipegang bot & manusianya tidak
+  // kembali ikut dikeluarkan — bot hanya memegang sampai game selesai)
   for (const p of [...room.players]) {
-    if (p.active === false) {
+    if (p.active === false || (p.takenOver && !p.connected)) {
       rooms.removePlayer(room, p.id);
       // Reap the identity only while it is still bound to this room; a
       // leaver who kept theirs (Misi 4B) may already be playing elsewhere.
@@ -622,7 +759,7 @@ function handleUnoNewRound(player, room) {
 // and mirrored by the MC bot when the room has only 2 humans.
 function nickOf(room, playerId) {
   const p = room.players.find((x) => x.id === playerId);
-  return p ? p.nickname : 'Pemain';
+  return p ? dispName(p) : 'Pemain';
 }
 
 function truthSetTimer(room, ms, fn) {
@@ -673,6 +810,7 @@ function startTruthGame(room) {
   if (!r.ok) return r;
   room.truth = { st: r.state, mc: room.players.filter((p) => !p.isBot).length < 3 };
   room.status = 'playing';
+  for (const p of room.players) armTakeover(room, p); // Misi 4C
   room.truthStage = 'spin';
   if (room.truth.mc) {
     mcSay(room, '🎤 Karena pemainnya pas-pasan, MC ikut menemani — aku yang putar rodanya yaa!');
@@ -729,6 +867,7 @@ function truthOnTurnClosed(room, events) {
   emitTruthEvents(room, events);
   if (finished) {
     broadcast(room, gameOverPayload(room, { awards: room.truth.st.awards }));
+    cleanupGhostSeats(room);
     return;
   }
   truthSetTimer(room, TRUTH_TIMING.spin, () => truthOpenAsk(room));
@@ -852,7 +991,7 @@ function scheduleTruthBots(room) {
   const st = room.truth.st;
   if (room.truthStage === 'answer' && st.phase === 'answering') {
     const ans = room.players.find((p) => p.id === st.current.answererId);
-    if (ans && ans.isBot) {
+    if (seatDriven(ans)) {
       const delay = Math.min(2000 + Math.random() * 2000, TRUTH_TIMING.answer * 0.4);
       truthBotLater(room, delay, () => {
         const r = truth.submitAnswer(st, ans.id, bot.pickTruthAnswer());
@@ -863,7 +1002,7 @@ function scheduleTruthBots(room) {
   }
   if (room.truthStage === 'react' && st.phase === 'reacting') {
     for (const p of room.players) {
-      if (!p.isBot || p.id === st.current.answererId) continue;
+      if (!seatDriven(p) || p.id === st.current.answererId) continue;
       if (Math.random() < 0.25) continue; // some bots stay quiet
       truthBotLater(room, 500 + Math.random() * TRUTH_TIMING.react * 0.5, () => {
         const kind = truth.REACTIONS[Math.floor(Math.random() * truth.REACTIONS.length)];
@@ -879,7 +1018,7 @@ function scheduleTruthBots(room) {
       });
     }
     const ans = room.players.find((p) => p.id === st.current.answererId);
-    if (ans && ans.isBot) {
+    if (seatDriven(ans)) {
       // do not make the human wait out a bot's full reaction window
       truthBotLater(room, TRUTH_TIMING.react * 0.75, () => {
         const e = truth.endTurn(st);
@@ -890,14 +1029,15 @@ function scheduleTruthBots(room) {
 }
 
 // ---------------- UNO bots ----------------
-// If the current turn belongs to a bot, let it move after a short delay.
+// If the current turn belongs to a bot-driven seat (a real bot, or a
+// human seat taken over under Misi 4C), let it move after a delay.
 function scheduleBotIfNeeded(room) {
   if (room.game !== 'uno' || room.status !== 'playing' || !room.uno || room.uno.st.over) return;
   if (room.botTimer) return;
   const seat = room.uno.st.turn;
   if (!room.uno.active[seat]) return;
   const p = room.players[seat];
-  if (!p || !p.isBot) return;
+  if (!seatDriven(p)) return;
   room.botTimer = setTimeout(() => {
     room.botTimer = null;
     if (!rooms.get(room.code)) return; // room was torn down meanwhile
@@ -909,7 +1049,7 @@ function runBotTurn(room) {
   if (room.status !== 'playing' || !room.uno || room.uno.st.over) return;
   const seat = room.uno.st.turn;
   const p = room.players[seat];
-  if (!p || !p.isBot) return;
+  if (!seatDriven(p)) return; // reclaimed by its human meanwhile
   const acts = bot.takeTurn(room.uno.st, seat);
   if (!acts.length) return;
   const events = acts.flatMap((a) => (a.r && a.r.events) || []);
@@ -983,6 +1123,9 @@ async function route(ws, type, data) {
     const ft = room.forfeitTimers.get(p.id);
     if (ft) { clearTimeout(ft); room.forfeitTimers.delete(p.id); }
     p.socket = ws; p.connected = true; ws._playerId = p.id;
+    // Misi 4C: coming back reclaims the seat from the bot at once —
+    // the name loses its "bot" suffix and pending bot moves stand down.
+    releaseTakeover(room, p);
     send(ws, { type: 'welcome', playerId: p.id, nickname: p.nickname, rejoined: true });
     // Refresh the room's view of the rejoined player, phase-correctly:
     // sendGameState on a lobby room crashes (no game state exists yet).
@@ -1138,6 +1281,7 @@ async function route(ws, type, data) {
       room.status = 'over';
       clearTurnTimer(room);
       broadcast(room, gameOverPayload(room, { ...room.chess.over, winnerColor }));
+      cleanupGhostSeats(room);
       return;
     }
     case 'uno_play': {
