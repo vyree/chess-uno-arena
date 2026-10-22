@@ -642,3 +642,40 @@ body.low-gfx * {
   border: 2px solid #dfe6f2; border-radius: var(--radius-md); background: #fff;
 }
 #truth-round { white-space: nowrap; }
+
+/* ============ Neon contrast lines (Sensei, 2026-10-22) ============ */
+/* A neon-green line system layered over the pastel purple: borders,
+   rules and markers get the neon; surfaces stay calm so it reads as
+   contrast, not noise. Lines survive Graphic Low (only glows fade). */
+:root {
+  --color-neon: #2bff88;
+  --color-neon-deep: #00c95f;
+  --neon-glow: 0 0 10px rgba(43, 255, 136, .55), 0 0 26px rgba(43, 255, 136, .25);
+}
+#app-header { border-bottom: 3px solid var(--color-neon); }
+.logo-io { color: var(--color-neon); }
+#tabbar { border-top: 3px solid var(--color-neon); }
+#tabbar .tab.active { box-shadow: inset 0 3px 0 var(--color-neon); }
+#tabbar .tab.active .tab-label { color: var(--color-neon); }
+.game-card { border: 2px solid var(--color-neon-deep); }
+.card-truth {
+  border-color: var(--color-neon);
+  box-shadow: 0 0 0 1px var(--color-neon), 0 0 18px rgba(43, 255, 136, .35),
+    0 12px 26px rgba(55, 32, 110, .35);
+}
+.card { border-top: 3px solid var(--color-neon-deep); }
+.wheel { border-color: var(--color-neon); box-shadow: var(--neon-glow), 0 6px 16px rgba(61, 43, 99, .3); }
+.wheel-needle { border-top-color: var(--color-neon); }
+.truth-disc { border-color: var(--color-neon); box-shadow: var(--neon-glow), 0 8px 22px rgba(61, 43, 99, .3); }
+.truth-disc .wheel-needle { border-top-color: var(--color-neon); }
+#truth-ring .seat-chip.turn {
+  border-color: var(--color-neon-deep);
+  box-shadow: 0 0 0 2px var(--color-neon), 0 0 14px rgba(43, 255, 136, .5);
+}
+.truth-banner { border: 2px solid var(--color-neon-deep); }
+.truth-popup { border: 2px solid var(--color-neon); }
+.btn.primary { box-shadow: inset 0 -3px 0 rgba(0, 201, 95, .9); }
+.xp-bar { background: linear-gradient(90deg, var(--color-neon-deep), var(--color-neon)); }
+.avatar-big { border-color: var(--color-neon-deep); }
+.react-btn strong { color: var(--color-neon-deep); }
+.big-code { color: var(--color-neon-deep); }
