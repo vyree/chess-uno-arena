@@ -4,7 +4,7 @@
 const S = {
   ws: null, playerId: null, nickname: '', game: 'chess',
   roomCode: null, players: [], hostId: null,
-  chess: null, uno: null, unoMeta: {},
+  chess: null, uno: null, unoMeta: {}, truth: null,
   selected: null, legalMoves: [],
   saidUnoArmed: false, deadline: null, helloSent: false,
   authMode: false, // login PARKED (Sensei, 2026-10-21): nickname-only, local progress
@@ -27,10 +27,24 @@ function toast(msg, ms) {
   clearTimeout(t._t);
   t._t = setTimeout(() => t.classList.add('hidden'), ms || 2600);
 }
+// The MABAR.io shell (header + tab bar) frames the three tab screens;
+// game-flow screens (menu, lobby, arenas) run chrome-less and full-bleed.
+const TAB_SCREENS = { 'screen-landing': 'home', 'screen-profile': 'profile', 'screen-settings': 'settings' };
+const TAB_TITLES = { home: 'Beranda', profile: 'Profile', settings: 'Settings' };
+
 function showScreen(id) {
   for (const s of document.querySelectorAll('.screen')) s.classList.add('hidden');
   $(id).classList.remove('hidden');
   window.scrollTo(0, 0);
+  const tab = TAB_SCREENS[id];
+  document.body.classList.toggle('on-tabs', !!tab);
+  if (tab) {
+    document.querySelectorAll('#tabbar .tab').forEach((b) =>
+      b.classList.toggle('active', b.dataset.tab === tab));
+    $('hdr-title').textContent = TAB_TITLES[tab];
+    if (id === 'screen-profile') renderProfile();
+    if (id === 'screen-settings') syncSettings();
+  }
 }
 function showModal(title, bodyHTML, actions) {
   $('modal-title').textContent = title;
@@ -127,6 +141,7 @@ function route(m) {
       S.playerId = m.playerId; S.nickname = m.nickname; saveSession(); saveLocalNick();
       if (m.rejoined) toast('Kembali tersambung! 🎉');
       break;
+    case 'pong': onPong(); break;
     case 'room_list': renderRoomList(m.rooms); break;
     case 'lobby_update': onLobby(m); break;
     case 'game_state': onGameState(m); break;
@@ -161,15 +176,42 @@ function enterGame(game) {
   if (!currentNick()) { openNickModal(); return; }
   openGameMenu();
 }
+const GAME_MENU = {
+  chess: ['♟️ Catur', '2 pemain · klasik, timer per giliran'],
+  uno: ['🃏 UNO', '2–8 pemain · tumpuk +2/+4, jangan lupa teriak UNO!'],
+  truth: ['🎡 Truth or Truth', '2–8 pemain · roda acak, jawab jujur, kumpulkan reaksi!'],
+};
+
 function openGameMenu() {
-  const isUno = S.game === 'uno';
-  $('gm-title').textContent = isUno ? '🃏 UNO' : '♟️ Catur';
-  $('gm-sub').textContent = isUno
-    ? '2–8 pemain · tumpuk +2/+4, jangan lupa teriak UNO!'
-    : '2 pemain · klasik, timer per giliran';
-  $('bot-card').classList.toggle('hidden', !isUno);
+  const [title, sub] = GAME_MENU[S.game] || GAME_MENU.chess;
+  $('gm-title').textContent = title;
+  $('gm-sub').textContent = sub;
+  $('bot-card').classList.toggle('hidden', S.game !== 'uno');
+  // Sensei's playtest door (2026-10-22): a quiet "( test bot )" entry in
+  // the Truth menu footer — solo Truth against simulated bot answers.
+  $('truth-testbot-row').classList.toggle('hidden', S.game !== 'truth');
   showScreen('screen-gamemenu');
   refreshRooms();
+}
+
+function openTestBot() {
+  showModal('🤖 Test Bot — Truth or Truth',
+    '<p class="muted">Main Truth sendirian: kursi lain diisi bot yang menjawab dengan simulasi, supaya Sensei bisa uji coba alur gamenya.</p>' +
+    '<label for="testbot-size">Total pemain (termasuk kamu)</label>' +
+    '<select id="testbot-size"><option value="2">2 pemain</option>' +
+    '<option value="4" selected>4 pemain</option><option value="6">6 pemain</option>' +
+    '<option value="8">8 pemain</option></select>',
+    [
+      {
+        label: '▶️ Mulai', cls: 'primary',
+        onClick: () => {
+          if (ensureHello()) {
+            send('create_truth_bot_room', { size: parseInt($('testbot-size').value, 10) });
+          }
+        },
+      },
+      { label: 'Batal', cls: 'ghost' },
+    ]);
 }
 function openNickModal() {
   $('nick-input').value = currentNick();
@@ -187,42 +229,30 @@ function saveNickFromModal() {
   closeNickModal();
   openGameMenu();
 }
-function openSettings() {
-  $('settings-nick').value = currentNick();
-  const msg = $('settings-nick-msg');
-  msg.textContent = ''; msg.className = 'field-error';
-  $('settings-sound').checked = soundOn;
-  $('settings-modal').classList.remove('hidden');
-}
-function saveNickFromSettings() {
-  const v = $('settings-nick').value.trim();
-  const msg = $('settings-nick-msg');
-  if (!v) { msg.className = 'field-error'; msg.textContent = 'Nickname tidak boleh kosong'; return; }
-  if (v.length > 16) { msg.className = 'field-error'; msg.textContent = 'Maksimal 16 karakter'; return; }
-  S.nickname = v;
-  saveLocalNick();
-  msg.className = 'field-ok'; msg.textContent = 'Tersimpan ✓';
-}
-// Single sound switch: Settings toggle and the in-game button both call this.
+// Single sound switch: the Settings tab toggle and the in-game button
+// both call this; the nickname now lives in the Profile tab.
 function setSound(on) {
   soundOn = on;
   try { localStorage.setItem('cua-sound', on ? 'on' : 'off'); } catch { /* private mode */ }
   if (!on && 'speechSynthesis' in window) speechSynthesis.cancel();
   const b = $('btn-sound'); if (b) b.textContent = on ? '🔊' : '🔇';
-  const t = $('settings-sound'); if (t) t.checked = on;
+  const t = $('set-sound'); if (t) t.checked = on;
 }
+const GAME_LABEL = { chess: '♟️ Catur', uno: '🃏 UNO', truth: '🎡 Truth' };
+const GAME_NAME = { chess: 'catur', uno: 'UNO', truth: 'Truth or Truth' };
+
 function renderRoomList(rooms) {
   const box = $('room-list');
   box.innerHTML = '';
   const mine = rooms.filter((r) => r.game === S.game);
   if (!mine.length) {
-    box.innerHTML = `<p class="muted">Belum ada room ${S.game === 'uno' ? 'UNO' : 'catur'} yang menunggu. Buat satu yuk!</p>`;
+    box.innerHTML = `<p class="muted">Belum ada room ${GAME_NAME[S.game] || ''} yang menunggu. Buat satu yuk!</p>`;
     return;
   }
   for (const r of mine) {
     const div = document.createElement('div');
     div.className = 'room-item';
-    const label = r.game === 'chess' ? '♟️ Catur' : '🃏 UNO';
+    const label = GAME_LABEL[r.game] || r.game;
     div.innerHTML = `<span><span class="code">${r.code}</span> · ${label} · ${r.players.length}/${r.maxPlayers}</span>`;
     const b = document.createElement('button');
     b.className = 'btn secondary small'; b.textContent = 'Gabung';
@@ -267,6 +297,10 @@ function onGameState(m) {
     S.chess = m.state; S.game = 'chess';
     showScreen('screen-chess');
     renderChess(m);
+  } else if (m.game === 'truth') {
+    S.truth = m.state; S.game = 'truth';
+    showScreen('screen-truth');
+    renderTruth(m);
   } else {
     S.uno = m.state; S.unoMeta = m; S.game = 'uno';
     showScreen('screen-uno');
@@ -572,7 +606,7 @@ function seatAnchor(seat) {
 
 // Animate a ghost card flying between two elements (Web Animations API).
 function flyCard(fromEl, toEl, card, back) {
-  if (reducedMotion || !fromEl || !toEl) return;
+  if (reducedMotion || document.body.classList.contains('low-gfx') || !fromEl || !toEl) return;
   const a = fromEl.getBoundingClientRect();
   const b = toEl.getBoundingClientRect();
   const ghost = document.createElement('div');
@@ -739,6 +773,145 @@ function prefillLocalNick() {
   } catch { /* ignore */ }
 }
 
+// ---------- settings tab: ping + graphics ----------
+let pingWaiter = null;
+function onPong() {
+  if (pingWaiter) { const f = pingWaiter; pingWaiter = null; f(performance.now()); }
+}
+
+// Three samples over the live game socket; the average is what a player
+// would actually feel in a match.
+async function runPing() {
+  const out = $('ping-result');
+  if (!S.ws || S.ws.readyState !== 1) {
+    out.textContent = 'Belum terhubung ke server — tunggu sebentar, lalu coba lagi.';
+    return;
+  }
+  ensureHelloQuiet();
+  out.textContent = 'Mengukur…';
+  const samples = [];
+  for (let i = 0; i < 3; i++) {
+    const t0 = performance.now();
+    const done = new Promise((res) => {
+      pingWaiter = res;
+      setTimeout(() => { if (pingWaiter) { pingWaiter = null; res(null); } }, 3000);
+    });
+    send('ping');
+    const t1 = await done;
+    if (t1 === null) { out.textContent = 'Ping gagal — server tidak membalas. Coba lagi ya.'; return; }
+    samples.push(Math.round(t1 - t0));
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  const avg = Math.round(samples.reduce((a, b) => a + b, 0) / samples.length);
+  const quality = avg < 80 ? 'Sangat lancar 🚀' : avg < 150 ? 'Lancar ✅'
+    : avg < 300 ? 'Cukup 👍' : 'Berat 🐌 — cek koneksimu';
+  out.textContent = `🏓 ${avg} ms (sampel: ${samples.join(' · ')} ms) — ${quality}`;
+}
+
+const GFX_KEY = 'cua-gfx';
+function gfxMode() {
+  try { return localStorage.getItem(GFX_KEY) === 'low' ? 'low' : 'high'; } catch { return 'high'; }
+}
+// "Graphic" for this web arena = visual effects & animation quality.
+// Low freezes CSS animation/shadows and card flights — kind to old phones.
+function applyGfx() {
+  const low = gfxMode() === 'low';
+  document.body.classList.toggle('low-gfx', low);
+  document.querySelectorAll('#set-gfx .seg-btn').forEach((b) =>
+    b.classList.toggle('active', b.dataset.gfx === (low ? 'low' : 'high')));
+}
+function setGfx(mode) {
+  try { localStorage.setItem(GFX_KEY, mode); } catch { /* private mode */ }
+  applyGfx();
+}
+function syncSettings() {
+  const t = $('set-sound'); if (t) t.checked = soundOn;
+  applyGfx();
+  try {
+    $('server-info').textContent = 'Server: ' + new URL(serverEndpoint('wss')).host;
+  } catch { /* endpoint label is decorative */ }
+}
+
+// ---------- profile tab ----------
+// Preset avatars (Sensei's call, 2026-10-22): built-in picks keep the
+// profile light — no uploads, nothing extra stored on any server.
+const AVATARS = [
+  ['🦊', 'linear-gradient(135deg,#ffd29d,#ff8f6b)'],
+  ['🐱', 'linear-gradient(135deg,#fbc2eb,#a6c1ee)'],
+  ['🐼', 'linear-gradient(135deg,#e0eafc,#cfdef3)'],
+  ['🦁', 'linear-gradient(135deg,#f6d365,#fda085)'],
+  ['🐸', 'linear-gradient(135deg,#c1dfc4,#9fd3a8)'],
+  ['🐯', 'linear-gradient(135deg,#fddb92,#f6a35c)'],
+  ['🐰', 'linear-gradient(135deg,#fbc2eb,#fdcbf1)'],
+  ['🦉', 'linear-gradient(135deg,#a18cd1,#fbc2eb)'],
+];
+const AVATAR_KEY = 'cua-avatar';
+const BIO_KEY = 'cua-bio';
+
+function avatarIdx() {
+  let n = 0;
+  try { n = parseInt(localStorage.getItem(AVATAR_KEY) || '0', 10); } catch { /* default */ }
+  return AVATARS[n] ? n : 0;
+}
+// Level grows from XP: points carry most weight, wins and games add up.
+function levelOf(s) {
+  const xp = s.points + s.won * 20 + s.played * 5;
+  const level = 1 + Math.floor(Math.sqrt(xp / 60));
+  const cur = 60 * (level - 1) * (level - 1);
+  const next = 60 * level * level;
+  return { xp, level, pct: Math.min(100, Math.round(((xp - cur) / (next - cur)) * 100)) };
+}
+function renderProfile() {
+  const s = loadLocalStats();
+  const [emoji, grad] = AVATARS[avatarIdx()];
+  const av = $('profile-avatar');
+  av.textContent = emoji; av.style.background = grad;
+  $('profile-name').textContent = currentNick() || 'Tamu';
+  const lv = levelOf(s);
+  $('profile-level').textContent = lv.level;
+  $('profile-score').textContent = s.points;
+  $('xp-bar').style.width = lv.pct + '%';
+  $('profile-substats').textContent =
+    `${s.played} main · ${s.won} menang · ${lv.xp} XP menuju level ${lv.level + 1}`;
+  $('profile-nick-input').value = currentNick();
+  const bio = $('profile-bio');
+  if (document.activeElement !== bio) {
+    try { bio.value = localStorage.getItem(BIO_KEY) || ''; } catch { bio.value = ''; }
+  }
+}
+function renderAvatarPicker() {
+  const box = $('avatar-picker');
+  box.innerHTML = '';
+  AVATARS.forEach(([emoji, grad], i) => {
+    const b = document.createElement('button');
+    b.className = 'avatar-pick' + (i === avatarIdx() ? ' active' : '');
+    b.textContent = emoji; b.style.background = grad;
+    b.onclick = () => {
+      try { localStorage.setItem(AVATAR_KEY, String(i)); } catch { /* private mode */ }
+      renderProfile(); renderAvatarPicker();
+    };
+    box.appendChild(b);
+  });
+}
+function saveNickFromProfile() {
+  const v = $('profile-nick-input').value.trim();
+  const msg = $('profile-nick-msg');
+  if (!v) { msg.className = 'field-error'; msg.textContent = 'Nickname tidak boleh kosong'; return; }
+  if (v.length > 16) { msg.className = 'field-error'; msg.textContent = 'Maksimal 16 karakter'; return; }
+  S.nickname = v;
+  saveLocalNick();
+  if (S.helloSent) send('hello', { nickname: v }); // server renames us for future rooms
+  msg.className = 'field-ok'; msg.textContent = 'Tersimpan ✓';
+  renderProfile();
+}
+
+// ---------- truth arena (full screen lands in the next step) ----------
+function renderTruth(m) {
+  S.truthState = m.state;
+  const el = $('truth-status');
+  if (el) el.textContent = '🎡 Truth or Truth — layar arena sedang disiapkan.';
+}
+
 // ---------- wire up ----------
 document.addEventListener('DOMContentLoaded', () => {
   for (const b of document.querySelectorAll('.game-card')) {
@@ -748,10 +921,35 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn-nick-save').onclick = saveNickFromModal;
   $('btn-nick-cancel').onclick = closeNickModal;
   $('nick-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') saveNickFromModal(); });
-  $('btn-settings').onclick = openSettings;
-  $('btn-settings-close').onclick = () => $('settings-modal').classList.add('hidden');
-  $('btn-settings-save-nick').onclick = saveNickFromSettings;
-  $('settings-sound').onchange = (e) => setSound(e.target.checked);
+  // MABAR.io tab bar
+  document.querySelectorAll('#tabbar .tab').forEach((b) => {
+    b.onclick = () => showScreen(
+      { home: 'screen-landing', profile: 'screen-profile', settings: 'screen-settings' }[b.dataset.tab]);
+  });
+  $('set-sound').onchange = (e) => setSound(e.target.checked);
+  document.querySelectorAll('#set-gfx .seg-btn').forEach((b) => {
+    b.onclick = () => setGfx(b.dataset.gfx);
+  });
+  $('btn-ping').onclick = runPing;
+  $('btn-testbot').onclick = openTestBot;
+  // profile tab
+  $('profile-avatar').onclick = () => {
+    $('avatar-picker').classList.toggle('hidden');
+    renderAvatarPicker();
+  };
+  $('btn-profile-save-nick').onclick = saveNickFromProfile;
+  $('btn-bio-edit').onclick = () => {
+    $('profile-bio').disabled = false;
+    $('bio-actions').classList.remove('hidden');
+    $('profile-bio').focus();
+  };
+  $('btn-bio-save').onclick = () => {
+    try { localStorage.setItem(BIO_KEY, $('profile-bio').value.trim()); } catch { /* private mode */ }
+    $('profile-bio').disabled = true;
+    $('bio-actions').classList.add('hidden');
+    toast('Bio tersimpan ✓');
+  };
+  $('btn-leave-truth').onclick = () => { if (confirm('Keluar dari room?')) send('leave_room'); };
   $('btn-create').onclick = () => {
     if (!ensureHello()) return;
     send('create_room', { game: S.game });
@@ -801,5 +999,7 @@ document.addEventListener('DOMContentLoaded', () => {
   wireChat('chat-input-uno', 'btn-chat-uno', 'chat-box-uno');
   prefillLocalNick();
   renderLocalStats();
+  applyGfx();
+  showScreen('screen-landing');
   connect();
 });

@@ -480,3 +480,25 @@ server cadangan di Fly.io; Railway tetap utama, tidak ditinggalkan.
   diumumkan resmi) — paparan kita nihil (hanya FIREBASE_PROJECT_ID publik).
   Link pemain tidak berubah: https://fir-pro2-d77c3.web.app (default Fly);
   ?server=fly tetap diterima (sama dengan default).
+
+## MABAR.io — Cangkang 3 Tab (Sensei, 22 Okt 2026)
+
+Aplikasi berganti nama jadi **MABAR.io** (logo header "MABAR.io").
+Menu utama menjadi cangkang 3 tab dengan header + tab bar yang hanya
+tampil di layar tab:
+- **Home**: kartu Catur & UNO berdampingan + kartu lebar Truth or
+  Truth (Game 3 = Truth, dikonfirmasi Sensei) dengan roda CSS.
+- **Profile (ME)**: avatar BAWAAN (8 pilihan emoji gradien, tanpa
+  upload — keputusan Sensei: ringan), edit nickname, Level & Score
+  dari statistik lokal (XP = poin + 20/menang + 5/main; Level =
+  1 + floor(sqrt(XP/60))), Tentang Ku (bio lokal 120 char, edit pensil).
+- **Settings**: Sound (cua-sound), **Graphic High/Low** (cua-gfx;
+  Low membekukan animasi/bayangan/blur + mematikan animasi kartu
+  terbang — "grafis" di arena web = kualitas efek visual), **Test
+  Ping** (3 sampel ping/pong lewat socket game, tampil ms + label
+  kualitas), info server.
+- Menu "( test bot )" Truth berada di footer MENU GAME Truth
+  (catatan: spek awal menyebut lobby; ditafsirkan sebagai area depan
+  game Truth karena room bot langsung mulai tanpa lobby).
+- Urutan bangun disetujui Sensei: cangkang+Home -> Settings ->
+  Profile -> layar Truth.

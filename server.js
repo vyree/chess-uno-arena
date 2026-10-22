@@ -842,6 +842,10 @@ async function route(ws, type, data) {
       if (!started.ok) { teardownBotRoom(room); sendError(ws, started.error); }
       return;
     }
+    case 'ping': {
+      send(ws, { type: 'pong', t: Date.now() });
+      return;
+    }
     case 'list_rooms': {
       send(ws, { type: 'room_list', rooms: rooms.list() });
       return;

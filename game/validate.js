@@ -110,6 +110,9 @@ const VALIDATORS = {
     return { ok: true, data: { game: d.game } };
   },
   list_rooms() { return { ok: true, data: {} }; },
+  // Settings "Test Ping": the server only answers pong; the client
+  // measures the round trip of its own game connection.
+  ping() { return { ok: true, data: {} }; },
   join_room(d) {
     const c = validCode(d.code);
     if (!c.ok) return c;

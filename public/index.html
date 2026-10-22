@@ -3,21 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Chess + UNO Arena ♟️🃏</title>
+<title>MABAR.io — Main Bareng ♟️🃏🎡</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="app">
 
-  <!-- ============ LANDING / MENU UTAMA ============ -->
+  <!-- ============ SHELL HEADER (MABAR.io) ============ -->
+  <header id="app-header">
+    <span id="hdr-title">Beranda</span>
+    <span class="logo">MABAR<span class="logo-io">.io</span></span>
+  </header>
+
+  <!-- ============ HOME ============ -->
   <section id="screen-landing" class="screen">
-    <header class="app-header">
-      <div class="brand">
-        <span class="brand-mark">♟️</span>
-        <span class="brand-name">Chess + UNO Arena</span>
-      </div>
-      <button id="btn-settings" class="icon-btn" title="Pengaturan" aria-label="Pengaturan">⚙️</button>
-    </header>
     <p class="tagline">Main bareng teman — tanpa daftar, tanpa ribet!</p>
 
     <div class="game-grid">
@@ -29,10 +28,74 @@
         <span class="gc-head"><span class="gc-name">UNO</span><span class="gc-meta"><i class="dot"></i>2–8 pemain</span></span>
         <span class="gc-art art-uno" aria-hidden="true"><span class="mini-card mc-red"><span class="oval"><span class="val">7</span></span></span><span class="mini-card mc-yellow"><span class="oval"><span class="val">3</span></span></span><span class="mini-card mc-blue"><span class="oval"><span class="val">5</span></span></span></span>
       </button>
+      <button id="pick-truth" class="game-card card-truth" data-game="truth">
+        <span class="gc-head"><span class="gc-name">Truth or Truth</span><span class="gc-meta"><i class="dot"></i>2–8 pemain</span></span>
+        <span class="gc-art art-wheel" aria-hidden="true"><span class="wheel"><span class="wheel-needle"></span></span></span>
+        <span class="gc-badge">BARU ✨</span>
+      </button>
     </div>
 
     <div id="local-stats" class="stats-pill">🏆 Progresmu tersimpan lokal di perangkat ini</div>
     <p class="landing-note">Pilih game untuk mulai. Nickname diminta sekali saja, lalu tersimpan di perangkat ini.</p>
+  </section>
+
+  <!-- ============ PROFILE ============ -->
+  <section id="screen-profile" class="screen hidden">
+    <div class="card">
+      <div class="profile-top">
+        <button id="profile-avatar" class="avatar-big" title="Ganti avatar" aria-label="Ganti avatar">🦊</button>
+        <div class="profile-facts">
+          <div class="pf-name" id="profile-name">Tamu</div>
+          <div class="pf-line">⭐ Level <strong id="profile-level">1</strong></div>
+          <div class="pf-line">🏆 Score <strong id="profile-score">0</strong></div>
+        </div>
+      </div>
+      <div class="xp-wrap"><div id="xp-bar" class="xp-bar"></div></div>
+      <p id="profile-substats" class="muted"></p>
+      <div id="avatar-picker" class="avatar-picker hidden"></div>
+      <label for="profile-nick-input">Nickname</label>
+      <div class="edit-nick-row">
+        <input id="profile-nick-input" maxlength="16" placeholder="Nickname kamu" autocomplete="off">
+        <button id="btn-profile-save-nick" class="btn primary small">Simpan</button>
+      </div>
+      <div id="profile-nick-msg" class="field-error"></div>
+      <div class="bio-head">
+        <label for="profile-bio">Tentang Ku</label>
+        <button id="btn-bio-edit" class="icon-btn" title="Ubah bio" aria-label="Ubah bio">✏️</button>
+      </div>
+      <textarea id="profile-bio" maxlength="120" rows="3" placeholder="Ceritakan sedikit tentang kamu…" disabled></textarea>
+      <div class="row modal-row hidden" id="bio-actions">
+        <button id="btn-bio-save" class="btn primary small">Simpan Bio</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SETTINGS ============ -->
+  <section id="screen-settings" class="screen hidden">
+    <div class="card">
+      <h3 class="card-title">⚙️ Setting</h3>
+      <div class="setting-row">
+        <span>🔊 Sound</span>
+        <label class="switch" title="Suara nyala/mati">
+          <input type="checkbox" id="set-sound">
+          <span class="track"></span>
+        </label>
+      </div>
+      <div class="setting-row">
+        <span>🎨 Graphic</span>
+        <div class="seg" id="set-gfx">
+          <button data-gfx="high" class="seg-btn">High</button>
+          <button data-gfx="low" class="seg-btn">Low</button>
+        </div>
+      </div>
+      <p class="muted">Graphic Low mematikan animasi &amp; efek visual — lebih ringan untuk HP lama.</p>
+      <div class="setting-row">
+        <span>🏓 Koneksi</span>
+        <button id="btn-ping" class="btn secondary small">Test Ping</button>
+      </div>
+      <p id="ping-result" class="muted">Ukur kecepatan koneksimu ke server game.</p>
+      <p class="muted" id="server-info"></p>
+    </div>
   </section>
 
   <!-- ============ MENU GAME ============ -->
@@ -73,6 +136,7 @@
       <div id="room-list" class="room-list"><p class="muted">Memuat…</p></div>
       <button id="btn-refresh" class="btn ghost small">🔄 Refresh</button>
     </div>
+    <p id="truth-testbot-row" class="testbot-row hidden">( <button id="btn-testbot" class="linklike">test bot</button> )</p>
   </section>
 
   <!-- ============ LOBBY ============ -->
@@ -169,7 +233,23 @@
     </div>
   </section>
 
+  <!-- ============ TRUTH (arena lengkap menyusul) ============ -->
+  <section id="screen-truth" class="screen hidden">
+    <div class="game-bar">
+      <div><strong>🎡 Truth or Truth</strong></div>
+      <button id="btn-leave-truth" class="btn ghost small">Keluar Room</button>
+    </div>
+    <div id="truth-status" class="status-line"></div>
+  </section>
+
 </div>
+
+<!-- ============ TAB BAR ============ -->
+<nav id="tabbar">
+  <button class="tab active" data-tab="home"><span class="tab-ic">🏠</span><span class="tab-label">Home</span></button>
+  <button class="tab" data-tab="profile"><span class="tab-ic">👤</span><span class="tab-label">ME</span></button>
+  <button class="tab" data-tab="settings"><span class="tab-ic">⚙️</span><span class="tab-label">Settings</span></button>
+</nav>
 
 <!-- ============ MODAL ============ -->
 <div id="modal" class="modal hidden">
@@ -184,35 +264,12 @@
 <div id="nick-modal" class="modal hidden">
   <div class="modal-box">
     <h2>Nickname kamu</h2>
-    <p class="muted">Nama ini yang tampil di room. Tersimpan di perangkat ini, bisa diubah lagi lewat Pengaturan ⚙️.</p>
+    <p class="muted">Nama ini yang tampil di room. Tersimpan di perangkat ini, bisa diubah lagi di tab Profile 👤.</p>
     <input id="nick-input" maxlength="16" placeholder="cth: Noir" autocomplete="off">
     <div id="nick-modal-error" class="field-error"></div>
     <div class="row modal-row">
       <button id="btn-nick-cancel" class="btn ghost">Batal</button>
       <button id="btn-nick-save" class="btn primary">Simpan &amp; Main</button>
-    </div>
-  </div>
-</div>
-
-<!-- ============ SETTINGS ============ -->
-<div id="settings-modal" class="modal hidden">
-  <div class="modal-box settings-box">
-    <h2>⚙️ Pengaturan</h2>
-    <label for="settings-nick">Nickname</label>
-    <div class="edit-nick-row">
-      <input id="settings-nick" maxlength="16" placeholder="Nickname kamu" autocomplete="off">
-      <button id="btn-settings-save-nick" class="btn primary small">Simpan</button>
-    </div>
-    <div id="settings-nick-msg" class="field-error"></div>
-    <div class="setting-row">
-      <span>🔊 Suara</span>
-      <label class="switch" title="Suara nyala/mati">
-        <input type="checkbox" id="settings-sound">
-        <span class="track"></span>
-      </label>
-    </div>
-    <div class="row modal-row">
-      <button id="btn-settings-close" class="btn secondary">Tutup</button>
     </div>
   </div>
 </div>
