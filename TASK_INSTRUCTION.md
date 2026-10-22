@@ -259,8 +259,8 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
    waktu habis = dianggap pass.
 3. **Reaksi & poin**: pemain lain memberi reaksi pada jawaban
    (🔥 greget, 😂 ngakak, 🥺 deep, 👏 apresiasi) → reaksi = poin bagi
-   penjawab. Tombol **"Kurang greget!"**: bila mayoritas menekannya,
-   penjawab menerima satu pertanyaan susulan yang lebih menantang.
+   penjawab. Tombol **"Kurang greget!"** = pengurang poin (definisi final
+   di bagian Sistem Reaksi & Penghargaan di bawah).
 4. **Jatah PASS**: tiap pemain 1x per game melewati pertanyaan tanpa
    hukuman (jaga kenyamanan; soal dikurasi sopan, tidak vulgar).
 5. **Akhir game**: 2 putaran penuh (atau setting host) → podium gelar
@@ -334,6 +334,10 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
 - **Poin untuk penjawab**: 😆 Lucu = **+10**, 😭 Nangis = **+15**,
   🥰 Lovely = **+10**, 😤 Marah = **+15**. Poin diakumulasi per pemain
   sepanjang game.
+- **"Kurang Greget!" (pengurang poin)**: tiap pemain LAIN boleh menekan
+  1x per pertanyaan/jawaban → **−5 poin** untuk penjawab. Terpisah dari
+  jatah 2 reaksi. MENGGANTIKAN versi rancangan awal (mayoritas → soal
+  susulan) — tidak ada lagi pertanyaan susulan dari tombol ini.
 - **Penghargaan akhir game** (ditampilkan di layar penutup):
   - Pemain dengan total poin terbanyak (juara umum).
   - Per JAWABAN/cerita: **Paling Lucu** (😆 terbanyak), **Paling Sedih**
