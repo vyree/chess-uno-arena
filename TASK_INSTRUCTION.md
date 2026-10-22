@@ -342,3 +342,10 @@ server cadangan di Fly.io; Railway tetap utama, tidak ditinggalkan.
   200 berisi UI baru. Uji WS end-to-end dari sandbox terhalang proksi
   (pola sama seperti Railway dulu) — bukti akhir di perangkat Sensei via
   https://fir-pro2-d77c3.web.app/?server=fly
+- PERUBAHAN UTAMA 22 Okt 2026 (perintah Sensei): Fly.io menjadi server
+  UTAMA. Default CUA_WS_ENDPOINT sekarang wss://chess-uno-arena.fly.dev;
+  Railway turun jadi standby, dipilih eksplisit lewat ?server=railway.
+  Konteks: Railway major outage + insiden keamanan env vars (21 Okt,
+  diumumkan resmi) — paparan kita nihil (hanya FIREBASE_PROJECT_ID publik).
+  Link pemain tidak berubah: https://fir-pro2-d77c3.web.app (default Fly);
+  ?server=fly tetap diterima (sama dengan default).

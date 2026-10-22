@@ -4,4 +4,4 @@
  * progress is stored locally on their own device. Only the game-server
  * WebSocket endpoint lives here.
  */
-window.CUA_WS_ENDPOINT = 'wss://chess-uno-arena-production.up.railway.app'; // game server on Railway
+window.CUA_WS_ENDPOINT = 'wss://chess-uno-arena.fly.dev'; // game server on Fly.io (PRIMARY since 2026-10-22)

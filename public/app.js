@@ -49,11 +49,13 @@ function showModal(title, bodyHTML, actions) {
 function hideModal() { $('modal').classList.add('hidden'); }
 
 // ---------- websocket ----------
-// Backup-server switch: ?server=fly points the game at the Fly.io mirror
-// (Sensei, 2026-10-21, while Railway had a builds outage). Anything else
-// keeps the default endpoint from firebase-config.js (Railway).
+// Server switch: Fly.io is the PRIMARY server since 2026-10-22 (Sensei's
+// call, after Railway's outage + env-var security incident). The default
+// endpoint from firebase-config.js already points at Fly; ?server=railway
+// explicitly picks the Railway standby instead.
 function serverEndpoint(proto) {
   const pick = new URLSearchParams(location.search).get('server');
+  if (pick === 'railway') return 'wss://chess-uno-arena-production.up.railway.app';
   if (pick === 'fly') return 'wss://chess-uno-arena.fly.dev';
   return window.CUA_WS_ENDPOINT || (proto + '://' + location.host);
 }
