@@ -44,7 +44,15 @@ const TRUTH_TIMING = {
   answer: parseInt(process.env.TRUTH_ANSWER_MS, 10) || truth.ANSWER_MS,
   react: parseInt(process.env.TRUTH_REACT_MS, 10) || truth.REACT_MS,
 };
-const BOT_DELAY_MS = 900; // bot "thinking" pause so humans can follow the game
+// UNO bot "thinking" pause (Misi 8, Sensei): a human-like random
+// 5-10 s so bot turns feel natural instead of instant; the client
+// labels the wait "is thinking". UNO_BOT_THINK_MS (env) pins the
+// pause for tests/simulations.
+function unoBotThinkMs() {
+  const fixed = parseInt(process.env.UNO_BOT_THINK_MS || '', 10);
+  if (Number.isFinite(fixed) && fixed >= 0) return fixed;
+  return 5000 + Math.round(Math.random() * 5000);
+}
 const RECONNECT_GRACE_MS = parseInt(process.env.RECONNECT_GRACE_MS, 10) || 60 * 1000;
 const MSG_PER_SEC = 20;
 
@@ -305,13 +313,29 @@ function countPieces(board) {
   return n;
 }
 
+// What a chess move did, captured BEFORE it is applied (Misi 8: the
+// persona skill chat triggers need the moved/captured piece types).
+function chessMoveMeta(room, from, to, moverIsBot) {
+  const moved = room.chess.board[from];
+  const victim = room.chess.board[to];
+  return {
+    moverIsBot,
+    movedType: moved ? moved.t : null,
+    capturedType: victim ? victim.t : null,
+    movedTo: to,
+  };
+}
+
 function handleChessMove(player, room, data) {
   if (room.status !== 'playing' || !room.chess) { sendError(player.socket, 'Game belum berjalan'); return; }
   if (chessColor(player.seat) !== room.chess.turn) { sendError(player.socket, 'Bukan giliranmu'); return; }
+  const from = chess.parseSq(data.from);
+  const to = chess.parseSq(data.to);
+  const meta = chessMoveMeta(room, from, to, !!player.isBot);
   const before = countPieces(room.chess.board);
-  const r = chess.applyMove(room.chess, chess.parseSq(data.from), chess.parseSq(data.to), data.promotion);
+  const r = chess.applyMove(room.chess, from, to, data.promotion);
   if (!r.ok) { sendError(player.socket, r.error === 'langkah tidak legal' ? 'Langkah tidak legal' : 'Langkah tidak valid'); return; }
-  afterChessMove(room, r, { moverIsBot: !!player.isBot, captured: countPieces(room.chess.board) < before });
+  afterChessMove(room, r, { ...meta, captured: countPieces(room.chess.board) < before });
 }
 
 // Shared tail of a successful chess move (human or the VS AI persona):
@@ -377,6 +401,26 @@ function personaResultLine(room, winnerColor) {
   schedulePersonaLine(room, line);
 }
 
+const PIECE_VALUES = { p: 100, n: 320, b: 330, r: 500, q: 900 };
+
+// Gemini's parade moment (Misi 8): both his knights still alive and
+// the one that just moved has crossed into the human's half.
+function botKnightsAdvanced(room, meta) {
+  let knights = 0;
+  for (const p of room.chess.board) if (p && p.t === 'n' && p.c === 'b') knights++;
+  return knights >= 2 && Math.floor(meta.movedTo / 8) <= 3;
+}
+
+// Meta's bait (Misi 8): after his move the human CAN capture one of
+// his pieces worth a knight or more — poisoned or not, he taunts.
+function metaOffersBait(room) {
+  for (const m of chess.allLegalMoves(room.chess, 'w')) {
+    const victim = room.chess.board[m.to];
+    if (victim && victim.c === 'b' && (PIECE_VALUES[victim.t] || 0) >= 300) return true;
+  }
+  return false;
+}
+
 function personaMoveLine(room, meta) {
   if (!room.isBotRoom || !room.aiChat || !meta) return;
   if (meta.captured) {
@@ -384,12 +428,18 @@ function personaMoveLine(room, meta) {
     else room.aiCaptures.human += 1;
   }
   let category = null;
-  if (meta.captured) category = meta.moverIsBot ? 'botCaptured' : 'humanCaptured';
+  if (room.aiPersona === 'gemini' && !meta.moverIsBot && meta.capturedType === 'n') category = 'knightLost';
+  else if (room.aiPersona === 'gemini' && meta.moverIsBot && meta.movedType === 'n'
+    && (room.aiParadeCount || 0) < 2 && botKnightsAdvanced(room, meta)) category = 'parade';
+  else if (room.aiPersona === 'meta' && meta.moverIsBot && metaOffersBait(room)) category = 'bait';
+  else if (room.aiPersona === 'claude' && meta.moverIsBot && meta.capturedType === 'q') category = 'grind';
+  else if (meta.captured) category = meta.moverIsBot ? 'botCaptured' : 'humanCaptured';
   else if (chess.inCheck(room.chess.board, room.chess.turn)) {
     category = meta.moverIsBot ? 'botGaveCheck' : 'botInCheck';
   }
   if (!category) return;
   const line = personachat.eventLine(room.aiChat, room.aiPersona, category, chessFacts(room), Math.random, Date.now());
+  if (line && category === 'parade') room.aiParadeCount = (room.aiParadeCount || 0) + 1;
   schedulePersonaLine(room, line);
 }
 
@@ -458,10 +508,11 @@ function runChessAiTurn(room) {
   if (!p || !p.isBot) return;
   const mv = chessbot.chooseMove(room.chess, room.aiPersona);
   if (!mv) return;
+  const meta = chessMoveMeta(room, mv.from, mv.to, true);
   const before = countPieces(room.chess.board);
   const r = chess.applyMove(room.chess, mv.from, mv.to, mv.promo);
   if (!r.ok) return; // cannot happen: chooseMove returns legal moves only
-  afterChessMove(room, r, { moverIsBot: true, captured: countPieces(room.chess.board) < before });
+  afterChessMove(room, r, { ...meta, captured: countPieces(room.chess.board) < before });
 }
 
 // Shared tail of a successful UNO play (human or bot): scoring on a win,
@@ -851,7 +902,7 @@ function scheduleBotIfNeeded(room) {
     room.botTimer = null;
     if (!rooms.get(room.code)) return; // room was torn down meanwhile
     runBotTurn(room);
-  }, BOT_DELAY_MS);
+  }, unoBotThinkMs());
 }
 
 function runBotTurn(room) {
@@ -1132,6 +1183,7 @@ async function route(ws, type, data) {
       room.status = 'playing';
       room.aiChat = personachat.createState();
       room.aiCaptures = { bot: 0, human: 0 };
+      room.aiParadeCount = 0;
       startTurnTimer(room);
       sendGameState(room);
       schedulePersonaLine(room, personachat.eventLine(
@@ -1147,6 +1199,7 @@ async function route(ws, type, data) {
       room.chess = chess.newGame();
       room.status = 'playing';
       room.aiCaptures = { bot: 0, human: 0 };
+      room.aiParadeCount = 0;
       startTurnTimer(room);
       sendGameState(room);
       if (room.aiChat) {

@@ -710,3 +710,71 @@ dicek ulang chance/gap saat mendarat); hitungan tangkapan room
 (aiCaptures) dari selisih jumlah bidak sebelum/sesudah langkah.
 Klien TIDAK berubah — chat persona memakai pesan 'chat' biasa dengan
 from = nama persona.
+
+## MISI 8 — Skill Unik per Persona Catur + Bot UNO Mikir (Sensei, 22 Okt 2026 malam)
+
+Keputusan Sensei (berurutan, malam 22 Okt): (1) Gemini "bodo" karena
+blunder — skill attack ditambah, blunder DINOLKAN, pertahanan tetap
+diabaikan ("fokus ke attack"); (2) setiap persona dapat SATU skill
+unik selain gaya main; (3) Gemini dapat skill unik KEDUA: "2-Knight
+Parade" — dua kuda menerjang tanpa ampun, bidak lain mengamankan
+mereka; (4) bot UNO juga dikasih jeda mikir 5–10 detik + label
+"is thinking" biar natural (tidak selama catur); (5) GAS — lalu
+DITAHAN dari deploy: "lanjut dulu tp jgn deploy dulu yaaa, mau buat
+main dulu" → build + tes lokal saja, deploy menunggu kata Sensei.
+
+### Mesin (game/chessbot.js v3)
+- evaluateFor(st, personaKey, botColor): evaluate dasar (Putih) +
+  flavor per persona yang HANYA berlaku untuk warna bot — pressure
+  ring raja lawan (attack), garpu + kemajuan kuda (fork/knight),
+  perisai pion + pressure ring raja sendiri (defense), raja aktif +
+  pion bebas di endgame (endgame). Bobot: Gemini atk 2.2/fork 2.0/
+  knight 2.2/def 0.1/end 0.5; GPT 1.0/1.0/1.0/1.25/1.0; Meta 1.7/1.3/
+  1.1/0.8/0.8; Claude 1.1/1.1/1.0/1.3/1.8.
+- Resep: Gemini depth 2, blunder 0, jitter 90. GPT depth 2, blunder
+  0.08, jitter 40. Meta depth 3, jitter 25, sacTolerance 340. Claude
+  depth 3 + quiescence, jitter 10.
+- Buku pembuka mini per persona (langkah berbobot, cermin peringkat
+  untuk Hitam; hanya bila full ≤ 4 & tidak ada tangkapan tersedia)
+  + openingPrior (prinsip pembuka ±20 cp, full ≤ 10): mesin dangkal
+  tidak bisa merasakan tempo yang terbuang, jadi pembuka waras
+  dijamin buku — cara yang sama dipakai engine beneran.
+
+### Skill unik (penyesuaian skor di akar pencarian)
+- Gemini "Pantang Mundur": langkah mundur non-tangkapan −120.
+- Gemini "2-Knight Parade": langkah kuda +30; kuda mendarat en prise
+  tanpa pelindung −80; langkah yang menyelamatkan/membela kuda yang
+  sedang diserang +50 (pengawal); membiarkan kuda tergantung −60.
+- GPT "Protokol Anti-Blunder": maxNetLoss (tangkapan bersih terbesar
+  lawan dalam 1 langkah, SEE-lite dengan recapture) — bila ada
+  langkah nyaris terbaik yang aman, langkah berbahaya (≥200) −400.
+- Meta "Si Penjebak": di dalam toleransi: tangkapan +40, skak +130,
+  pengorbanan sejati (penyerang ≥300 memakan lebih murah) +170,
+  + trapBonus (skor statis sesudah balasan SERAKAH lawan vs sesudah
+  balasan TERBAIK — selisihnya ×0.5) untuk 6 kandidat teratas.
+- Claude "Si Penggerus": unggul >60 cp → tukar-menukar melibatkan
+  ratu +45; tertinggal → −35. Endgame di flavor (1.8).
+
+### Chat pemicu skill (personachat + server)
+- Kategori baru: parade (Gemini, maks 2×/game via room.aiParadeCount),
+  knightLost (Gemini — kudanya dimakan manusia), bait (Meta — sesudah
+  langkahnya, manusia BISA memakan bidak ≥300), grind (Claude —
+  memakan ratu lawan). Meta langkah kini membawa movedType/
+  capturedType/movedTo (chessMoveMeta, dibaca SEBELUM applyMove) dari
+  handleChessMove & runChessAiTurn. Prioritas: knightLost > parade >
+  bait > grind > tangkapan/skak biasa.
+
+### Bot UNO mikir
+- server.unoBotThinkMs(): acak 5.000–10.000 ms (env UNO_BOT_THINK_MS
+  menimpa untuk tes/sim). Klien: status UNO saat giliran bot =
+  "<nama> is thinking" + kelas .thinking (animasi titik dipakai
+  bersama badge catur via CSS).
+
+### Bukti (tes deterministik, test/chessbot.test.js + personachat)
+Pembuka buku 4 persona × 5 rng; Gemini rng-0 tetap memakan ratu
+tergantung + menemukan mate scholar; Pantang Mundur (Gemini d5f6
+maju vs GPT d5f4 mundur); Parade (kuda bergerak dulu; pengawal c7c6/
+e7e6 membela kuda tergantung); Greek Gift (Meta d3h7, GPT menolak);
+Penggerus (Claude d1d5 saat unggul, menolak saat tertinggal);
+evaluateFor garpu (Gemini > GPT sebesar >30 cp); bank kalimat skill
+4 kategori. Total suite: 117/117.

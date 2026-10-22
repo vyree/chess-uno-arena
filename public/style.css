@@ -551,8 +551,8 @@ body.on-tabs { padding-bottom: 84px; }
 .ai-btn strong { font-size: 17px; }
 .ai-btn small { color: var(--color-muted); font-weight: 700; }
 .ai-btn:hover, .ai-btn:active { border-color: #ff2e93; transform: translateY(-1px); }
-/* "Gemini is thinking..." animated ellipsis (Misi 6) */
-.turn-badge.thinking::after {
+/* "Gemini is thinking..." animated ellipsis (Misi 6, also UNO bots Misi 8) */
+.turn-badge.thinking::after, #uno-status.thinking::after {
   content: ''; animation: thinkdots 1.2s steps(4) infinite;
 }
 @keyframes thinkdots {

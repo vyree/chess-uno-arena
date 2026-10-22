@@ -481,11 +481,15 @@ function renderUno(m) {
   renderUnoRing(m, mySeat);
 
   let status = '';
+  const turnPlayer = m.players[st.turn];
+  const botThinking = !st.over && !isMyTurn && turnPlayer && turnPlayer.isBot;
   if (st.over) status = 'Ronde selesai!';
   else if (st.pendingDraw > 0 && isMyTurn) status = `Kamu kena +${st.pendingDraw}! Ambil kartunya`;
   else if (isMyTurn) status = st.drewThisTurn ? 'Kartu diambil — mainkan atau lewati' : 'Giliranmu!';
-  else status = `Menunggu ${m.players[st.turn] ? m.players[st.turn].nickname : ''}…`;
+  else if (botThinking) status = `${turnPlayer.nickname} is thinking`;
+  else status = `Menunggu ${turnPlayer ? turnPlayer.nickname : ''}…`;
   $('uno-status').textContent = status;
+  $('uno-status').classList.toggle('thinking', !!botThinking);
   // red pill only while YOU face a pending +N penalty (Sensei, 2026-10-22)
   $('uno-status').classList.toggle('penalty', !st.over && st.pendingDraw > 0 && isMyTurn);
 

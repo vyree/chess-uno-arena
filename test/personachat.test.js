@@ -77,3 +77,14 @@ test('event lines: start selalu bunyi; quip biasa kena jeda antar-event', () => 
   const later = PC.eventLine(st, 'claude', 'botCaptured', FACTS, yes, 130000);
   assert.ok(later);
 });
+
+test('misi 8: kalimat pemicu skill tersedia (parade, kuda hilang, umpan, gerus)', () => {
+  const parade = PC.eventLine(PC.createState(), 'gemini', 'parade', FACTS, yes, 200000);
+  assert.ok(parade && parade.text.includes('PARADE'));
+  const lost = PC.eventLine(PC.createState(), 'gemini', 'knightLost', FACTS, yes, 200000);
+  assert.ok(lost && lost.text.includes('KUDA'));
+  const bait = PC.eventLine(PC.createState(), 'meta', 'bait', FACTS, yes, 200000);
+  assert.ok(bait && bait.text.includes('berani'));
+  const grind = PC.eventLine(PC.createState(), 'claude', 'grind', FACTS, yes, 200000);
+  assert.ok(grind && grind.text.includes('endgame'));
+});

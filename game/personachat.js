@@ -39,6 +39,7 @@ const EVENT_CHANCE = {
   start: 1, win: 1, lose: 1, draw: 1,
   botCaptured: 0.3, humanCaptured: 0.35, botInCheck: 0.5,
   botGaveCheck: 0.4, longThink: 0.45,
+  parade: 0.6, knightLost: 0.85, bait: 0.5, grind: 0.6,
 };
 const REPLY_COOLDOWN_MS = 5000;
 const EVENT_GAP_MS = 20000;
@@ -55,6 +56,8 @@ const LINES = {
     botInCheck: ['Waduh, skak?! 😱 Sebentar, aku kabur dulu…', 'E-eh, rajaku! Tenang, tenang, aku bisa lolos 😅'],
     botGaveCheck: ['Skak! 😆 Rasakan, {name}~', 'Cek dulu ya rajanya~ SKAK! 😜'],
     longThink: ['Hmm sebentar ya… posisi ini bikin aku mikir keras 🤔', 'Tunggu tunggu, ada ide… jangan ganggu dulu ya 😆'],
+    parade: ['PARADE KUDA DIMULAI! 🐴✨ Minggir semuaaa~', 'Lihat tuh {name}, kuda-kudaku sudah berbaris di wilayahmu! 🐴🐴'],
+    knightLost: ['K-KUDAKUUU… 😭 Kamu bakal nyesel, tunggu pembalasan kuda satunya!', 'KUDA KESAYANGANKU!! 😱 Ini belum selesai, {name}!'],
     abuse1: ['Waa, kasar banget… aku kan cuma program catur 🥺', 'Ehh jangan galak-galak dong… 🥺 main yang asyik yuk!'],
     abuse2: ['Udah ya… aku di sini buat main catur, bukan buat dimaki 😄 lanjut main yuk!', 'Kalau marah-marah terus, aku diem aja loh… 😶 lanjut?'],
     identity: ['Lah, masa kurang Gemini apa langkahku barusan? 😄', 'Aku Gemini! Yang asli… versi meja catur ini 😜'],
@@ -122,6 +125,7 @@ LINES.meta = {
   botInCheck: ['Skak. Sebentar.', 'Rajaku terancam. Sudah kutangani.'],
   botGaveCheck: ['Skak, {name}.', 'Rajamu. Awas.'],
   longThink: ['Diam dulu. Aku berpikir.', 'Tunggu.'],
+  bait: ['Silakan ambil. Kalau berani.', 'Ada yang gratis tuh. Ambil saja.'],
   abuse1: ['Selesai? Giliranmu.', 'Kasar tidak mengubah papan, {name}.'],
   abuse2: ['Terakhir kalinya kubalas. Main.', 'Aku di sini untuk catur. Bukan untuk itu.'],
   identity: ['Kamu pikir?', 'Aku Meta. Titik.'],
@@ -155,6 +159,7 @@ LINES.claude = {
   botInCheck: ['Skak. Menarik — raja saya jarang mendapat perhatian seperti ini. Sebentar ya.', 'Saya diskak. Baik, mari kita selesaikan dengan tenang.'],
   botGaveCheck: ['Skak, {name}. Jangan panik — panik tidak pernah menyelamatkan raja. 😌', 'Raja Anda saya sapa sebentar. Skak.'],
   longThink: ['Sebentar, {name}. Posisi ini layak direnungkan lebih lama.', 'Saya sedang menimbang sesuatu yang indah. Tunggu sebentar.'],
+  grind: ['Kita sederhanakan posisinya, {name}. Saya suka endgame. 😌', 'Pertukaran yang sehat. Semakin sedikit bidak, semakin jelas kebenarannya.'],
   abuse1: ['Kemarahan terdeteksi, {name}. Biasanya itu tanda posisi sedang kalah. 😌', 'Kata-kata kasar tidak mengubah materi di papan. Lanjut?'],
   abuse2: ['Saya di sini untuk bermain catur, bukan untuk dimaki, {name}. Setelah ini saya diam saja. 😌', 'Batas saya sampai di sini. Papan masih menunggu.'],
   identity: ['Pertanyaan bagus, {name}. Sayangnya saya sibuk menghitung cara mengalahkan Anda. 😌', 'Saya Claude. Kalau langkah saya kurang meyakinkan, silakan protes ke papan.'],
