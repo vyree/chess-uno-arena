@@ -231,7 +231,6 @@
     <div id="uno-arena" class="uno-arena">
       <div id="uno-ring" class="uno-ring"></div>
       <div class="uno-table">
-        <div id="uno-deck" class="uno-card deck" title="Ambil kartu"><span class="oval"><span class="val">🎴</span></span><small id="deck-count"></small></div>
         <div id="uno-discard" class="uno-card"></div>
         <div class="uno-badges">
           <div id="uno-color-badge" class="color-badge"></div>
@@ -241,20 +240,23 @@
       <div id="uno-flash" class="uno-flash hidden"></div>
     </div>
     <div class="uno-actions">
-      <button id="btn-uno-say" class="btn warning">📢 UNO!</button>
-      <button id="btn-uno-pass" class="btn secondary hidden">⏭️ Lewati</button>
+      <div class="uno-actions-left">
+        <button id="btn-uno-say" class="btn warning">📢 UNO!</button>
+        <button id="btn-uno-pass" class="btn secondary hidden">⏭️ Lewati</button>
+      </div>
+      <div id="uno-deck" class="uno-card deck" title="Ambil kartu"><span class="oval"><span class="val">🎴</span></span><small id="deck-count"></small></div>
     </div>
     <h3>Kartumu (<span id="hand-count">0</span>)</h3>
     <div id="uno-hand" class="uno-hand"></div>
-    <div class="row">
-      <button id="btn-leave-uno" class="btn ghost small">Keluar Room</button>
-    </div>
     <div class="card chat-card">
       <div id="chat-box-uno" class="chat-box small"></div>
       <div class="chat-row">
         <input id="chat-input-uno" maxlength="200" placeholder="Chat…" autocomplete="off">
         <button id="btn-chat-uno" class="btn secondary small">Kirim</button>
       </div>
+    </div>
+    <div class="row">
+      <button id="btn-leave-uno" class="btn ghost small">Keluar Room</button>
     </div>
   </section>
 

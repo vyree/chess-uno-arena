@@ -137,7 +137,19 @@ input:focus { outline: none; border-color: var(--color-primary); }
 .timer { font-size: 18px; font-weight: 700; }
 .timer.low { color: var(--color-danger); animation: blink 1s infinite; }
 @keyframes blink { 50% { opacity: .4; } }
-.status-line { text-align: center; min-height: 22px; margin-bottom: 8px; font-weight: 600; }
+/* status notification pill (Sensei, 2026-10-22): colored placeholder so
+   turn/waiting notices are unmissable — green for general notices,
+   red when the notice is a penalty (facing a +N stack). */
+.status-line {
+  text-align: center; min-height: 22px; margin: 0 auto 8px;
+  width: fit-content; max-width: 100%;
+  padding: 6px 16px; border-radius: var(--radius-full);
+  background: var(--color-success); color: #fff; font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0,0,0,.18);
+  transition: background-color .25s ease;
+}
+.status-line.penalty { background: #e03131; }
+.status-line:empty { background: transparent; box-shadow: none; }
 
 /* chess board */
 .board {
@@ -279,8 +291,13 @@ input:focus { outline: none; border-color: var(--color-primary); }
   width: 34px; height: 34px; border-radius: 50%;
   border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.3);
 }
-.uno-actions { display: flex; gap: 8px; justify-content: center; margin-bottom: 6px; }
+/* control row under the table (Sensei, 2026-10-22): UNO button pinned
+   left, the draw deck pinned right beside the hand — the table center
+   keeps only the discard pile, so the arena reads clean. */
+.uno-actions { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.uno-actions-left { display: flex; gap: 8px; align-items: center; }
 .uno-actions .btn.armed { background: var(--color-success); color: #fff; }
+.uno-actions .uno-card.deck { width: 52px; height: 76px; font-size: 19px; flex: 0 0 auto; }
 /* hand: flat side-overlapping row, left to right, no fan/tilt
    (Sensei's request, 2026-10-21) */
 .uno-hand {

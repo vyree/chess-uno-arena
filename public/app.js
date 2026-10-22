@@ -370,7 +370,7 @@ function renderChess(m) {
   else { badge.textContent = 'Giliran lawan'; badge.className = 'turn-badge'; }
 
   $('chess-status').textContent = st.inCheck && !st.over
-    ? (isMyTurn ? '⚠️ Rajamu sedang diskak!' : '⚠️ Raja lawan diskak!') : '';
+    ? (isMyTurn ? 'Rajamu sedang diskak!' : 'Raja lawan diskak!') : '';
 
   const board = $('board');
   board.innerHTML = '';
@@ -477,10 +477,12 @@ function renderUno(m) {
 
   let status = '';
   if (st.over) status = 'Ronde selesai!';
-  else if (st.pendingDraw > 0 && isMyTurn) status = `Kamu kena +${st.pendingDraw}! Ambil kartunya 🃏`;
-  else if (isMyTurn) status = st.drewThisTurn ? 'Kartu diambil — mainkan atau lewati' : 'Giliranmu! 🎯';
+  else if (st.pendingDraw > 0 && isMyTurn) status = `Kamu kena +${st.pendingDraw}! Ambil kartunya`;
+  else if (isMyTurn) status = st.drewThisTurn ? 'Kartu diambil — mainkan atau lewati' : 'Giliranmu!';
   else status = `Menunggu ${m.players[st.turn] ? m.players[st.turn].nickname : ''}…`;
   $('uno-status').textContent = status;
+  // red pill only while YOU face a pending +N penalty (Sensei, 2026-10-22)
+  $('uno-status').classList.toggle('penalty', !st.over && st.pendingDraw > 0 && isMyTurn);
 
   // table
   const disc = $('uno-discard');
