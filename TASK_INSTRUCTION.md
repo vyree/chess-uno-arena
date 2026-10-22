@@ -320,6 +320,21 @@ Keputusan terkunci (Sensei, 21 Okt 2026 02:54 WIB):
       Tes: 76/76 unit hijau + sim WS Truth 2 skenario SEMUA LOLOS
       (Set Aturan, ASK, kartu otomatis, PASS, timeout, poin reaksi,
       MC, Mode Eksplisit penuh 8 soal) + regresi simulate.js LOLOS.
+- [x] Addendum Fase 2 — Room Bot Truth untuk UJI COBA (Sensei,
+      22 Okt 2026, SEMENTARA): pesan `create_truth_bot_room {size}`
+      (total kursi 2–8 termasuk manusia) membuat room bot yang
+      langsung mulai dengan aturan default. Bot tidak bisa menjawab
+      sungguhan, jadi server MENYIMULASIKANNYA: jawaban diambil dari
+      kolam jawaban pura-pura (`TRUTH_FAKE_ANSWERS` di game/bot.js),
+      bot ikut bereaksi ke jawaban pemain (poin & gelar tetap
+      mengalir), dan jendela reaksi pada giliran bot dipersingkat
+      supaya uji coba solo tidak lambat. MC tetap menemani (manusia
+      < 3). Terverifikasi: sim WS skenario C (solo 4 kursi) LOLOS
+      penuh 2x berturut-turut; total suite 77/77 unit + regresi
+      simulate.js LOLOS.
+      **Spek UI dari Sensei (untuk Fase 3):** pintu masuk uji bot ini
+      adalah menu **"( test bot )" di lobby game Truth, diletakkan di
+      bagian FOOTER dan agak tersembunyi** — bukan menu utama.
 - [ ] Fase 3 — UI: layar truth, animasi roda nama, kartu soal, reaksi,
       podium gelar, efek suara; panel "Set Aturan" di layar room
 - [ ] Fase 4 — Deploy (Railway + Hosting) + uji publik

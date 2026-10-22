@@ -75,4 +75,34 @@ function takeTurn(st, idx) {
   return log;
 }
 
-module.exports = { BOT_NAMES, takeTurn, chooseCard, chooseWildColor };
+// Truth or Truth bot rooms (Misi 3, playtest scheme — Sensei): bots
+// cannot really answer, so the server simulates plausible answers
+// from this pool. Deliberately generic so they fit almost any card.
+const TRUTH_FAKE_ANSWERS = [
+  'Pernah sih, tapi ceritanya panjang... intinya aku kapok.',
+  'Sering! Hampir tiap minggu malah, hehe.',
+  'Hmm, terakhir waktu itu... ya begitulah, jangan ditiru ya.',
+  'Jujur ya, aku malu cerita ini. Tapi pernah, sekali saja.',
+  'Enggak pernah! Aku anaknya baik-baik kok.',
+  'Itu rahasia... tapi kalau dipaksa jawab: iya, pernah.',
+  'Waktu SMP sih pernah, sekarang sudah tobat.',
+  'Sebenarnya sering kepikiran, tapi belum pernah kesampaian.',
+  'Pernah, dan sampai sekarang masih suka kebayang.',
+  'Kalau yang itu sih keahlian aku, jangan diragukan lagi.',
+  'Baru kemarin kejadian, masih anget ceritanya.',
+  'Aku jawab jujur ya: tidak, dan aku bangga soal itu.',
+  'Pernah sekali, gara-gara penasaran doang sih.',
+  'Hampir tiap hari! Sudah jadi kebiasaan burukku.',
+  'Dulu sering, sekarang sudah jauh berkurang kok.',
+  'Cerita ini cuma aku kasih tahu di sini ya: pernah, dua kali.',
+  'Malu-maluin banget pokoknya, tapi ya terjadi juga akhirnya.',
+  'Enggak akan aku lupakan sih, itu pengalaman paling nekatku.',
+];
+
+function pickTruthAnswer(rand) {
+  const r = typeof rand === 'function' ? rand : Math.random;
+  return TRUTH_FAKE_ANSWERS[Math.floor(r() * TRUTH_FAKE_ANSWERS.length)];
+}
+
+module.exports = { BOT_NAMES, takeTurn, chooseCard, chooseWildColor,
+  TRUTH_FAKE_ANSWERS, pickTruthAnswer };

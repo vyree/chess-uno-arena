@@ -172,6 +172,12 @@ const VALIDATORS = {
   uno_pass() { return { ok: true, data: {} }; },
   uno_new_round() { return { ok: true, data: {} }; },
   // ---- Truth or Truth (Misi 3 Fase 2) ----
+  create_truth_bot_room(d) {
+    if (!Number.isInteger(d.size) || d.size < 2 || d.size > 8) {
+      return { ok: false, error: 'ukuran meja bot Truth harus 2-8 pemain' };
+    }
+    return { ok: true, data: { size: d.size } };
+  },
   truth_set_rules(d) {
     const data = {};
     if (d.totalQuestions !== undefined) {

@@ -309,6 +309,21 @@ test('validator pesan WS truth: rute truth_* terdaftar dan ketat', () => {
   assert.equal(vm('truth_next', {}).ok, true);
   const cr = vm('create_room', { game: 'truth' });
   assert.equal(cr.ok, true);
+  const br = vm('create_truth_bot_room', { size: 4 });
+  assert.equal(br.ok, true);
+  assert.equal(br.data.size, 4);
+  assert.equal(vm('create_truth_bot_room', { size: 1 }).ok, false);
+  assert.equal(vm('create_truth_bot_room', { size: 9 }).ok, false);
+});
+
+test('bot Truth: kolam jawaban simulasi sehat', () => {
+  const B = require('../game/bot.js');
+  assert.ok(B.TRUTH_FAKE_ANSWERS.length >= 12);
+  assert.equal(new Set(B.TRUTH_FAKE_ANSWERS).size, B.TRUTH_FAKE_ANSWERS.length);
+  for (const a of B.TRUTH_FAKE_ANSWERS) {
+    assert.ok(a.length >= 1 && a.length <= 1000);
+  }
+  assert.ok(B.TRUTH_FAKE_ANSWERS.includes(B.pickTruthAnswer(() => 0)));
 });
 
 test('validator truth: batas teks ASK, jawaban, dan jenis reaksi', () => {

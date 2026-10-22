@@ -8,7 +8,12 @@
  * Scenarios: A) normal 2-player game with Set Aturan, ASK claim, card
  * auto-open, PASS, answer timeout, reactions, MC narration, game over.
  * B) Explicit Mode: ASK rejected, notice event, cards only from the
- * explicit deck. Server must not crash.
+ * explicit deck. C) Bot room: one human playtests solo — bots fill the
+ * seats, simulate answers, react to the human, game completes.
+ * Suggested fast timings for the full run:
+ *   TRUTH_SPIN_MS=200 TRUTH_ASK_WINDOW_MS=600 TRUTH_ASK_SUBMIT_MS=900 \
+ *   TRUTH_ANSWER_MS=6000 TRUTH_REACT_MS=3000
+ * Server must not crash.
  */
 const WebSocket = require('ws');
 const Q = require('../game/questions.js');
@@ -136,7 +141,8 @@ async function scenarioA() {
 
   // --- Giliran 1: klaim ASK ---
   await until(() => stage(a) === 'ask', 'jendela ASK giliran 1');
-  check('event ask_window_open terkirim', a.events.some((e) => e.type === 'ask_window_open'));
+  await until(() => a.events.some((e) => e.type === 'ask_window_open'), 'event ask_window_open');
+  check('event ask_window_open terkirim', true);
   const asker = otherOf(a, b);
   const ans1 = selfOf(a, b);
   asker.send('truth_ask');
@@ -177,7 +183,7 @@ async function scenarioA() {
 
   // --- Giliran 4: timeout jawaban ---
   await until(() => stage(a) === 'answer' && snap(a).turnNumber === 4, 'giliran 4 menjawab');
-  await until(() => a.events.some((e) => e.type === 'answer_timeout'), 'event timeout', 8000);
+  await until(() => a.events.some((e) => e.type === 'answer_timeout'), 'event timeout', 12000);
   check('timeout jawaban menutup giliran', true);
 
   // --- Giliran 5-8: polos sampai selesai ---
@@ -214,8 +220,9 @@ async function scenarioB() {
   check('totalTurns = 8', snap(a).totalTurns === 8);
 
   await until(() => stage(a) === 'ask', 'jeda eksplisit');
-  check('event explicit_question_incoming terkirim',
-    a.events.some((e) => e.type === 'explicit_question_incoming'));
+  await until(() => a.events.some((e) => e.type === 'explicit_question_incoming'),
+    'event explicit_question_incoming');
+  check('event explicit_question_incoming terkirim', true);
   const asker = otherOf(a, b);
   asker.send('truth_ask');
   const err = await asker.next('error');
@@ -236,10 +243,53 @@ async function scenarioB() {
   a.close(); b.close();
 }
 
+async function scenarioC() {
+  console.log('Skenario C: room bot Truth (uji coba solo)');
+  const B = require('../game/bot.js');
+  const h = new Sim('Sensei');
+  await h.connect();
+  h.send('create_truth_bot_room', { size: 4 });
+  await until(() => h.state && h.state.game === 'truth', 'game_state bot room');
+  check('bot room: 4 pemain', h.state.players.length === 4);
+  check('bot room: 3 bot mengisi kursi', h.state.players.filter((p) => p.isBot).length === 3);
+  check('bot room: total 10 pertanyaan', snap(h).totalTurns === 10);
+  const botIds = new Set(h.state.players.filter((p) => p.isBot).map((p) => p.id));
+  const fakeSet = new Set(B.TRUTH_FAKE_ANSWERS);
+  let botAnswered = false;
+  let humanAnswered = false;
+  const deadline = Date.now() + 150000;
+  while (!h.over && Date.now() < deadline) {
+    const s = snap(h);
+    const stg = stage(h);
+    if (s && stg === 'answer' && s.current.answererId === h.playerId) {
+      humanAnswered = true;
+      h.send('truth_answer', { text: 'Jawaban asli dari Sensei.' });
+      await sleep(300);
+    } else if (s && stg === 'react') {
+      if (s.current.answer && botIds.has(s.current.answererId)
+          && fakeSet.has(s.current.answer)) botAnswered = true;
+      if (s.current.answererId === h.playerId) {
+        await sleep(1200); // beri waktu bot bereaksi dulu
+        if (stage(h) === 'react') h.send('truth_next');
+      }
+    }
+    await sleep(120);
+  }
+  check('game bot selesai (game_over)', !!h.over);
+  check('bot terbukti menjawab (simulasi)', botAnswered);
+  check('manusia ikut menjawab di gilirannya', humanAnswered);
+  const me = h.over ? h.over.scores.find((x) => x.playerId === h.playerId) : null;
+  check('poin manusia > 0 dari reaksi bot', !!me && me.points > 0, me && String(me.points));
+  check('skor akhir 4 pemain', !!h.over && h.over.scores.length === 4);
+  check('MC menemani room bot', h.chats.some((c) => c.from === 'MC'));
+  h.close();
+}
+
 (async () => {
   try {
     await scenarioA();
     await scenarioB();
+    await scenarioC();
   } catch (e) {
     console.log('  FAIL: pengecualian — ' + e.message);
     failures++;

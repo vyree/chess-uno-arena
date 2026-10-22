@@ -459,7 +459,7 @@ function startTruthGame(room) {
     totalQuestions: s.totalQuestions === null ? undefined : s.totalQuestions,
   });
   if (!r.ok) return r;
-  room.truth = { st: r.state, mc: room.players.length < 3 };
+  room.truth = { st: r.state, mc: room.players.filter((p) => !p.isBot).length < 3 };
   room.status = 'playing';
   room.truthStage = 'spin';
   if (room.truth.mc) {
@@ -500,6 +500,7 @@ function truthAfterQuestion(room, events) {
     const r = truth.timeoutTurn(room.truth.st);
     if (r.ok) truthOnTurnClosed(room, r.events);
   });
+  scheduleTruthBots(room);
 }
 
 function truthOnTurnClosed(room, events) {
@@ -508,6 +509,7 @@ function truthOnTurnClosed(room, events) {
     room.status = 'over';
     room.truthStage = null;
     clearTurnTimer(room);
+    clearTruthBotTimers(room);
   } else {
     room.truthStage = 'spin';
   }
@@ -559,18 +561,23 @@ function handleTruthAskQuestion(player, room, data) {
   truthAfterQuestion(room, r.events);
 }
 
-function handleTruthAnswer(player, room, data) {
-  if (!truthGuard(player, room)) return;
-  const r = truth.submitAnswer(room.truth.st, player.id, data.text);
-  if (!r.ok) { sendError(player.socket, r.error); return; }
+function enterTruthReact(room, events) {
   room.truthStage = 'react';
   sendGameState(room);
-  emitTruthEvents(room, r.events);
+  emitTruthEvents(room, events);
   truthSetTimer(room, TRUTH_TIMING.react, () => {
     if (!room.truth || room.status !== 'playing') return;
     const e = truth.endTurn(room.truth.st);
     if (e.ok) truthOnTurnClosed(room, e.events);
   });
+  scheduleTruthBots(room);
+}
+
+function handleTruthAnswer(player, room, data) {
+  if (!truthGuard(player, room)) return;
+  const r = truth.submitAnswer(room.truth.st, player.id, data.text);
+  if (!r.ok) { sendError(player.socket, r.error); return; }
+  enterTruthReact(room, r.events);
 }
 
 function handleTruthPass(player, room) {
@@ -605,6 +612,69 @@ function handleTruthNext(player, room) {
   const r = truth.endTurn(room.truth.st);
   if (!r.ok) { sendError(player.socket, r.error); return; }
   truthOnTurnClosed(room, r.events);
+}
+
+// ---------------- Truth bots (playtest rooms) ----------------
+// Bots cannot really answer (Sensei): this driver simulates answers
+// from game/bot.js, lets bots react to answers, and shortens a bot's
+// own reaction window so a solo test game keeps moving.
+function truthBotLater(room, ms, fn) {
+  if (!room.truthBotTimers) room.truthBotTimers = new Set();
+  const t = setTimeout(() => {
+    room.truthBotTimers.delete(t);
+    if (!rooms.get(room.code) || !room.truth || room.status !== 'playing') return;
+    fn();
+  }, ms);
+  room.truthBotTimers.add(t);
+  return t;
+}
+
+function clearTruthBotTimers(room) {
+  if (!room.truthBotTimers) return;
+  for (const t of room.truthBotTimers) clearTimeout(t);
+  room.truthBotTimers.clear();
+}
+
+function scheduleTruthBots(room) {
+  if (!room.truth || room.status !== 'playing') return;
+  const st = room.truth.st;
+  if (room.truthStage === 'answer' && st.phase === 'answering') {
+    const ans = room.players.find((p) => p.id === st.current.answererId);
+    if (ans && ans.isBot) {
+      const delay = Math.min(2000 + Math.random() * 2000, TRUTH_TIMING.answer * 0.4);
+      truthBotLater(room, delay, () => {
+        const r = truth.submitAnswer(st, ans.id, bot.pickTruthAnswer());
+        if (r.ok) enterTruthReact(room, r.events);
+      });
+    }
+    return;
+  }
+  if (room.truthStage === 'react' && st.phase === 'reacting') {
+    for (const p of room.players) {
+      if (!p.isBot || p.id === st.current.answererId) continue;
+      if (Math.random() < 0.25) continue; // some bots stay quiet
+      truthBotLater(room, 500 + Math.random() * TRUTH_TIMING.react * 0.5, () => {
+        const kind = truth.REACTIONS[Math.floor(Math.random() * truth.REACTIONS.length)];
+        const r = truth.react(st, p.id, kind);
+        if (!r.ok) return;
+        sendGameState(room);
+        emitTruthEvents(room, r.events);
+        if (Math.random() < 0.3) { // sometimes a second reaction
+          const kind2 = truth.REACTIONS[Math.floor(Math.random() * truth.REACTIONS.length)];
+          const r2 = truth.react(st, p.id, kind2);
+          if (r2.ok) { sendGameState(room); emitTruthEvents(room, r2.events); }
+        }
+      });
+    }
+    const ans = room.players.find((p) => p.id === st.current.answererId);
+    if (ans && ans.isBot) {
+      // do not make the human wait out a bot's full reaction window
+      truthBotLater(room, TRUTH_TIMING.react * 0.75, () => {
+        const e = truth.endTurn(st);
+        if (e.ok) truthOnTurnClosed(room, e.events);
+      });
+    }
+  }
 }
 
 // ---------------- UNO bots ----------------
@@ -648,6 +718,7 @@ function runBotTurn(room) {
 // A bot room exists only for its human: remove the bots and the room itself.
 function teardownBotRoom(room) {
   if (room.botTimer) { clearTimeout(room.botTimer); room.botTimer = null; }
+  clearTruthBotTimers(room);
   for (const p of [...room.players]) {
     if (p.isBot) { rooms.removePlayer(room, p.id); players.delete(p.id); }
   }
@@ -749,6 +820,26 @@ async function route(ws, type, data) {
       startTurnTimer(room);
       sendGameState(room);
       scheduleBotIfNeeded(room);
+      return;
+    }
+    case 'create_truth_bot_room': {
+      // Solo Truth playtest table (Sensei): the human plus bots that
+      // simulate answers; the game starts at once with default rules.
+      if (player.roomCode) { sendError(ws, 'Kamu sudah di sebuah room'); return; }
+      const created = rooms.create('truth', player);
+      if (!created.ok) { sendError(ws, created.error); return; }
+      const room = created.room;
+      room.isBotRoom = true;
+      for (let i = 0; i < data.size - 1; i++) {
+        const bp = {
+          id: 'bot-' + crypto.randomUUID(), nickname: bot.BOT_NAMES[i % bot.BOT_NAMES.length],
+          isBot: true, socket: null, roomCode: room.code, seat: 0, connected: true, active: true,
+        };
+        players.set(bp.id, bp);
+        rooms.addPlayer(room, bp);
+      }
+      const started = startTruthGame(room);
+      if (!started.ok) { teardownBotRoom(room); sendError(ws, started.error); }
       return;
     }
     case 'list_rooms': {
