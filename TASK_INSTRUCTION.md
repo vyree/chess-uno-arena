@@ -661,3 +661,6 @@ Keputusan implementasi (as-built):
   multiplayer biasa tetap "Giliran lawan".
 - Batasan jujur: kekuatan mesin ringan ini setara pemain kafe yang
   kuat di level Hell — bukan Stockfish; itu memang niatnya (kostum).
+- KOREKSI Sensei (22 Okt 2026 malam): label level (Normal/Hard/Hell)
+  DIHAPUS dari tombol persona — tingkat kesulitan adalah RAHASIA;
+  pemain hanya melihat nama AI-nya. Resep kekuatan tetap di server.
