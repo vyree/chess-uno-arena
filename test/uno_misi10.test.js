@@ -264,3 +264,26 @@ test('bot: reset tidak lagi menjawab tumpukan; lowestCard untuk hadiah', () => {
   assert.deepEqual(playable, []); // reset keluar dari daftar playable tumpukan
   assert.equal(bot.lowestCard([num('x', 'red', 9), skip('y', 'blue'), num('z', 'green', 2)]).id, 'z');
 });
+
+// ---------- WS validate allowlist (regresi bug live 2026-10-27) ----------
+// Penyebab bug: server.js memvalidasi SETIAP pesan lewat validateMessage
+// SEBELUM routing; route uno_negate/uno_gift/uno_reset ada di switch tapi
+// tidak ada di VALIDATORS, sehingga semua aksi jendela ditolak live dengan
+// 'perintah tidak dikenal' — padahal tes engine/server lulus 143/143.
+// Tes ini mengunci gerbang validasi untuk ketiga aksi jendela.
+
+const { validateMessage } = require('../game/validate.js');
+
+test('validateMessage: menerima uno_negate/uno_gift/uno_reset; menolak tipe asing', () => {
+  for (const type of ['uno_negate', 'uno_gift', 'uno_reset']) {
+    const r = validateMessage(JSON.stringify({ type, data: { cardId: 'c1' } }));
+    assert.equal(r.ok, true, type);
+    assert.equal(r.type, type);
+    assert.equal(r.data.cardId, 'c1');
+  }
+  const bad = validateMessage(JSON.stringify({ type: 'uno_reset', data: {} }));
+  assert.equal(bad.ok, false); // cardId wajib
+  const unknown = validateMessage(JSON.stringify({ type: 'uno_curang', data: {} }));
+  assert.equal(unknown.ok, false);
+  assert.equal(unknown.error, 'perintah tidak dikenal: uno_curang');
+});

@@ -196,6 +196,24 @@ const VALIDATORS = {
   uno_draw() { return { ok: true, data: {} }; },
   uno_pass() { return { ok: true, data: {} }; },
   uno_new_round() { return { ok: true, data: {} }; },
+  // Misi 10 window actions (BUGFIX 2026-10-27: these routes existed in
+  // server.js but were missing here, so validateMessage rejected every
+  // window action live with 'perintah tidak dikenal' before routing).
+  uno_negate(d) {
+    const c = validCardId(d.cardId);
+    if (!c.ok) return c;
+    return { ok: true, data: { cardId: c.value } };
+  },
+  uno_gift(d) {
+    const c = validCardId(d.cardId);
+    if (!c.ok) return c;
+    return { ok: true, data: { cardId: c.value } };
+  },
+  uno_reset(d) {
+    const c = validCardId(d.cardId);
+    if (!c.ok) return c;
+    return { ok: true, data: { cardId: c.value } };
+  },
   chess_new_round() { return { ok: true, data: {} }; },
   // ---- Truth or Truth (Misi 3 Fase 2) ----
   create_truth_bot_room(d) {

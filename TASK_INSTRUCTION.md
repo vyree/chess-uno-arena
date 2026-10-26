@@ -979,5 +979,17 @@ kedua host).**
   perintah Sensei yang mengubahnya).
 - Jendela Uno! = satu respons per jendela (Negate! ATAU Reset, siapa
   cepat dia dapat); engine menutup jendela pada respons pertama.
+- **BUG LIVE 2026-10-27 (diperbaiki lokal, belum deploy):** route
+  uno_negate/uno_gift/uno_reset ada di switch server.js tapi TIDAK ada
+  di VALIDATORS game/validate.js — server memvalidasi SETIAP pesan
+  sebelum routing, sehingga semua aksi jendela ditolak live dengan
+  'perintah tidak dikenal'. **Aturan checklist permanen: pesan WS baru
+  WAJIB didaftarkan di DUA tempat (VALIDATORS + switch case), dan tes
+  regresi validateMessage wajib ada.** Tes regresi: `test/uno_misi10.test.js`
+  bagian "WS validate allowlist".
+- **BUG VISUAL 2026-10-27 (diperbaiki lokal):** kartu Reset tidak punya
+  override warna teks — label sudut putih (#fff bawaan .uno-card) di
+  atas kartu off-white (#f5f5f0) = tidak terlihat; pola nullwhite
+  (color + border-color gelap) diterapkan ke .uno-card.reset.
 - Keluar saat jendela/hadiah berjalan: jendela ditutup / hadiah
   dibatalkan (kartu kembali ke pemilik), timer giliran dimulai ulang.

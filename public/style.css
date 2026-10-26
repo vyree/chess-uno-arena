@@ -302,7 +302,7 @@ input:focus { outline: none; border-color: var(--color-primary); }
 .uno-card.playable { outline: 3px solid var(--color-success); }
 /* Misi 10: Reset (white power card) + Negate! (black card, ≠ glyph on
    the classic white oval) + gift-phase pick highlight + finished seats. */
-.uno-card.reset { background: #f5f5f0; }
+.uno-card.reset { background: #f5f5f0; color: #1c1c1e; border-color: #cfcfda; }
 .uno-card.reset .val { color: #222; }
 .uno-card.negate { background: #17171c; }
 .uno-card.negate .val { color: #17171c; }
