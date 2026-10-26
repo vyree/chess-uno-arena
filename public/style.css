@@ -21,6 +21,7 @@
   --color-uno-yellow: #e69c00;
   --color-uno-green: #159947;
   --color-uno-blue: #2266b8;
+  --color-uno-purple: #7b2fbe;
   --radius-sm: 6px;
   --radius-md: 12px;
   --radius-lg: 20px;
@@ -266,23 +267,27 @@ input:focus { outline: none; border-color: var(--color-primary); }
 .uno-card.yellow .val { color: var(--color-uno-yellow); }
 .uno-card.green .val { color: var(--color-uno-green); }
 .uno-card.blue .val { color: var(--color-uno-blue); }
+.uno-card.purple .val { color: var(--color-uno-purple); }
 .uno-card .motif {
   width: 56%; height: 74%; border-radius: 5px; transform: rotate(22deg);
   background: conic-gradient(from 45deg,
-    var(--color-uno-red) 0 25%, var(--color-uno-blue) 0 50%,
-    var(--color-uno-yellow) 0 75%, var(--color-uno-green) 0);
+    var(--color-uno-red) 0 20%, var(--color-uno-blue) 0 40%,
+    var(--color-uno-yellow) 0 60%, var(--color-uno-green) 0 80%,
+    var(--color-uno-purple) 0);
 }
 .uno-card .mini-motif {
   display: inline-block; width: 11px; height: 11px; border-radius: 50%;
   background: conic-gradient(from 45deg,
-    var(--color-uno-red) 0 25%, var(--color-uno-blue) 0 50%,
-    var(--color-uno-yellow) 0 75%, var(--color-uno-green) 0);
+    var(--color-uno-red) 0 20%, var(--color-uno-blue) 0 40%,
+    var(--color-uno-yellow) 0 60%, var(--color-uno-green) 0 80%,
+    var(--color-uno-purple) 0);
 }
 .uno-card small { font-size: 11px; font-weight: 600; }
 .uno-card.red { background: var(--color-uno-red); }
 .uno-card.yellow { background: var(--color-uno-yellow); }
 .uno-card.green { background: var(--color-uno-green); }
 .uno-card.blue { background: var(--color-uno-blue); }
+.uno-card.purple { background: var(--color-uno-purple); }
 .uno-card.wild { background: #1c1c1e; }
 /* Hell specials (Misi 5): Reverse Black = a black card with the classic
    white oval + dark reverse glyph; Null White = a white card sealed by a
@@ -295,6 +300,14 @@ input:focus { outline: none; border-color: var(--color-primary); }
 .uno-card.deck { background: #3a3f4d; cursor: pointer; }
 .uno-card.deck small { position: absolute; bottom: 4px; left: 0; right: 0; text-align: center; }
 .uno-card.playable { outline: 3px solid var(--color-success); }
+/* Misi 10: Reset (white power card) + Negate! (black card, ≠ glyph on
+   the classic white oval) + gift-phase pick highlight + finished seats. */
+.uno-card.reset { background: #f5f5f0; }
+.uno-card.reset .val { color: #222; }
+.uno-card.negate { background: #17171c; }
+.uno-card.negate .val { color: #17171c; }
+.uno-card.giftable { outline: 3px solid var(--color-warning, #e69c00); }
+.seat-chip.finished { opacity: .65; }
 .color-badge {
   width: 34px; height: 34px; border-radius: 50%;
   border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.3);
@@ -321,7 +334,7 @@ input:focus { outline: none; border-color: var(--color-primary); }
 .uno-hand .uno-card:first-child { margin-left: auto; }
 .uno-hand .uno-card:last-child { margin-right: auto; }
 .uno-hand .uno-card:hover { transform: translateY(-12px); z-index: 6; }
-.uno-hand .uno-card:not(.playable) { filter: saturate(.55); }
+.uno-hand .uno-card:not(.playable):not(.giftable) { filter: saturate(.55); }
 
 /* modal & toast */
 .modal {

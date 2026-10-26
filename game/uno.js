@@ -1,6 +1,6 @@
 'use strict';
 /**
- * UNO engine: standard 108-card rules (simplified per PRD).
+ * UNO engine: 133-card rules, 5 colors (simplified per PRD).
  * Simplifications (documented): no wild+4 challenge.
  * UNO declaration via saidUno flag (forget = draw 2 penalty).
  * House rules (Misi 2, Sensei 2026-10-21): 2-8 players; strict stacking.
@@ -13,9 +13,28 @@
  *   the other direction) and Null White (erase the pile, uncounterable;
  *   EVERY player draws 2; caster picks the color). Both specials are
  *   dead cards outside a pending pile.
+ * Misi 10 (Sensei 2026-10-23, built 2026-10-26):
+ * - unlimited toggle (all modes): emptying your hand FINISHES you
+ *   (rank + score) instead of ending the game; the last player left
+ *   is the loser (0). Finish score = opponents' remaining cards +
+ *   rank bonus (1st +350, 2nd +300, -50 per rank).
+ * - Reset (hell x2, max 2 uses/game): pile-only; cancels the pile, then
+ *   collects every hand + the discard pile back into the deck,
+ *   reshuffles, redeals 7 to each active player, flips a new starter,
+ *   and the caster moves first. Playing it as your last card is NOT
+ *   a win — the redeal happens instead.
+ * - Negate! (hell x2, max 2 uses/game, holder needs 2+ cards): played
+ *   only during the 5-second window after someone shouts UNO! (hand
+ *   reaches 1). It voids the UNO: every other active player gives 1
+ *   card to the victim (10-second parallel gift phase; timeout picks
+ *   each giver's lowest card), then the victim draws +2.
+ * Clock policy (engine is a pure state machine; the server owns the
+ * clock): the engine RECORDS negateWindow/giftPhase but never blocks
+ * play/draw/pass on them — the server pauses turns and runs the 5s/10s
+ * timers, and bots act through the same engine functions.
  */
 
-const COLORS = ['red', 'yellow', 'green', 'blue'];
+const COLORS = ['red', 'yellow', 'green', 'blue', 'purple'];
 const NUMBERS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 const ACTIONS = ['skip', 'reverse', 'draw2'];
 
@@ -43,8 +62,9 @@ function buildDeck(mode) {
   }
   if (mode === 'hell') {
     // Hell-only composition (Misi 5): draw cards doubled so piles ignite
-    // more often (+2 x4 per color = 16 total, wild4 x8), plus the two
-    // hell specials, 4 copies each. Total: 128 cards.
+    // more often (+2 x4 per color = 20 total, wild4 x8), plus the two
+    // hell specials, 4 copies each. Misi 10 adds Reset x2 + Negate! x2.
+    // Total: 159 cards.
     for (const color of COLORS) {
       deck.push(mkCard(color, 'draw2', null));
       deck.push(mkCard(color, 'draw2', null));
@@ -53,6 +73,10 @@ function buildDeck(mode) {
     for (let i = 0; i < 4; i++) {
       deck.push(mkCard(null, 'reverseBlack', null));
       deck.push(mkCard(null, 'nullWhite', null));
+    }
+    for (let i = 0; i < 2; i++) {
+      deck.push(mkCard(null, 'reset', null));
+      deck.push(mkCard(null, 'negate', null));
     }
   }
   return deck;
@@ -70,8 +94,8 @@ function shuffle(arr, rand) {
 const MODES = ['normal', 'hard', 'hell'];
 
 function newGame(numPlayers, opts) {
-  // opts: { rand, mode } — a bare function is treated as rand (legacy
-  // calls); the Misi 2 boolean `extreme` maps to 'hard' (legacy calls).
+  // opts: { rand, mode, unlimited } — a bare function is treated as rand
+  // (legacy calls); the Misi 2 boolean `extreme` maps to 'hard' (legacy).
   if (typeof opts === 'function') opts = { rand: opts };
   opts = opts || {};
   if (numPlayers < 2 || numPlayers > 8) throw new Error('pemain harus 2-8');
@@ -93,6 +117,14 @@ function newGame(numPlayers, opts) {
     pendingDraw: 0,       // next player draws this many & loses turn
     pendingKind: null,    // 'draw2' | 'wild4' — kind of the pile's current top answer level
     mode,                 // 'normal' | 'hard' | 'hell' (Misi 5)
+    unlimited: !!opts.unlimited, // Misi 10: finish instead of win
+    finished: [],         // Misi 10 unlimited: [{ player, rank, score }]
+    scores: new Array(numPlayers).fill(0), // Misi 10 unlimited: final scores
+    resetUses: 0,         // Misi 10: Reset capped at 2 per game
+    negateUses: 0,        // Misi 10: Negate! capped at 2 per game
+    negateWindow: null,   // Misi 10: { victim } while a UNO! window is open
+    negateSeq: 0,         // Misi 10: window counter (client dismiss tracking)
+    giftPhase: null,      // Misi 10: { victim, caster, pending, given }
     drawnCard: null,      // card drawn this turn (may be played or passed)
     drewThisTurn: false,
     over: null,
@@ -101,16 +133,29 @@ function newGame(numPlayers, opts) {
   return st;
 }
 
+function isFinished(st, idx) {
+  return st.finished.some((f) => f.player === idx);
+}
+
+function activeSeats(st) {
+  const out = [];
+  for (let i = 0; i < st.hands.length; i++) if (!isFinished(st, i)) out.push(i);
+  return out;
+}
+
 function topCard(st) { return st.discard[st.discard.length - 1]; }
 
 // Pile answers by mode (Misi 5):
 // - normal: a +2 pile answers only with +2; a +4 pile has NO answer.
 // - hard/hell: a +2 pile answers with +2 or +4 (escalation); a +4 pile
 //   answers only with +4.
-// The hell specials (Reverse Black / Null White) answer ANY pending pile.
+// The hell specials (Reverse Black / Null White / Reset) answer ANY
+// pending pile. Reset is spent (uses cap) when actually played, so an
+// exhausted Reset is no longer an answer — see playCard.
 function isStackCard(st, card) {
   if (!st.pendingKind) return false;
   if (card.kind === 'reverseBlack' || card.kind === 'nullWhite') return true;
+  if (card.kind === 'reset') return st.resetUses < 2;
   if (st.mode === 'normal') return st.pendingKind === 'draw2' && card.kind === 'draw2';
   if (st.pendingKind === 'draw2') return card.kind === 'draw2' || card.kind === 'wild4';
   return card.kind === 'wild4';
@@ -128,8 +173,11 @@ function stackError(st, card) {
 function canPlay(st, playerIdx, card) {
   if (st.over || st.turn !== playerIdx || st.drewThisTurn) return false;
   if (st.pendingDraw > 0) return isStackCard(st, card);
-  // hell specials are dead cards outside a pending pile
-  if (card.kind === 'reverseBlack' || card.kind === 'nullWhite') return false;
+  // hell specials are dead cards outside a pending pile; Negate! is
+  // never played via canPlay — it only fires inside a UNO! window
+  // (playNegate), so it is dead here in every situation.
+  if (card.kind === 'reverseBlack' || card.kind === 'nullWhite'
+    || card.kind === 'reset' || card.kind === 'negate') return false;
   const top = topCard(st);
   if (card.kind === 'wild' || card.kind === 'wild4') return true;
   if (card.color === st.currentColor) return true;
@@ -146,13 +194,22 @@ function replenish(st) {
 }
 
 function advanceTurn(st, skip) {
+  // Move `skip` ACTIVE seats forward (Misi 10: finished seats are
+  // skipped, so a skip card skips the next player still in the game).
   const n = st.hands.length;
-  st.turn = (((st.turn + st.dir * skip) % n) + n) % n;
+  let steps = skip;
+  while (steps-- > 0) {
+    let guard = 0;
+    do {
+      st.turn = (((st.turn + st.dir) % n) + n) % n;
+    } while (isFinished(st, st.turn) && ++guard <= n);
+  }
 }
 
 function cardPoints(c) {
   if (c.kind === 'number') return c.value;
-  if (c.kind === 'wild' || c.kind === 'wild4' || c.kind === 'reverseBlack' || c.kind === 'nullWhite') return 50;
+  if (c.kind === 'wild' || c.kind === 'wild4' || c.kind === 'reverseBlack' || c.kind === 'nullWhite'
+    || c.kind === 'reset' || c.kind === 'negate') return 50;
   return 20;
 }
 
@@ -167,10 +224,15 @@ function playCard(st, playerIdx, cardId, opts) {
   if (hi < 0) return { ok: false, error: 'kartu tidak ada di tanganmu' };
   const card = hand[hi];
   const stacking = st.pendingDraw > 0;
+  if (card.kind === 'negate') {
+    // Negate! never goes through a normal play — it only fires inside
+    // a UNO! window (playNegate). This keeps its trigger unambiguous.
+    return { ok: false, error: 'negate hanya bisa dipakai saat ada yang teriak Uno!' };
+  }
   if (stacking) {
     // facing a draw pile: only the mode's stack answers (Misi 5) are legal
     if (!isStackCard(st, card)) return { ok: false, error: stackError(st, card) };
-  } else if (card.kind === 'reverseBlack' || card.kind === 'nullWhite') {
+  } else if (card.kind === 'reverseBlack' || card.kind === 'nullWhite' || card.kind === 'reset') {
     return { ok: false, error: 'kartu spesial hanya bisa dipakai melawan tumpukan' };
   } else if (!canPlay(st, playerIdx, card)) {
     return { ok: false, error: 'kartu tidak cocok' };
@@ -203,6 +265,41 @@ function playCard(st, playerIdx, cardId, opts) {
     events.push({ type: 'nullify', player: playerIdx, nulled, affected });
   }
 
+  if (card.kind === 'reset') {
+    // Reset (Misi 10, hell): the pile vanishes and EVERYTHING is
+    // reshuffled — deck + all hands + discard — then each player still
+    // in the game draws 7 fresh cards, a new starter is flipped, and
+    // the caster moves first. Resolved BEFORE any UNO/win check:
+    // playing Reset as your last card is NOT a win.
+    st.pendingDraw = 0;
+    st.pendingKind = null;
+    st.resetUses++;
+    const held = st.hands.map((h) => h.length);
+    const pool = [...st.deck, ...st.discard];
+    for (const h of st.hands) pool.push(...h.splice(0, h.length));
+    st.deck = shuffle(pool);
+    st.discard = [];
+    for (let p = 0; p < st.hands.length; p++) {
+      // only seats still in the game redraw: finished seats
+      // (unlimited) and emptied inactive seats stay out.
+      if (p !== playerIdx && held[p] === 0) continue;
+      for (let i = 0; i < 7 && st.deck.length; i++) st.hands[p].push(st.deck.pop());
+    }
+    let starter;
+    for (;;) {
+      const c = st.deck.pop();
+      if (c.kind === 'number') { starter = c; break; }
+      st.deck.unshift(c);
+    }
+    st.discard = [starter];
+    st.currentColor = starter.color;
+    st.turn = playerIdx;
+    st.drewThisTurn = false;
+    st.drawnCard = null;
+    events.push({ type: 'reset', player: playerIdx });
+    return { ok: true, penalty: 0, events };
+  }
+
   // UNO penalty: forgot to declare with 1 card left
   let penalty = 0;
   if (hand.length === 1 && !opts.saidUno) {
@@ -210,12 +307,42 @@ function playCard(st, playerIdx, cardId, opts) {
     replenish(st);
     for (let i = 0; i < 2 && st.deck.length; i++) hand.push(st.deck.pop());
   }
-  if (hand.length === 1) events.push({ type: 'uno', player: playerIdx });
+  if (hand.length === 1) {
+    events.push({ type: 'uno', player: playerIdx });
+    // Misi 10: every UNO! shout opens a Negate! window (the server
+    // pauses turns and runs the 5-second clock; see the header note).
+    st.negateWindow = { victim: playerIdx };
+    st.negateSeq++;
+  }
 
   // win?
+  let finishedInfo = null;
   if (hand.length === 0) {
-    st.over = { winner: playerIdx, reason: 'habis' };
-    return { ok: true, won: true, penalty, events };
+    if (st.unlimited) {
+      // Misi 10: finishing does NOT end the game — the finisher banks
+      // opponents' remaining cards + a rank bonus, then leaves the
+      // rotation. The last player left is the loser (score 0).
+      const rank = st.finished.length + 1;
+      let pts = 0;
+      st.hands.forEach((h, i) => {
+        if (i !== playerIdx && !isFinished(st, i)) for (const c of h) pts += cardPoints(c);
+      });
+      pts += Math.max(0, 350 - (rank - 1) * 50);
+      st.scores[playerIdx] = pts;
+      st.finished.push({ player: playerIdx, rank, score: pts });
+      finishedInfo = { player: playerIdx, rank, score: pts };
+      events.push({ type: 'finish', player: playerIdx, rank, score: pts });
+      const left = activeSeats(st);
+      if (left.length <= 1) {
+        st.over = { winner: st.finished[0].player, loser: left[0] ?? -1, reason: 'unlimited' };
+        return { ok: true, finished: finishedInfo, gameOver: true, penalty, events };
+      }
+      // game continues: the finishing card's effects still apply, then
+      // the turn moves on (advanceTurn skips finished seats below).
+    } else {
+      st.over = { winner: playerIdx, reason: 'habis' };
+      return { ok: true, won: true, penalty, events };
+    }
   }
 
   // action effects
@@ -239,7 +366,7 @@ function playCard(st, playerIdx, cardId, opts) {
     if (stacking) events.push({ type: 'stack', player: playerIdx, total: st.pendingDraw });
   }
   advanceTurn(st, skip);
-  return { ok: true, penalty, events };
+  return { ok: true, penalty, events, finished: finishedInfo };
 }
 
 // Draw 1 card. If pendingDraw > 0, draws the penalty pile and loses turn.
@@ -267,7 +394,8 @@ function drawCard(st, playerIdx) {
 
 function canPlayAfterDraw(st, playerIdx, card) {
   const top = topCard(st);
-  if (card.kind === 'reverseBlack' || card.kind === 'nullWhite') return false; // pile-only specials
+  if (card.kind === 'reverseBlack' || card.kind === 'nullWhite'
+    || card.kind === 'reset' || card.kind === 'negate') return false; // pile/window-only specials
   if (card.kind === 'wild' || card.kind === 'wild4') return true;
   if (card.color === st.currentColor) return true;
   if (card.kind === 'number' && top.kind === 'number' && card.value === top.value) return true;
@@ -298,9 +426,109 @@ function playDrawnCard(st, playerIdx, cardId, opts) {
   return r;
 }
 
+// ---------- Misi 10: Negate! window + gift phase ----------
+// Play a Negate! card during an open UNO! window. The holder must hold
+// 2+ cards (Negate can never be your last card) and the game must have
+// Negate uses left. Opens the parallel gift phase: every other ACTIVE
+// player owes the victim 1 card (the victim never gives).
+function playNegate(st, playerIdx, cardId) {
+  if (st.over) return { ok: false, error: 'ronde sudah selesai' };
+  if (!st.negateWindow) return { ok: false, error: 'tidak ada jendela negate' };
+  if (st.negateUses >= 2) return { ok: false, error: 'jatah negate habis' };
+  const hand = st.hands[playerIdx];
+  const hi = hand.findIndex((c) => c.id === cardId);
+  if (hi < 0) return { ok: false, error: 'kartu tidak ada di tanganmu' };
+  const card = hand[hi];
+  if (card.kind !== 'negate') return { ok: false, error: 'bukan kartu negate' };
+  if (hand.length < 2) return { ok: false, error: 'negate butuh minimal 2 kartu di tangan' };
+  hand.splice(hi, 1);
+  st.discard.push(card);
+  st.negateUses++;
+  const victim = st.negateWindow.victim;
+  st.negateWindow = null;
+  st.giftPhase = {
+    victim,
+    caster: playerIdx,
+    pending: activeSeats(st).filter((s) => s !== victim),
+    given: [],
+  };
+  return { ok: true, events: [{ type: 'negate', player: playerIdx, victim }] };
+}
+
+// Give 1 card to the victim during an open gift phase. When the last
+// pending giver submits, the phase resolves at once: the victim gains
+// the gifted cards, then draws +2, and the game unpauses.
+function giveCard(st, playerIdx, cardId) {
+  if (st.over) return { ok: false, error: 'ronde sudah selesai' };
+  const gp = st.giftPhase;
+  if (!gp) return { ok: false, error: 'tidak ada fase hadiah negate' };
+  if (!gp.pending.includes(playerIdx)) return { ok: false, error: 'kamu tidak perlu memberi kartu' };
+  const hand = st.hands[playerIdx];
+  const hi = hand.findIndex((c) => c.id === cardId);
+  if (hi < 0) return { ok: false, error: 'kartu tidak ada di tanganmu' };
+  const card = hand.splice(hi, 1)[0];
+  gp.given.push({ from: playerIdx, card });
+  gp.pending = gp.pending.filter((s) => s !== playerIdx);
+  const events = [{ type: 'gifted', player: playerIdx, victim: gp.victim }];
+  if (gp.pending.length === 0) events.push(...resolveGift(st));
+  return { ok: true, events };
+}
+
+// Move gifted cards to the victim, then the victim draws +2. Shared by
+// giveCard (last giver) and resolveGiftTimeout (clock expiry).
+function resolveGift(st) {
+  const gp = st.giftPhase;
+  if (!gp) return [];
+  for (const g of gp.given) st.hands[gp.victim].push(g.card);
+  const n = gp.given.length;
+  st.giftPhase = null;
+  replenish(st);
+  for (let i = 0; i < 2 && st.deck.length; i++) st.hands[gp.victim].push(st.deck.pop());
+  return [{ type: 'negateResolved', player: gp.caster, victim: gp.victim, given: n, drawn: 2 }];
+}
+
+// Gift-phase clock expiry: every pending giver auto-gives their lowest
+// card (ties: first in hand), then the phase resolves as usual.
+function resolveGiftTimeout(st) {
+  const gp = st.giftPhase;
+  if (!gp) return { ok: false, events: [] };
+  for (const seat of [...gp.pending]) {
+    const hand = st.hands[seat];
+    if (!hand.length) continue;
+    let low = hand[0];
+    for (const c of hand) if (cardPoints(c) < cardPoints(low)) low = c;
+    gp.given.push({ from: seat, card: low });
+    st.hands[seat] = hand.filter((c) => c.id !== low.id);
+  }
+  gp.pending = [];
+  return { ok: true, events: resolveGift(st) };
+}
+
+// UNO! window clock expiry: nobody negated — the game simply continues.
+function closeNegateWindow(st) {
+  if (!st.negateWindow) return false;
+  st.negateWindow = null;
+  return true;
+}
+
+// Cancel an open gift phase (used when the phase can no longer complete,
+// e.g. the victim leaves): gifted cards return to their owners.
+function cancelGiftPhase(st) {
+  const gp = st.giftPhase;
+  if (!gp) return;
+  for (const g of gp.given) st.hands[g.from].push(g.card);
+  st.giftPhase = null;
+}
+
 // Score a finished round into the scores array. Returns points gained by winner.
+// Unlimited games already banked their scores at finish time (st.scores),
+// so this just distributes those instead of winner-takes-all.
 function scoreRound(st, scores) {
   if (!st.over) return 0;
+  if (st.unlimited) {
+    st.scores.forEach((s, i) => { scores[i] += s; });
+    return st.finished.length ? st.scores[st.finished[0].player] : 0;
+  }
   let pts = 0;
   st.hands.forEach((hand, i) => {
     if (i !== st.over.winner) for (const c of hand) pts += cardPoints(c);
@@ -334,10 +562,26 @@ function toClient(st, playerIdx) {
     over: st.over,
     round: st.round,
     numPlayers: st.hands.length,
+    // Misi 10 (client reads only its own eligibility — never others'):
+    unlimited: !!st.unlimited,
+    finished: st.finished || [],
+    scores: st.scores || [],
+    negateWindow: st.negateWindow ? { victim: st.negateWindow.victim } : null,
+    negateSeq: st.negateSeq || 0,
+    canNegate: !!st.negateWindow && st.negateUses < 2 && hand.length >= 2
+      && hand.some((c) => c.kind === 'negate'),
+    giftPhase: st.giftPhase ? {
+      victim: st.giftPhase.victim,
+      caster: st.giftPhase.caster,
+      pending: [...st.giftPhase.pending],
+      amPending: st.giftPhase.pending.includes(playerIdx),
+    } : null,
   };
 }
 
 module.exports = {
   COLORS, MODES, buildDeck, shuffle, newGame, canPlay, isStackCard, playCard, drawCard,
   passTurn, playDrawnCard, scoreRound, cardPoints, toClient, topCard,
+  playNegate, giveCard, resolveGiftTimeout, closeNegateWindow, cancelGiftPhase,
+  isFinished, activeSeats,
 };

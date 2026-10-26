@@ -12,22 +12,26 @@ function rng(seed) {
   };
 }
 
-test('deck berisi 108 kartu standar', () => {
+test('deck berisi 133 kartu (5 warna, ungu 1 set)', () => {
   const d = U.buildDeck();
-  assert.equal(d.length, 108);
+  assert.equal(d.length, 133);
   const wilds = d.filter((c) => c.kind === 'wild').length;
   const wild4s = d.filter((c) => c.kind === 'wild4').length;
   assert.equal(wilds, 4);
   assert.equal(wild4s, 4);
+  const purple = d.filter((c) => c.color === 'purple');
+  assert.equal(purple.length, 25);
+  assert.equal(purple.filter((c) => c.kind === 'number' && c.value === 0).length, 1);
+  assert.equal(purple.filter((c) => c.kind === 'draw2').length, 2);
   const ids = new Set(d.map((c) => c.id));
-  assert.equal(ids.size, 108);
+  assert.equal(ids.size, 133);
 });
 
 test('newGame: 7 kartu per pemain, starter kartu angka', () => {
   const st = U.newGame(4, rng(42));
   assert.equal(st.hands.length, 4);
   for (const h of st.hands) assert.equal(h.length, 7);
-  assert.equal(st.deck.length, 108 - 28 - 1);
+  assert.equal(st.deck.length, 133 - 28 - 1);
   assert.equal(U.topCard(st).kind, 'number');
   assert.equal(st.turn, 0);
 });
@@ -53,6 +57,21 @@ test('canPlay: cocok warna / angka / simbol / wild', () => {
   assert.equal(U.canPlay(st, 0, st.hands[0][2]), false);
   assert.equal(U.canPlay(st, 0, st.hands[0][3]), true);
   assert.equal(U.canPlay(st, 1, st.hands[0][0]), false, 'bukan giliran');
+});
+
+test('warna ungu: cocok warna, bisa dipilih dari wild', () => {
+  const st = U.newGame(2, rng(7));
+  st.discard = [{ id: 't', color: 'purple', kind: 'number', value: 5 }];
+  st.currentColor = 'purple';
+  const purple9 = { id: 'p', color: 'purple', kind: 'number', value: 9 };
+  const blue3 = { id: 'b', color: 'blue', kind: 'number', value: 3 };
+  const wild = { id: 'w', color: null, kind: 'wild', value: null };
+  st.hands[0] = [purple9, blue3, wild];
+  assert.equal(U.canPlay(st, 0, purple9), true);
+  assert.equal(U.canPlay(st, 0, blue3), false);
+  const r = U.playCard(st, 0, 'w', { saidUno: true, wildColor: 'purple' });
+  assert.equal(r.ok, true);
+  assert.equal(st.currentColor, 'purple');
 });
 
 test('kartu aksi cocok berdasarkan simbol', () => {

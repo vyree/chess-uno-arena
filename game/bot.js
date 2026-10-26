@@ -13,7 +13,7 @@ const BOT_NAMES = [
 
 // Color the bot wants when playing a wild: its most-held color.
 function chooseWildColor(st, idx) {
-  const counts = { red: 0, yellow: 0, green: 0, blue: 0 };
+  const counts = { red: 0, yellow: 0, green: 0, blue: 0, purple: 0 };
   for (const c of st.hands[idx]) if (c.color) counts[c.color]++;
   let best = 'red';
   for (const col of uno.COLORS) if (counts[col] > counts[best]) best = col;
@@ -32,10 +32,11 @@ function nextSeat(st, idx) {
 function chooseCard(st, idx, playable) {
   if (st.pendingDraw > 0) {
     // Pile answers (Misi 5): stack first — it grows the pile for the next
-    // victim. Bounce a big pile back with Reverse Black; Null White only
-    // for a huge pile (it taxes everyone, bot included). Below those
-    // thresholds the bot keeps its specials: return null and takeTurn
-    // takes the pile instead.
+    // victim. Bounce a big pile back with Reverse Black; Reset a huge
+    // pile instead of taking it (fresh hand beats a 6+ tax); Null White
+    // only for a huge pile when no Reset is held (it taxes everyone,
+    // bot included). Below those thresholds the bot keeps its specials:
+    // return null and takeTurn takes the pile instead.
     const stack = playable.find((c) => c.kind === 'draw2' || c.kind === 'wild4');
     if (stack) return stack;
     if (st.pendingDraw >= 4) {
@@ -43,10 +44,12 @@ function chooseCard(st, idx, playable) {
       if (rb) return rb;
     }
     if (st.pendingDraw >= 6) {
+      const rs = playable.find((c) => c.kind === 'reset');
+      if (rs) return rs;
       const nw = playable.find((c) => c.kind === 'nullWhite');
       if (nw) return nw;
     }
-    if (playable.some((c) => c.kind === 'reverseBlack' || c.kind === 'nullWhite')) return null;
+    if (playable.some((c) => c.kind === 'reverseBlack' || c.kind === 'nullWhite' || c.kind === 'reset')) return null;
   }
   if (playable.length === 1) return playable[0];
   const isWild = (c) => c.kind === 'wild' || c.kind === 'wild4';
@@ -125,5 +128,12 @@ function pickTruthAnswer(rand) {
   return TRUTH_FAKE_ANSWERS[Math.floor(r() * TRUTH_FAKE_ANSWERS.length)];
 }
 
-module.exports = { BOT_NAMES, takeTurn, chooseCard, chooseWildColor,
+// Lowest-value card in a hand (Misi 10: what bots gift in a Negate!
+// gift phase, and what the clock auto-picks on timeout). Ties: first.
+function lowestCard(hand) {
+  if (!hand.length) return null;
+  return hand.reduce((a, b) => (uno.cardPoints(b) < uno.cardPoints(a) ? b : a));
+}
+
+module.exports = { BOT_NAMES, takeTurn, chooseCard, chooseWildColor, lowestCard,
   TRUTH_FAKE_ANSWERS, pickTruthAnswer };

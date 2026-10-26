@@ -36,7 +36,7 @@ test('8 pemain: 7 kartu each, deck cukup', () => {
   const st = U.newGame(8, rng(5));
   assert.equal(st.hands.length, 8);
   for (const h of st.hands) assert.equal(h.length, 7);
-  assert.equal(st.deck.length, 108 - 56 - 1);
+  assert.equal(st.deck.length, 133 - 56 - 1);
 });
 
 test('+2 memulai tumpukan: pendingKind tercatat, giliran maju', () => {
@@ -186,16 +186,19 @@ test('simulasi 6 pemain dengan stacking: game selesai, invariant pending terjaga
 const rb = (id) => ({ id, color: null, kind: 'reverseBlack', value: null });
 const nw = (id) => ({ id, color: null, kind: 'nullWhite', value: null });
 
-test('deck hell = 128: +2 x16, +4 x8, reverseBlack x4, nullWhite x4 (mode lain 108)', () => {
+test('deck hell = 159: +2 x20, +4 x8, reverseBlack x4, nullWhite x4, reset x2, negate x2 (mode lain 133)', () => {
   const count = (deck, k) => deck.filter((c) => c.kind === k).length;
   const hell = U.buildDeck('hell');
-  assert.equal(hell.length, 128);
-  assert.equal(count(hell, 'draw2'), 16);
+  assert.equal(hell.length, 159);
+  assert.equal(count(hell, 'draw2'), 20);
   assert.equal(count(hell, 'wild4'), 8);
   assert.equal(count(hell, 'reverseBlack'), 4);
   assert.equal(count(hell, 'nullWhite'), 4);
-  assert.equal(U.buildDeck('normal').length, 108);
-  assert.equal(U.buildDeck('hard').length, 108);
+  assert.equal(count(hell, 'reset'), 2);
+  assert.equal(count(hell, 'negate'), 2);
+  assert.equal(hell.filter((c) => c.color === 'purple').length, 27);
+  assert.equal(U.buildDeck('normal').length, 133);
+  assert.equal(U.buildDeck('hard').length, 133);
   assert.equal(count(U.buildDeck('normal'), 'reverseBlack'), 0);
 });
 

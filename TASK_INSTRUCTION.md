@@ -901,3 +901,68 @@ keputusan); tes takeover UNO distabilkan (rejoin 1700ms — di atas
 2,1 detik ronde sah bisa berakhir lebih dulu); screenshot Chrome:
 18-spectate.png (badge menonton + papan live), 19-decision-panel.png
 (panel + roster + hitung mundur), 20-back-to-lobby.png.
+
+## MISI 10 — UNO Unlimited + Kartu Reset + Negate! (Sensei, 23 Okt 2026 — SPEK TERKUNCI, PARKIR)
+
+**Perintah Sensei (23 Okt 2026 ±10:42 WIB): "catat dulu dan parkirkan dulu
+yaa.. nanti kita bahas lain kali" — spek ini hanya DICATAT; jangan dibangun
+sampai Sensei membuka lagi diskusinya.**
+
+### Toggle Unlimited (panel room UNO, berlaku di semua level: Normal / Hard / Hell)
+- Game TIDAK berakhir saat pemain pertama habis — pemain yang finis
+  dikeluarkan dari permainan, game berlanjut sampai tersisa tepat 1 pemain
+  yang kalah.
+- Bonus peringkat: 1st +350, 2nd +300, berkurang 50 per peringkat di
+  bawahnya (3rd +250, 4th +200, ...).
+- Skor finisher = nilai kartu sisa semua lawan pada momen ia finis +
+  bonus peringkat; pemain terakhir (yang kalah) = 0.
+
+### Kartu Reset (Hell saja, x2 — deck Hell bertambah 128 -> 132)
+- Kartu putih berlogo tombol power.
+- Hanya bisa diaktifkan saat terkena stack ala +2/+4.
+- Efek: stack dibatalkan (nol), SEMUA tangan pemain dikumpulkan kembali
+  ke deck, di-shuffle (dengan animasi), semua pemain menggambar ulang
+  7 kartu; tangan 0 saat pengumpulan BUKAN kemenangan.
+- Reset total termasuk discard pile ikut di-shuffle, kartu pembuka baru
+  di-flip, pengaktif jalan duluan.
+- Uncounterable; 2 kopi, maks 2 kali pakai per game.
+
+### Kartu Negate! (Hell saja, x2 — deck Hell bertambah 128 -> 132)
+- Kartu hitam berlogo.
+- Hanya bisa diaktifkan saat ada yang teriak "Uno!" dengan sisa 1 kartu.
+- Efek: Uno dibatalkan; setiap pemain lain memilih 1 kartu untuk
+  diberikan ke korban (pemain yang kartunya tinggal 1 dikecualikan dari
+  memberi); lalu korban menggambar +2 lagi.
+- Setiap ada yang teriak "Uno!", dialog "tunggu respon.." muncul di
+  SEMUA pemain selama 5 detik agar pemegangnya tetap tersembunyi;
+  pemegang Negate dapat dialog "pakai atau tidak" — siapa cepat dia
+  dapat; lewat 5 detik tanpa respons -> permainan lanjut.
+- Fase memilih kartu: maks 10 detik; timeout -> sistem memilih kartu
+  bernilai terendah otomatis.
+- Tidak bisa dimainkan sebagai kartu terakhir (syarat tangan pemegang
+  >=2); uncounterable; 2 kopi, maks 2 kali pakai per game.
+- Bot otomatis memakai Negate dan memberikan kartu terendah.
+
+Catatan tafsir (sudah dikonfirmasi Sensei): saat membahas jendela Uno!,
+Sensei menulis "kartu reset" — yang dimaksud adalah Negate (salah ketik,
+sudah dikonfirmasi Sensei).
+
+**Status: DIBANGUN 26 Okt 2026 atas perintah Sensei ("tambahkan misi 10,
+build skrg") — LOKAL, BELUM deploy/push (deploy masih DITAHAN).**
+
+### Catatan build (26 Okt 2026 — adaptasi dari spek, dicatat agar tidak hilang)
+- Baseline deck berubah karena kartu ungu (26 Okt 2026): Hell 155, bukan
+  128 — jadi Hell dengan Misi 10 = **159** (bukan 132). Normal/Hard tetap
+  133 (Reset/Negate hanya ada di Hell).
+- Jam milik server, bukan engine (pola yang sama seperti driver Truth):
+  engine hanya MENCATAT jendela/hadiah; server menghentikan giliran dan
+  menjalankan timer 5 detik (jendela) / 10 detik (hadiah). Timeout adalah
+  jaring pengaman semua edge (disconnect, kursi takeover, klik terlewat).
+- Fase hadiah berjalan PARALEL: semua pemberi memilih dalam satu jendela
+  10 detik yang sama; timeout memilihkan kartu terendah per pemberi.
+- Reset mengocok ulang hanya untuk kursi yang masih aktif: kursi finis
+  (Unlimited) dan kursi nonaktif yang dikosongkan tetap keluar.
+- Bot: Negate otomatis dipakai saat jendela terbuka; hadiah bot = kartu
+  terendah; Reset dipakai bot saat tumpukan >= 6 tanpa jawaban stack.
+- Keluar saat jendela/hadiah berjalan: jendela ditutup / hadiah
+  dibatalkan (kartu kembali ke pemilik), timer giliran dimulai ulang.

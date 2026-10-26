@@ -68,7 +68,7 @@ function validMode(d) {
 
 function validColor(c) {
   if (c === undefined || c === null) return { ok: true, value: undefined };
-  if (!['red', 'yellow', 'green', 'blue'].includes(c)) {
+  if (!['red', 'yellow', 'green', 'blue', 'purple'].includes(c)) {
     return { ok: false, error: 'warna tidak valid' };
   }
   return { ok: true, value: c };

@@ -18,7 +18,7 @@ const PIECES = {
   wk: '♔', wq: '♕', wr: '♖', wb: '♗', wn: '♘', wp: '♙',
   bk: '♚', bq: '♛', br: '♜', bb: '♝', bn: '♞', bp: '♟',
 };
-const UNO_LABEL = { skip: '⊘', reverse: '⇄', draw2: '+2', wild: 'W', wild4: '+4', reverseBlack: '⇄', nullWhite: '✕' };
+const UNO_LABEL = { skip: '⊘', reverse: '⇄', draw2: '+2', wild: 'W', wild4: '+4', reverseBlack: '⇄', nullWhite: '✕', reset: '⏻', negate: '≠' };
 
 const $ = (id) => document.getElementById(id);
 
@@ -379,6 +379,7 @@ function onLobby(m) {
   $('lobby-extreme-row').classList.toggle('hidden', m.game !== 'uno');
   if (m.game === 'uno') {
     $('lobby-mode').disabled = !isHost;
+    $('lobby-unlimited').disabled = !isHost;
     $('lobby-extreme-note').classList.toggle('hidden', isHost);
   }
   // Truth only: the host's Set Aturan panel (Sensei's spec, 2026-10-22)
@@ -513,7 +514,7 @@ function onChessLegal(m) {
 }
 
 // ---------- uno ----------
-const UNO_COLORS = { red: 'Merah 🔴', yellow: 'Kuning 🟡', green: 'Hijau 🟢', blue: 'Biru 🔵' };
+const UNO_COLORS = { red: 'Merah 🔴', yellow: 'Kuning 🟡', green: 'Hijau 🟢', blue: 'Biru 🔵', purple: 'Ungu 🟣' };
 
 function cardLabel(c) {
   if (c.kind === 'number') return String(c.value);
@@ -523,6 +524,8 @@ function cardClass(c) {
   if (c.kind === 'wild' || c.kind === 'wild4') return 'wild';
   if (c.kind === 'reverseBlack') return 'blackrev';
   if (c.kind === 'nullWhite') return 'nullwhite';
+  if (c.kind === 'reset') return 'reset';
+  if (c.kind === 'negate') return 'negate';
   return c.color || '';
 }
 
@@ -558,6 +561,12 @@ function renderUno(m) {
   const botThinking = !st.over && !isMyTurn && turnPlayer && (turnPlayer.isBot || turnPlayer.takenOver);
   if (spectating && !st.over) status = `👀 Menonton — giliran ${turnPlayer ? turnPlayer.nickname : ''}`;
   else if (st.over) status = 'Ronde selesai!';
+  else if (st.giftPhase) status = st.giftPhase.amPending
+    ? '🎁 Pilih 1 kartu untuk diberikan ke korban! (maks 10 detik)'
+    : '🎁 Menunggu hadiah Negate…';
+  else if (st.negateWindow) status = st.canNegate
+    ? '≠ Kamu pegang Negate! Pakai atau lewati (5 detik)'
+    : '⏳ Tunggu respons Negate… (5 detik)';
   else if (st.pendingDraw > 0 && isMyTurn) status = `Kamu kena +${st.pendingDraw}! Ambil kartunya`;
   else if (isMyTurn) status = st.drewThisTurn ? 'Kartu diambil — mainkan atau lewati' : 'Giliranmu!';
   else if (botThinking) status = `${turnPlayer.nickname} is thinking`;
@@ -577,8 +586,12 @@ function renderUno(m) {
   dirEl.classList.toggle('ccw', st.dir === -1);
   dirEl.title = st.dir === -1 ? 'Arah: berlawanan jarum jam' : 'Arah: searah jarum jam';
   const modeBadge = $('uno-mode-badge');
-  modeBadge.classList.toggle('hidden', !st.mode || st.mode === 'normal');
-  modeBadge.textContent = st.mode === 'hell' ? '🔥 HELL' : 'HARD';
+  const badgeParts = [];
+  if (st.mode === 'hell') badgeParts.push('🔥 HELL');
+  else if (st.mode === 'hard') badgeParts.push('HARD');
+  if (st.unlimited) badgeParts.push('∞ UNLIMITED');
+  modeBadge.classList.toggle('hidden', badgeParts.length === 0);
+  modeBadge.textContent = badgeParts.join(' · ');
 
   // hand
   const hand = $('uno-hand');
@@ -590,7 +603,9 @@ function renderUno(m) {
   }
   myHand.forEach((c, i) => {
     const el = document.createElement('div');
-    el.className = 'uno-card ' + cardClass(c) + (st.playable && st.playable[i] ? ' playable' : '');
+    el.className = 'uno-card ' + cardClass(c)
+      + (st.playable && st.playable[i] ? ' playable' : '')
+      + (st.giftPhase && st.giftPhase.amPending ? ' giftable' : '');
     el.innerHTML = cardHTML(c);
     el.onclick = () => onUnoCardClick(c);
     hand.appendChild(el);
@@ -601,20 +616,50 @@ function renderUno(m) {
   $('btn-uno-say').classList.toggle('armed', S.saidUnoArmed);
   $('btn-uno-say').classList.toggle('hidden', spectating);
   $('btn-uno-pass').classList.toggle('hidden', !(isMyTurn && st.drewThisTurn));
+
+  // Misi 10: Negate! dialogs. Holders get a use-or-skip modal (a
+  // dismissed window is never re-shown: negateSeq identifies windows);
+  // everyone else gets one toast per window + the status line above.
+  // (onGameState hides modals first, so showing here is safe.)
+  if (!spectating && !st.over && st.negateWindow) {
+    const victim = m.players[st.negateWindow.victim];
+    if (st.canNegate && S.negateDismissed !== st.negateSeq) {
+      showModal('Ada yang teriak UNO!', `<p>${victim ? victim.nickname : 'Seseorang'} tinggal 1 kartu! Kamu pegang <strong>Negate!</strong> — batalkan UNO-nya?</p><p class="muted">Jendela ini hanya 5 detik. Siapa cepat dia dapat.</p>`, [
+        { label: '≠ Pakai Negate!', cls: 'primary', onClick: () => {
+          const c = myHand.find((x) => x.kind === 'negate');
+          if (c) send('uno_negate', { cardId: c.id });
+        } },
+        { label: 'Lewati', cls: 'ghost', onClick: () => { S.negateDismissed = st.negateSeq; } },
+      ]);
+    } else if (!st.canNegate && S.negateToasted !== st.negateSeq) {
+      S.negateToasted = st.negateSeq;
+      toast('⏳ Tunggu respons Negate… (5 detik)');
+    }
+  }
 }
 
 function colorHex(c) {
-  return { red: '#d92323', yellow: '#e69c00', green: '#159947', blue: '#2266b8' }[c] || '#999';
+  return { red: '#d92323', yellow: '#e69c00', green: '#159947', blue: '#2266b8', purple: '#7b2fbe' }[c] || '#999';
 }
 
 function onUnoCardClick(card) {
+  // Misi 10 phases route clicks before normal play:
+  const st = S.uno;
+  if (st && st.giftPhase) {
+    if (st.giftPhase.amPending) send('uno_gift', { cardId: card.id });
+    return;
+  }
+  if (st && st.negateWindow) {
+    if (st.canNegate && card.kind === 'negate') send('uno_negate', { cardId: card.id });
+    return;
+  }
   const doPlay = (wildColor) => {
     send('uno_play', { cardId: card.id, saidUno: S.saidUnoArmed, wildColor });
     S.saidUnoArmed = false;
   };
   if (card.kind === 'wild' || card.kind === 'wild4' || card.kind === 'nullWhite') {
     showModal('Pilih warna…', '<div class="color-pick">' +
-      ['red', 'yellow', 'green', 'blue'].map((c) =>
+      ['red', 'yellow', 'green', 'blue', 'purple'].map((c) =>
         `<button data-c="${c}" style="background:${colorHex(c)}" title="${c}"></button>`).join('') +
       '</div>', [{ label: 'Batal', cls: 'ghost' }]);
     document.querySelectorAll('.color-pick button').forEach((b) => {
@@ -657,6 +702,14 @@ function renderUnoRing(m, mySeat) {
       b.className = 'uno-badge';
       b.textContent = 'UNO!';
       chip.appendChild(b);
+    }
+    const fin = (st.finished || []).find((f) => f.player === seat);
+    if (fin) {
+      const b = document.createElement('span');
+      b.className = 'uno-badge finished';
+      b.textContent = `FINIS #${fin.rank}`;
+      chip.appendChild(b);
+      chip.classList.add('finished');
     }
     ring.appendChild(chip);
   }
@@ -807,6 +860,18 @@ function handleUnoEvents(events) {
       }
     } else if (ev.type === 'uno') {
       sfx('uno');
+    } else if (ev.type === 'finish') {
+      sfx('win');
+      unoFlash(`🏁 FINIS #${ev.rank}! +${ev.score}`);
+    } else if (ev.type === 'reset') {
+      sfx('penalty');
+      unoFlash('⏻ RESET! Semua kartu dikocok ulang');
+    } else if (ev.type === 'negate') {
+      sfx('penalty');
+      unoFlash('≠ NEGATE! Uno dibatalkan');
+    } else if (ev.type === 'negateResolved') {
+      sfx('penalty');
+      unoFlash(`🎁 Korban +${ev.given} kartu & +${ev.drawn}`);
     }
   }
 }
@@ -816,6 +881,7 @@ const REASONS_ID = {
   checkmate: 'Skakmat!', stalemate: 'Remis — stalemate', fifty: 'Remis — aturan 50 langkah',
   repetition: 'Remis — repetisi 3x', timeout: 'Waktu habis ⏱️', resign: 'Menyerah 🏳️',
   forfeit: 'Lawan keluar dari permainan', habis: 'Kartu habis! 🎉', semua_keluar: 'Semua lawan keluar',
+  unlimited: 'Unlimited selesai! Satu pemain tersisa 🏁',
 };
 
 // ---------- Misi 9: decision panel ----------
@@ -907,6 +973,12 @@ function onGameOver(m) {
   let body = `<p style="font-size:18px">${reason}</p>`;
   if (m.winnerNickname) body += `<p>🏆 Pemenang: <strong>${m.winnerNickname}</strong></p>`;
   else body += '<p>🤝 Seri!</p>';
+  if (m.finished && m.finished.length) {
+    body += '<p><strong>🏁 Peringkat finis:</strong></p><table class="score-table">'
+      + m.finished.map((f) => `<tr><td>#${f.rank} ${f.nickname}</td><td><strong>${f.points}</strong></td></tr>`).join('')
+      + '</table>';
+  }
+  if (m.loserNickname) body += `<p>😢 Terakhir (kalah, 0 poin): <strong>${m.loserNickname}</strong></p>`;
   if (m.points) body += `<p>+${m.points} poin!</p>`;
   if (m.note) body += `<p class="muted">${m.note}</p>`;
   if (m.scores && m.scores.length) {
@@ -1447,6 +1519,7 @@ document.addEventListener('DOMContentLoaded', () => {
     send('create_bot_room', {
       size: parseInt($('bot-size').value, 10),
       mode: $('bot-mode').value,
+      unlimited: $('bot-unlimited').checked,
     });
   };
   $('btn-join').onclick = () => {
@@ -1462,6 +1535,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   $('btn-start').onclick = () => send('start_game', {
     mode: S.game === 'uno' ? $('lobby-mode').value : 'normal',
+    unlimited: S.game === 'uno' ? $('lobby-unlimited').checked : false,
   });
   const btnSound = $('btn-sound');
   btnSound.textContent = soundOn ? '🔊' : '🔇';

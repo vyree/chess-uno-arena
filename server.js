@@ -94,6 +94,7 @@ const REASONS = {
   repetition: 'Remis — repetisi 3x', timeout: 'Waktu habis', resign: 'Menyerah',
   forfeit: 'Lawan keluar dari permainan', habis: 'Kartu habis!',
   semua_keluar: 'Semua lawan keluar',
+  unlimited: 'Game Unlimited selesai — satu pemain tersisa!',
 };
 
 function lobbySnapshot(room, forPlayer) {
@@ -136,6 +137,8 @@ function gameSnapshot(room, player) {
     const u = room.uno;
     base.state = uno.toClient(u.st, player.seat);
     base.round = u.round;
+    base.negateEndsAt = room.negateEndsAt || null;
+    base.giftEndsAt = room.giftEndsAt || null;
     base.scores = room.players
       .filter((p) => p.active !== false)
       .map((p) => ({ nickname: dispName(p), points: room.scoreBoard[p.id] || 0 }));
@@ -188,6 +191,17 @@ function gameOverPayload(room, result) {
     payload.scores = room.players
       .filter((p) => p.active !== false)
       .map((p) => ({ nickname: dispName(p), points: room.scoreBoard[p.id] || 0 }));
+    // Misi 10 unlimited: the ranking is the story — first finisher is
+    // the winner, the last player left is the loser (0 points).
+    if (result.reason === 'unlimited' && room.uno) {
+      payload.loserSeat = result.loser;
+      const l = room.players[result.loser];
+      payload.loserNickname = l ? dispName(l) : null;
+      payload.finished = room.uno.st.finished.map((f) => {
+        const fp = room.players[f.player];
+        return { nickname: fp ? dispName(fp) : '?', rank: f.rank, points: f.score };
+      });
+    }
   }
   return payload;
 }
@@ -217,6 +231,7 @@ function onTurnTimeout(room) {
   } else {
     const u = room.uno;
     if (!u || u.st.over) return;
+    if (u.st.negateWindow || u.st.giftPhase) return; // Misi 10: turn timer is paused during window phases
     const seat = u.st.turn;
     if (!u.active[seat]) { unoFixTurn(room); startTurnTimer(room); sendGameState(room); scheduleBotIfNeeded(room); return; }
     if (u.st.pendingDraw > 0) {
@@ -266,6 +281,14 @@ function forfeitPlayer(room, playerId, keepIdentity = false) {
     if (rooms.get(room.code)) sendGameState(room);
   } else {
     const u = room.uno;
+    // Misi 10: leaving mid-window cancels the phase safely — a window
+    // just closes, and gifted cards return to their owners. The turn
+    // timer was paused for the phase, so it restarts below if the game
+    // continues.
+    const hadPhase = !!(u.st.negateWindow || u.st.giftPhase);
+    if (u.st.negateWindow) uno.closeNegateWindow(u.st);
+    if (u.st.giftPhase) uno.cancelGiftPhase(u.st);
+    clearNegateTimer(room);
     // Misi 4C: a taken-over seat is never destroyed by a forfeit —
     // the bot keeps playing it until the game ends.
     if (player && u.active[player.seat] && !player.takenOver) {
@@ -285,6 +308,12 @@ function forfeitPlayer(room, playerId, keepIdentity = false) {
       } else {
         sendGameState(room);
       }
+    }
+    if (hadPhase && room.status === 'playing' && u.st && !u.st.over) {
+      unoFixTurn(room);
+      startTurnTimer(room);
+      sendGameState(room);
+      scheduleBotIfNeeded(room);
     }
   }
   if (!keepIdentity) players.delete(playerId);
@@ -524,7 +553,7 @@ function startSession(room) {
     rooms.shuffleSeats(room);
     const prevRound = room.uno ? room.uno.round : 0;
     const n = room.players.length;
-    room.uno = { st: uno.newGame(n, { mode: room.unoMode || 'normal' }), active: new Array(n).fill(true), round: prevRound + 1 };
+    room.uno = { st: uno.newGame(n, { mode: room.unoMode || 'normal', unlimited: !!room.unoUnlimited }), active: new Array(n).fill(true), round: prevRound + 1 };
     if (!room.scoreBoard) room.scoreBoard = {};
     for (const p of room.players) {
       if (room.scoreBoard[p.id] === undefined) room.scoreBoard[p.id] = 0;
@@ -600,8 +629,9 @@ function handleStartGame(player, room, data) {
     // UNO: seat order is shuffled at every game start (Sensei, Misi 2)
     rooms.shuffleSeats(room);
     room.unoMode = (data && data.mode) || 'normal';
+    room.unoUnlimited = !!(data && data.unlimited);
     const n = room.players.length;
-    room.uno = { st: uno.newGame(n, { mode: room.unoMode }), active: new Array(n).fill(true), round: 1 };
+    room.uno = { st: uno.newGame(n, { mode: room.unoMode, unlimited: room.unoUnlimited }), active: new Array(n).fill(true), round: 1 };
     room.scoreBoard = {};
     for (const p of room.players) room.scoreBoard[p.id] = 0;
     room.status = 'playing';
@@ -891,6 +921,41 @@ function afterUnoPlay(room, player, r) {
     enterDecision(room);
     return;
   }
+  if (r.gameOver) {
+    // Misi 10 unlimited: one player left (the loser, 0 points); every
+    // finisher already banked their score at finish time.
+    clearNegateTimer(room);
+    u.st.scores.forEach((s, i) => {
+      const p = room.players[i];
+      if (p) room.scoreBoard[p.id] = s;
+    });
+    room.status = 'over';
+    clearTurnTimer(room);
+    const payload = gameOverPayload(room, u.st.over);
+    payload.points = u.st.finished.length ? u.st.finished[0].score : 0;
+    if (r.events && r.events.length) payload.events = r.events;
+    broadcast(room, payload);
+    enterDecision(room);
+    return;
+  }
+  if (r.finished) {
+    // Misi 10 unlimited: a finisher banks their score live; the game
+    // continues for everyone else.
+    const fp = room.players[r.finished.player];
+    if (fp) room.scoreBoard[fp.id] = r.finished.score;
+    note = `${dispName(player)} FINIS peringkat ${r.finished.rank} (+${r.finished.score} poin)!`;
+  }
+  if (u.st.negateWindow) {
+    // Misi 10: a UNO! shout pauses the game — no turn timer, no bot
+    // turn — until the 5-second Negate! window resolves (see
+    // openNegateWindowFlow). The turn already advanced in the engine.
+    unoFixTurn(room);
+    sendGameState(room);
+    if (r.events && r.events.length) broadcast(room, { type: 'uno_events', events: r.events });
+    if (note) broadcast(room, { type: 'chat', from: 'Sistem', text: note });
+    openNegateWindowFlow(room);
+    return;
+  }
   unoFixTurn(room);
   startTurnTimer(room);
   sendGameState(room);
@@ -899,16 +964,139 @@ function afterUnoPlay(room, player, r) {
   scheduleBotIfNeeded(room);
 }
 
+// ---------------- Misi 10: Negate! window + gift phase (server clock) ----------------
+// The engine records the window; this driver owns the 5s/10s clocks and
+// the bot reactions. Timeouts are the safety net for every edge (a human
+// who disconnects mid-window, a taken-over seat, a missed click).
+function clearNegateTimer(room) {
+  if (room.negateTimer) { clearTimeout(room.negateTimer); room.negateTimer = null; }
+  room.negateEndsAt = null;
+  room.giftEndsAt = null;
+}
+
+function openNegateWindowFlow(room) {
+  const u = room.uno;
+  if (!u || !u.st.negateWindow) return;
+  // bots that hold Negate! fire at once (Sensei: bot otomatis memakai Negate)
+  for (let s = 0; s < u.st.hands.length; s++) {
+    if (!u.active[s]) continue;
+    const p = room.players[s];
+    if (!seatDriven(p)) continue;
+    const card = u.st.hands[s].find((c) => c.kind === 'negate');
+    if (card && u.st.hands[s].length >= 2 && u.st.negateUses < 2) {
+      const r = uno.playNegate(u.st, s, card.id);
+      if (r.ok) { afterNegatePlayed(room, p, r); return; }
+    }
+  }
+  // no bot negated: humans get the 5-second window
+  room.negateEndsAt = Date.now() + 5000;
+  room.negateTimer = setTimeout(() => {
+    room.negateTimer = null;
+    room.negateEndsAt = null;
+    if (!rooms.get(room.code) || room.status !== 'playing' || !room.uno) return;
+    if (uno.closeNegateWindow(room.uno.st)) {
+      unoFixTurn(room);
+      startTurnTimer(room);
+      sendGameState(room);
+      scheduleBotIfNeeded(room);
+    }
+  }, 5000);
+}
+
+function afterNegatePlayed(room, player, r) {
+  const u = room.uno;
+  clearNegateTimer(room);
+  sendGameState(room);
+  if (r.events) broadcast(room, { type: 'uno_events', events: r.events });
+  // bots gift at once (lowest card); humans get the 10-second phase
+  const st = u.st;
+  if (st.giftPhase) {
+    const botEvents = [];
+    while (st.giftPhase) {
+      const seat = st.giftPhase.pending.find((s) => {
+        const p = room.players[s];
+        return u.active[s] && seatDriven(p);
+      });
+      if (seat === undefined) break;
+      const card = bot.lowestCard(st.hands[seat]);
+      if (!card) break;
+      const gr = uno.giveCard(st, seat, card.id);
+      if (!gr.ok) break;
+      botEvents.push(...(gr.events || []));
+    }
+    if (botEvents.length) broadcast(room, { type: 'uno_events', events: botEvents });
+    sendGameState(room);
+  }
+  if (!st.giftPhase) {
+    // resolved by bots alone (or no humans pending): game continues
+    unoFixTurn(room);
+    startTurnTimer(room);
+    sendGameState(room);
+    scheduleBotIfNeeded(room);
+    return;
+  }
+  room.giftEndsAt = Date.now() + 10000;
+  room.negateTimer = setTimeout(() => {
+    room.negateTimer = null;
+    room.giftEndsAt = null;
+    if (!rooms.get(room.code) || room.status !== 'playing' || !room.uno) return;
+    const rr = uno.resolveGiftTimeout(room.uno.st);
+    sendGameState(room);
+    if (rr.events) broadcast(room, { type: 'uno_events', events: rr.events });
+    unoFixTurn(room);
+    startTurnTimer(room);
+    sendGameState(room);
+    scheduleBotIfNeeded(room);
+  }, 10000);
+}
+
+function handleUnoNegate(player, room, data) {
+  if (!mustBePlaying(player)) return;
+  const u = room.uno;
+  if (room.status !== 'playing' || !u) { sendError(player.socket, 'Game belum berjalan'); return; }
+  const r = uno.playNegate(u.st, player.seat, data.cardId);
+  if (!r.ok) {
+    const msgs = {
+      'tidak ada jendela negate': 'Tidak ada jendela Negate saat ini',
+      'jatah negate habis': 'Jatah Negate sudah habis (maks 2 per game)',
+      'bukan kartu negate': 'Itu bukan kartu Negate!',
+      'negate butuh minimal 2 kartu di tangan': 'Negate tidak bisa dimainkan sebagai kartu terakhir',
+    };
+    sendError(player.socket, msgs[r.error] || 'Tidak bisa memakai Negate');
+    return;
+  }
+  afterNegatePlayed(room, player, r);
+}
+
+function handleUnoGift(player, room, data) {
+  if (!mustBePlaying(player)) return;
+  const u = room.uno;
+  if (room.status !== 'playing' || !u) { sendError(player.socket, 'Game belum berjalan'); return; }
+  const r = uno.giveCard(u.st, player.seat, data.cardId);
+  if (!r.ok) { sendError(player.socket, 'Kamu tidak perlu memberi kartu / kartu tidak valid'); return; }
+  sendGameState(room);
+  if (r.events) broadcast(room, { type: 'uno_events', events: r.events });
+  if (!u.st.giftPhase) {
+    // last gift resolved the phase: game continues
+    clearNegateTimer(room);
+    unoFixTurn(room);
+    startTurnTimer(room);
+    sendGameState(room);
+    scheduleBotIfNeeded(room);
+  }
+}
+
 function handleUnoPlay(player, room, data) {
   if (!mustBePlaying(player)) return;
   const u = room.uno;
   if (room.status !== 'playing' || !u) { sendError(player.socket, 'Game belum berjalan'); return; }
+  if (u.st.negateWindow || u.st.giftPhase) { sendError(player.socket, 'Tunggu dulu — jendela Negate sedang berjalan'); return; }
   if (u.st.turn !== player.seat) { sendError(player.socket, 'Bukan giliranmu'); return; }
   const isDrawn = u.st.drewThisTurn && u.st.drawnCard === data.cardId;
   const playFn = isDrawn ? uno.playDrawnCard : uno.playCard;
   const r = playFn(u.st, player.seat, data.cardId, { saidUno: data.saidUno, wildColor: data.wildColor });
   if (!r.ok) {
-    const msgs = { 'bukan giliranmu': 'Bukan giliranmu', 'kartu tidak cocok': 'Kartu tidak cocok', 'pilih warna dulu': 'Pilih warna dulu untuk kartu wild', 'kartu tidak ada di tanganmu': 'Kartu tidak ada di tanganmu', 'hanya kartu sejenis yang bisa menumpuk': 'Hanya kartu sejenis yang bisa menumpuk tumpukan ini', '+4 tidak bisa ditumpuk di mode normal': 'Mode Normal: +4 tidak bisa ditumpuk — ambil kartunya!', 'tumpukan +4 hanya bisa dijawab +4': 'Tumpukan +4 hanya bisa dijawab +4', 'kartu spesial hanya bisa dipakai melawan tumpukan': 'Kartu spesial hanya bisa dipakai melawan tumpukan' };
+    const msgs = { 'bukan giliranmu': 'Bukan giliranmu', 'kartu tidak cocok': 'Kartu tidak cocok', 'pilih warna dulu': 'Pilih warna dulu untuk kartu wild', 'kartu tidak ada di tanganmu': 'Kartu tidak ada di tanganmu', 'hanya kartu sejenis yang bisa menumpuk': 'Hanya kartu sejenis yang bisa menumpuk tumpukan ini', '+4 tidak bisa ditumpuk di mode normal': 'Mode Normal: +4 tidak bisa ditumpuk — ambil kartunya!', 'tumpukan +4 hanya bisa dijawab +4': 'Tumpukan +4 hanya bisa dijawab +4', 'kartu spesial hanya bisa dipakai melawan tumpukan': 'Kartu spesial hanya bisa dipakai melawan tumpukan', 'negate hanya bisa dipakai saat ada yang teriak Uno!': 'Negate hanya bisa dipakai saat ada yang teriak Uno!' };
     sendError(player.socket, msgs[r.error] || 'Langkah tidak valid');
     return;
   }
@@ -919,6 +1107,7 @@ function handleUnoDraw(player, room) {
   if (!mustBePlaying(player)) return;
   const u = room.uno;
   if (room.status !== 'playing' || !u) { sendError(player.socket, 'Game belum berjalan'); return; }
+  if (u.st.negateWindow || u.st.giftPhase) { sendError(player.socket, 'Tunggu dulu — jendela Negate sedang berjalan'); return; }
   const r = uno.drawCard(u.st, player.seat);
   if (!r.ok) {
     const msgs = { 'bukan giliranmu': 'Bukan giliranmu', 'sudah ambil kartu giliran ini': 'Kamu sudah ambil kartu' };
@@ -937,6 +1126,7 @@ function handleUnoPass(player, room) {
   if (!mustBePlaying(player)) return;
   const u = room.uno;
   if (room.status !== 'playing' || !u) { sendError(player.socket, 'Game belum berjalan'); return; }
+  if (u.st.negateWindow || u.st.giftPhase) { sendError(player.socket, 'Tunggu dulu — jendela Negate sedang berjalan'); return; }
   const r = uno.passTurn(u.st, player.seat);
   if (!r.ok) { sendError(player.socket, 'Ambil kartu dulu atau mainkan kartumu'); return; }
   clearTurnTimer(room);
@@ -970,7 +1160,7 @@ function handleUnoNewRound(player, room) {
   // UNO: seats are re-shuffled every new round (Sensei, Misi 2)
   rooms.shuffleSeats(room);
   const n = room.players.length;
-  room.uno = { st: uno.newGame(n, { mode: room.unoMode || 'normal' }), active: new Array(n).fill(true), round: room.uno.round + 1 };
+  room.uno = { st: uno.newGame(n, { mode: room.unoMode || 'normal', unlimited: !!room.unoUnlimited }), active: new Array(n).fill(true), round: room.uno.round + 1 };
   room.status = 'playing';
   startTurnTimer(room);
   sendGameState(room);
@@ -1258,6 +1448,7 @@ function scheduleTruthBots(room) {
 // human seat taken over under Misi 4C), let it move after a delay.
 function scheduleBotIfNeeded(room) {
   if (room.game !== 'uno' || room.status !== 'playing' || !room.uno || room.uno.st.over) return;
+  if (room.uno.st.negateWindow || room.uno.st.giftPhase) return; // Misi 10: window phases have their own flow
   if (room.botTimer) return;
   const seat = room.uno.st.turn;
   if (!room.uno.active[seat]) return;
@@ -1272,6 +1463,7 @@ function scheduleBotIfNeeded(room) {
 
 function runBotTurn(room) {
   if (room.status !== 'playing' || !room.uno || room.uno.st.over) return;
+  if (room.uno.st.negateWindow || room.uno.st.giftPhase) return; // Misi 10: window phases have their own flow
   const seat = room.uno.st.turn;
   const p = room.players[seat];
   if (!seatDriven(p)) return; // reclaimed by its human meanwhile
@@ -1295,6 +1487,7 @@ function runBotTurn(room) {
 // A bot room exists only for its human: remove the bots and the room itself.
 function teardownBotRoom(room) {
   if (room.botTimer) { clearTimeout(room.botTimer); room.botTimer = null; }
+  clearNegateTimer(room);
   clearTruthBotTimers(room);
   for (const p of [...room.players]) {
     if (p.isBot) { rooms.removePlayer(room, p.id); players.delete(p.id); }
@@ -1389,6 +1582,7 @@ async function route(ws, type, data) {
       const room = created.room;
       room.isBotRoom = true;
       room.unoMode = data.mode || 'normal';
+      room.unoUnlimited = !!data.unlimited;
       for (let i = 0; i < data.size - 1; i++) {
         const bp = {
           id: 'bot-' + crypto.randomUUID(), nickname: bot.BOT_NAMES[i % bot.BOT_NAMES.length],
@@ -1399,7 +1593,7 @@ async function route(ws, type, data) {
       }
       rooms.shuffleSeats(room);
       const n = room.players.length;
-      room.uno = { st: uno.newGame(n, { mode: room.unoMode }), active: new Array(n).fill(true), round: 1 };
+      room.uno = { st: uno.newGame(n, { mode: room.unoMode, unlimited: room.unoUnlimited }), active: new Array(n).fill(true), round: 1 };
       room.scoreBoard = {};
       for (const p of room.players) room.scoreBoard[p.id] = 0;
       room.status = 'playing';
@@ -1579,6 +1773,18 @@ async function route(ws, type, data) {
       const room = needRoom(); if (!room) return;
       if (room.game !== 'uno') { sendError(ws, 'Ini bukan room UNO'); return; }
       handleUnoPass(player, room);
+      return;
+    }
+    case 'uno_negate': {
+      const room = needRoom(); if (!room) return;
+      if (room.game !== 'uno') { sendError(ws, 'Ini bukan room UNO'); return; }
+      handleUnoNegate(player, room, data);
+      return;
+    }
+    case 'uno_gift': {
+      const room = needRoom(); if (!room) return;
+      if (room.game !== 'uno') { sendError(ws, 'Ini bukan room UNO'); return; }
+      handleUnoGift(player, room, data);
       return;
     }
     case 'uno_new_round': {

@@ -138,6 +138,7 @@ class RoomManager {
     if (!room) return;
     if (room.timer) clearTimeout(room.timer);
     if (room.decisionTimer) clearTimeout(room.decisionTimer);
+    if (room.negateTimer) clearTimeout(room.negateTimer); // Misi 10 window/gift clock
     for (const t of room.forfeitTimers.values()) clearTimeout(t);
     for (const t of room.takeoverTimers.values()) clearTimeout(t);
     this.rooms.delete(code);
