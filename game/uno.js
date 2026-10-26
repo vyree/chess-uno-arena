@@ -18,11 +18,13 @@
  *   (rank + score) instead of ending the game; the last player left
  *   is the loser (0). Finish score = opponents' remaining cards +
  *   rank bonus (1st +350, 2nd +300, -50 per rank).
- * - Reset (hell x2, max 2 uses/game): pile-only; cancels the pile, then
- *   collects every hand + the discard pile back into the deck,
- *   reshuffles, redeals 7 to each active player, flips a new starter,
- *   and the caster moves first. Playing it as your last card is NOT
- *   a win — the redeal happens instead.
+ * - Reset (hell x2, max 2 uses/game; REVISED 2026-10-26 late night,
+ *   Sensei: trigger moved from pile-answer to UNO! window): played
+ *   ONLY inside a UNO! window (like Negate!, first response wins, holder
+ *   needs 2+ cards). Effect: collects every hand + the discard pile back
+ *   into the deck, reshuffles, redeals 7 to each active player, flips a
+ *   new starter, and the caster moves first. Any pending pile is cleared
+ *   with the reshuffle (the pile's cards no longer exist as hands).
  * - Negate! (hell x2, max 2 uses/game, holder needs 2+ cards): played
  *   only during the 5-second window after someone shouts UNO! (hand
  *   reaches 1). It voids the UNO: every other active player gives 1
@@ -149,13 +151,12 @@ function topCard(st) { return st.discard[st.discard.length - 1]; }
 // - normal: a +2 pile answers only with +2; a +4 pile has NO answer.
 // - hard/hell: a +2 pile answers with +2 or +4 (escalation); a +4 pile
 //   answers only with +4.
-// The hell specials (Reverse Black / Null White / Reset) answer ANY
-// pending pile. Reset is spent (uses cap) when actually played, so an
-// exhausted Reset is no longer an answer — see playCard.
+// The hell specials (Reverse Black / Null White) answer ANY pending pile.
+// Reset is NOT a pile answer anymore (revised 2026-10-26: it answers a
+// UNO! window via playReset, like Negate! via playNegate).
 function isStackCard(st, card) {
   if (!st.pendingKind) return false;
   if (card.kind === 'reverseBlack' || card.kind === 'nullWhite') return true;
-  if (card.kind === 'reset') return st.resetUses < 2;
   if (st.mode === 'normal') return st.pendingKind === 'draw2' && card.kind === 'draw2';
   if (st.pendingKind === 'draw2') return card.kind === 'draw2' || card.kind === 'wild4';
   return card.kind === 'wild4';
@@ -229,10 +230,15 @@ function playCard(st, playerIdx, cardId, opts) {
     // a UNO! window (playNegate). This keeps its trigger unambiguous.
     return { ok: false, error: 'negate hanya bisa dipakai saat ada yang teriak Uno!' };
   }
+  if (card.kind === 'reset') {
+    // Reset never goes through a normal play either (revised 2026-10-26):
+    // it only fires inside a UNO! window (playReset).
+    return { ok: false, error: 'reset hanya bisa dipakai saat ada yang teriak Uno!' };
+  }
   if (stacking) {
     // facing a draw pile: only the mode's stack answers (Misi 5) are legal
     if (!isStackCard(st, card)) return { ok: false, error: stackError(st, card) };
-  } else if (card.kind === 'reverseBlack' || card.kind === 'nullWhite' || card.kind === 'reset') {
+  } else if (card.kind === 'reverseBlack' || card.kind === 'nullWhite') {
     return { ok: false, error: 'kartu spesial hanya bisa dipakai melawan tumpukan' };
   } else if (!canPlay(st, playerIdx, card)) {
     return { ok: false, error: 'kartu tidak cocok' };
@@ -265,40 +271,8 @@ function playCard(st, playerIdx, cardId, opts) {
     events.push({ type: 'nullify', player: playerIdx, nulled, affected });
   }
 
-  if (card.kind === 'reset') {
-    // Reset (Misi 10, hell): the pile vanishes and EVERYTHING is
-    // reshuffled — deck + all hands + discard — then each player still
-    // in the game draws 7 fresh cards, a new starter is flipped, and
-    // the caster moves first. Resolved BEFORE any UNO/win check:
-    // playing Reset as your last card is NOT a win.
-    st.pendingDraw = 0;
-    st.pendingKind = null;
-    st.resetUses++;
-    const held = st.hands.map((h) => h.length);
-    const pool = [...st.deck, ...st.discard];
-    for (const h of st.hands) pool.push(...h.splice(0, h.length));
-    st.deck = shuffle(pool);
-    st.discard = [];
-    for (let p = 0; p < st.hands.length; p++) {
-      // only seats still in the game redraw: finished seats
-      // (unlimited) and emptied inactive seats stay out.
-      if (p !== playerIdx && held[p] === 0) continue;
-      for (let i = 0; i < 7 && st.deck.length; i++) st.hands[p].push(st.deck.pop());
-    }
-    let starter;
-    for (;;) {
-      const c = st.deck.pop();
-      if (c.kind === 'number') { starter = c; break; }
-      st.deck.unshift(c);
-    }
-    st.discard = [starter];
-    st.currentColor = starter.color;
-    st.turn = playerIdx;
-    st.drewThisTurn = false;
-    st.drawnCard = null;
-    events.push({ type: 'reset', player: playerIdx });
-    return { ok: true, penalty: 0, events };
-  }
+  // (Reset no longer resolves here: since 2026-10-26 it answers a UNO!
+  // window via playReset, like Negate! via playNegate.)
 
   // UNO penalty: forgot to declare with 1 card left
   let penalty = 0;
@@ -309,8 +283,9 @@ function playCard(st, playerIdx, cardId, opts) {
   }
   if (hand.length === 1) {
     events.push({ type: 'uno', player: playerIdx });
-    // Misi 10: every UNO! shout opens a Negate! window (the server
-    // pauses turns and runs the 5-second clock; see the header note).
+    // Misi 10: every UNO! shout opens a response window (Negate! or
+    // Reset — first response wins; the server pauses turns and runs
+    // the 5-second clock; see the header note).
     st.negateWindow = { victim: playerIdx };
     st.negateSeq++;
   }
@@ -455,6 +430,54 @@ function playNegate(st, playerIdx, cardId) {
   return { ok: true, events: [{ type: 'negate', player: playerIdx, victim }] };
 }
 
+// Play Reset inside an open UNO! window (revised 2026-10-26: Reset is a
+// window card, NOT a pile answer). Mirrors playNegate's guards, then
+// reshuffles the whole table: every hand + the discard pile back into
+// the deck, 7 fresh cards to each still-in seat, a new number starter,
+// and the caster moves first. Any pending pile dies with the reshuffle.
+// Resolves immediately (no gift phase); the window closes on the first
+// response, so a Reset after a Negate (or vice versa) is rejected.
+function playReset(st, playerIdx, cardId) {
+  if (st.over) return { ok: false, error: 'ronde sudah selesai' };
+  if (!st.negateWindow) return { ok: false, error: 'tidak ada jendela Uno!' };
+  if (st.resetUses >= 2) return { ok: false, error: 'jatah reset habis' };
+  const hand = st.hands[playerIdx];
+  const hi = hand.findIndex((c) => c.id === cardId);
+  if (hi < 0) return { ok: false, error: 'kartu tidak ada di tanganmu' };
+  const card = hand[hi];
+  if (card.kind !== 'reset') return { ok: false, error: 'bukan kartu reset' };
+  if (hand.length < 2) return { ok: false, error: 'reset butuh minimal 2 kartu di tangan' };
+  hand.splice(hi, 1);
+  st.discard.push(card);
+  st.resetUses++;
+  st.pendingDraw = 0;
+  st.pendingKind = null;
+  st.negateWindow = null;
+  const held = st.hands.map((h) => h.length);
+  const pool = [...st.deck, ...st.discard];
+  for (const h of st.hands) pool.push(...h.splice(0, h.length));
+  st.deck = shuffle(pool);
+  st.discard = [];
+  for (let p = 0; p < st.hands.length; p++) {
+    // only seats still in the game redraw: finished seats
+    // (unlimited) and emptied inactive seats stay out.
+    if (p !== playerIdx && held[p] === 0) continue;
+    for (let i = 0; i < 7 && st.deck.length; i++) st.hands[p].push(st.deck.pop());
+  }
+  let starter;
+  for (;;) {
+    const c = st.deck.pop();
+    if (c.kind === 'number') { starter = c; break; }
+    st.deck.unshift(c);
+  }
+  st.discard = [starter];
+  st.currentColor = starter.color;
+  st.turn = playerIdx;
+  st.drewThisTurn = false;
+  st.drawnCard = null;
+  return { ok: true, events: [{ type: 'reset', player: playerIdx }] };
+}
+
 // Give 1 card to the victim during an open gift phase. When the last
 // pending giver submits, the phase resolves at once: the victim gains
 // the gifted cards, then draws +2, and the game unpauses.
@@ -570,6 +593,8 @@ function toClient(st, playerIdx) {
     negateSeq: st.negateSeq || 0,
     canNegate: !!st.negateWindow && st.negateUses < 2 && hand.length >= 2
       && hand.some((c) => c.kind === 'negate'),
+    canReset: !!st.negateWindow && st.resetUses < 2 && hand.length >= 2
+      && hand.some((c) => c.kind === 'reset'),
     giftPhase: st.giftPhase ? {
       victim: st.giftPhase.victim,
       caster: st.giftPhase.caster,
@@ -582,6 +607,6 @@ function toClient(st, playerIdx) {
 module.exports = {
   COLORS, MODES, buildDeck, shuffle, newGame, canPlay, isStackCard, playCard, drawCard,
   passTurn, playDrawnCard, scoreRound, cardPoints, toClient, topCard,
-  playNegate, giveCard, resolveGiftTimeout, closeNegateWindow, cancelGiftPhase,
+  playNegate, playReset, giveCard, resolveGiftTimeout, closeNegateWindow, cancelGiftPhase,
   isFinished, activeSeats,
 };

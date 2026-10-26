@@ -919,13 +919,21 @@ sampai Sensei membuka lagi diskusinya.**
 
 ### Kartu Reset (Hell saja, x2 — deck Hell bertambah 128 -> 132)
 - Kartu putih berlogo tombol power.
-- Hanya bisa diaktifkan saat terkena stack ala +2/+4.
-- Efek: stack dibatalkan (nol), SEMUA tangan pemain dikumpulkan kembali
-  ke deck, di-shuffle (dengan animasi), semua pemain menggambar ulang
-  7 kartu; tangan 0 saat pengumpulan BUKAN kemenangan.
-- Reset total termasuk discard pile ikut di-shuffle, kartu pembuka baru
-  di-flip, pengaktif jalan duluan.
+- **REVISI Sensei 26 Okt 2026 ±23:31 WIB (SUPERSEDES trigger lama):**
+  Reset BUKAN lagi jawaban tumpukan — hanya bisa dimainkan saat ada
+  yang teriak "UNO!" (sisa 1 kartu), seperti Negate!. Bukan kartu
+  giliran biasa, bukan jawaban tumpukan, dan pemegang harus punya
+  minimal 2 kartu (tidak bisa jadi kartu terakhir).
+- Efek (revisi): SEMUA tangan pemain + discard pile dikumpulkan ke
+  deck, di-shuffle, semua pemain yang masih aktif menggambar ulang
+  7 kartu, kartu pembuka baru di-flip, pengaktif jalan duluan.
+  Tumpukan yang sedang berjalan ikut nol karena pengocokan ulang.
+- Jendela Uno! kini menampung DUA kartu respons (Negate! dan Reset):
+  respons pertama menang, yang lain ditolak karena jendela tertutup.
 - Uncounterable; 2 kopi, maks 2 kali pakai per game.
+- (Trigger lama — "hanya saat terkena stack +2/+4" — SUDAH TIDAK
+  BERLAKU; versi live hasil deploy 26 Okt 2026 masih memakai trigger
+  lama sampai deploy berikutnya.)
 
 ### Kartu Negate! (Hell saja, x2 — deck Hell bertambah 128 -> 132)
 - Kartu hitam berlogo.
@@ -948,7 +956,10 @@ Sensei menulis "kartu reset" — yang dimaksud adalah Negate (salah ketik,
 sudah dikonfirmasi Sensei).
 
 **Status: DIBANGUN 26 Okt 2026 atas perintah Sensei ("tambahkan misi 10,
-build skrg") — LOKAL, BELUM deploy/push (deploy masih DITAHAN).**
+build skrg") — DEPLOYED 26 Okt 2026 malam (commit 58b13f2; server Fly
+v7 + klien Firebase live; smoke test browser lulus). REVISI trigger
+Reset 26 Okt 2026 ±23:31 WIB — LOKAL, BELUM deploy (menunggu perintah
+deploy berikutnya).**
 
 ### Catatan build (26 Okt 2026 — adaptasi dari spek, dicatat agar tidak hilang)
 - Baseline deck berubah karena kartu ungu (26 Okt 2026): Hell 155, bukan
@@ -963,6 +974,10 @@ build skrg") — LOKAL, BELUM deploy/push (deploy masih DITAHAN).**
 - Reset mengocok ulang hanya untuk kursi yang masih aktif: kursi finis
   (Unlimited) dan kursi nonaktif yang dikosongkan tetap keluar.
 - Bot: Negate otomatis dipakai saat jendela terbuka; hadiah bot = kartu
-  terendah; Reset dipakai bot saat tumpukan >= 6 tanpa jawaban stack.
+  terendah. Bot TIDAK PERNAH otomatis memakai Reset (revisi 26 Okt
+  2026; asumsi Arona — Reset kartu keputusan manusia; belum ada
+  perintah Sensei yang mengubahnya).
+- Jendela Uno! = satu respons per jendela (Negate! ATAU Reset, siapa
+  cepat dia dapat); engine menutup jendela pada respons pertama.
 - Keluar saat jendela/hadiah berjalan: jendela ditutup / hadiah
   dibatalkan (kartu kembali ke pemilik), timer giliran dimulai ulang.

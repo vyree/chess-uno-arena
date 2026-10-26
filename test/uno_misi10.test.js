@@ -37,53 +37,82 @@ test('deck hell = 159: reset x2, negate x2, mode lain 133 tanpa keduanya', () =>
   assert.equal(U.buildDeck('hard').length, 133);
 });
 
-// ---------- Reset ----------
+// ---------- Reset (revised 2026-10-26: UNO! window card, NOT a pile answer) ----------
 
-test('reset: mati di giliran biasa, menjawab tumpukan apa pun', () => {
+test('reset: mati di giliran biasa DAN melawan tumpukan; hanya hidup di jendela Uno!', () => {
   const st = U.newGame(4, { rand: rng(3), mode: 'hell' });
   st.discard = [num('t', 'red', 5)];
   st.currentColor = 'red';
   st.turn = 0;
   st.hands[0] = [reset('r1'), num('a', 'red', 1)];
   assert.equal(U.canPlay(st, 0, st.hands[0][0]), false);
+  assert.equal(U.playCard(st, 0, 'r1', {}).error, 'reset hanya bisa dipakai saat ada yang teriak Uno!');
   st.pendingDraw = 4;
   st.pendingKind = 'wild4';
-  assert.equal(U.canPlay(st, 0, st.hands[0][0]), true);
+  assert.equal(U.canPlay(st, 0, st.hands[0][0]), false);
+  assert.equal(U.isStackCard(st, st.hands[0][0]), false);
+  assert.equal(U.playCard(st, 0, 'r1', {}).error, 'reset hanya bisa dipakai saat ada yang teriak Uno!');
+  assert.equal(U.playReset(st, 0, 'r1').error, 'tidak ada jendela Uno!');
 });
 
-test('reset: tumpukan nol, semua tangan + discard dikocok ulang, pengaktif jalan duluan', () => {
+test('playReset: semua tangan + discard dikocok ulang, tumpukan ikut nol, pengaktif jalan duluan', () => {
   const st = U.newGame(4, { rand: rng(3), mode: 'hell' });
   st.discard = [num('t', 'red', 5)];
   st.currentColor = 'red';
   st.turn = 0;
+  st.hands[0] = [num('a1', 'red', 9), num('a2', 'blue', 3)];
+  const shout = U.playCard(st, 0, 'a1', { saidUno: true });
+  assert.equal(shout.ok, true);
+  assert.deepEqual(st.negateWindow, { victim: 0 });
+  // a pile is still pending while the window is open (victim stacked to 1)
   st.pendingDraw = 6;
   st.pendingKind = 'wild4';
-  st.hands[0] = [reset('r1')]; // kartu terakhir — BUKAN kemenangan
-  st.hands[1] = [num('b', 'blue', 2)];
+  st.hands[1] = [reset('r1'), num('b', 'blue', 2)];
   st.hands[2] = [num('c', 'green', 3)];
   st.hands[3] = [num('d', 'yellow', 4)];
-  const r = U.playCard(st, 0, 'r1', { saidUno: true });
+  const r = U.playReset(st, 1, 'r1');
   assert.equal(r.ok, true);
   assert.equal(st.over, null);
   assert.equal(st.pendingDraw, 0);
   assert.equal(st.pendingKind, null);
+  assert.equal(st.negateWindow, null);
   assert.equal(st.resetUses, 1);
   for (const h of st.hands) assert.equal(h.length, 7);
   assert.equal(U.topCard(st).kind, 'number');
   assert.equal(st.currentColor, U.topCard(st).color);
-  assert.equal(st.turn, 0);
+  assert.equal(st.turn, 1);
   assert.equal(r.events.some((e) => e.type === 'reset'), true);
 });
 
-test('reset: jatah habis (2x pakai) membuatnya mati total', () => {
+test('playReset: ditolak — bukan reset / tangan 1 / jatah habis', () => {
   const st = U.newGame(4, { rand: rng(3), mode: 'hell' });
+  st.discard = [num('t', 'red', 5)];
+  st.currentColor = 'red';
   st.turn = 0;
-  st.pendingDraw = 4;
-  st.pendingKind = 'draw2';
+  st.hands[0] = [num('a1', 'red', 9), num('a2', 'blue', 3)];
+  U.playCard(st, 0, 'a1', { saidUno: true });
+  st.hands[1] = [num('b', 'blue', 2), num('b2', 'green', 2)];
+  assert.equal(U.playReset(st, 1, 'b').error, 'bukan kartu reset');
+  st.hands[2] = [reset('r2')]; // kartu terakhir — tidak bisa jadi pengaktif
+  assert.equal(U.playReset(st, 2, 'r2').error, 'reset butuh minimal 2 kartu di tangan');
   st.resetUses = 2;
-  st.hands[0] = [reset('r1'), num('a', 'red', 1)];
-  assert.equal(U.isStackCard(st, st.hands[0][0]), false);
-  assert.equal(U.canPlay(st, 0, st.hands[0][0]), false);
+  st.hands[3] = [reset('r3'), num('d', 'yellow', 4)];
+  assert.equal(U.playReset(st, 3, 'r3').error, 'jatah reset habis');
+});
+
+test('jendela Uno!: respons pertama menang — reset setelah negate ditolak', () => {
+  const st = U.newGame(4, { rand: rng(3), mode: 'hell' });
+  st.discard = [num('t', 'red', 5)];
+  st.currentColor = 'red';
+  st.turn = 0;
+  st.hands[0] = [num('a1', 'red', 9), num('a2', 'blue', 3)];
+  U.playCard(st, 0, 'a1', { saidUno: true });
+  st.hands[1] = [negate('n1'), num('b', 'blue', 2)];
+  st.hands[2] = [reset('r2'), num('c', 'green', 3)];
+  const n = U.playNegate(st, 1, 'n1');
+  assert.equal(n.ok, true);
+  assert.equal(st.negateWindow, null);
+  assert.equal(U.playReset(st, 2, 'r2').error, 'tidak ada jendela Uno!');
 });
 
 // ---------- Negate! ----------
@@ -223,7 +252,7 @@ test('unlimited: kartu skip sebagai finis tetap melewati 1 pemain aktif', () => 
 
 // ---------- bot ----------
 
-test('bot: tumpukan >= 6 tanpa jawaban → reset; lowestCard untuk hadiah', () => {
+test('bot: reset tidak lagi menjawab tumpukan; lowestCard untuk hadiah', () => {
   const st = U.newGame(4, { rand: rng(3), mode: 'hell' });
   st.discard = [num('t', 'red', 5)];
   st.currentColor = 'red';
@@ -232,6 +261,6 @@ test('bot: tumpukan >= 6 tanpa jawaban → reset; lowestCard untuk hadiah', () =
   st.pendingKind = 'wild4';
   st.hands[1] = [reset('r1'), num('a', 'red', 1), num('b', 'blue', 2)];
   const playable = st.hands[1].filter((c) => U.canPlay(st, 1, c));
-  assert.equal(bot.chooseCard(st, 1, playable).id, 'r1');
+  assert.deepEqual(playable, []); // reset keluar dari daftar playable tumpukan
   assert.equal(bot.lowestCard([num('x', 'red', 9), skip('y', 'blue'), num('z', 'green', 2)]).id, 'z');
 });

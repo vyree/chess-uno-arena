@@ -142,7 +142,8 @@ document.addEventListener('visibilitychange', () => {
 // Misi 9: while spectating, game actions are blocked client-side too
 // (the server rejects them as well) — watching is watch-only.
 const SPECTATE_BLOCKED = ['chess_move', 'chess_resign', 'chess_moves_for',
-  'uno_play', 'uno_draw', 'uno_pass', 'truth_answer', 'uno_new_round', 'chess_new_round'];
+  'uno_play', 'uno_draw', 'uno_pass', 'truth_answer', 'uno_new_round', 'chess_new_round',
+  'uno_negate', 'uno_gift', 'uno_reset'];
 function send(type, data) {
   if (S.spectating && SPECTATE_BLOCKED.includes(type)) {
     toast('Kamu sedang menonton 👀 — ikut game berikutnya lewat panel keputusan ya');
@@ -564,9 +565,13 @@ function renderUno(m) {
   else if (st.giftPhase) status = st.giftPhase.amPending
     ? '🎁 Pilih 1 kartu untuk diberikan ke korban! (maks 10 detik)'
     : '🎁 Menunggu hadiah Negate…';
-  else if (st.negateWindow) status = st.canNegate
+  else if (st.negateWindow) status = (st.canNegate && st.canReset)
+    ? '≠⏻ Kamu pegang Negate & Reset! Pakai atau lewati (5 detik)'
+    : st.canReset
+    ? '⏻ Kamu pegang Reset! Pakai atau lewati (5 detik)'
+    : st.canNegate
     ? '≠ Kamu pegang Negate! Pakai atau lewati (5 detik)'
-    : '⏳ Tunggu respons Negate… (5 detik)';
+    : '⏳ Tunggu respons UNO!… (5 detik)';
   else if (st.pendingDraw > 0 && isMyTurn) status = `Kamu kena +${st.pendingDraw}! Ambil kartunya`;
   else if (isMyTurn) status = st.drewThisTurn ? 'Kartu diambil — mainkan atau lewati' : 'Giliranmu!';
   else if (botThinking) status = `${turnPlayer.nickname} is thinking`;
@@ -617,23 +622,32 @@ function renderUno(m) {
   $('btn-uno-say').classList.toggle('hidden', spectating);
   $('btn-uno-pass').classList.toggle('hidden', !(isMyTurn && st.drewThisTurn));
 
-  // Misi 10: Negate! dialogs. Holders get a use-or-skip modal (a
-  // dismissed window is never re-shown: negateSeq identifies windows);
-  // everyone else gets one toast per window + the status line above.
-  // (onGameState hides modals first, so showing here is safe.)
+  // Misi 10: UNO! window dialogs. Holders of a window card get a
+  // use-or-skip modal (a dismissed window is never re-shown:
+  // negateSeq identifies windows); everyone else gets one toast per
+  // window + the status line above. (onGameState hides modals first,
+  // so showing here is safe.) Revised 2026-10-26: Reset is a window
+  // card too — a holder of both sees both buttons, first response wins.
   if (!spectating && !st.over && st.negateWindow) {
     const victim = m.players[st.negateWindow.victim];
-    if (st.canNegate && S.negateDismissed !== st.negateSeq) {
-      showModal('Ada yang teriak UNO!', `<p>${victim ? victim.nickname : 'Seseorang'} tinggal 1 kartu! Kamu pegang <strong>Negate!</strong> — batalkan UNO-nya?</p><p class="muted">Jendela ini hanya 5 detik. Siapa cepat dia dapat.</p>`, [
-        { label: '≠ Pakai Negate!', cls: 'primary', onClick: () => {
-          const c = myHand.find((x) => x.kind === 'negate');
-          if (c) send('uno_negate', { cardId: c.id });
-        } },
-        { label: 'Lewati', cls: 'ghost', onClick: () => { S.negateDismissed = st.negateSeq; } },
-      ]);
-    } else if (!st.canNegate && S.negateToasted !== st.negateSeq) {
+    if ((st.canNegate || st.canReset) && S.negateDismissed !== st.negateSeq) {
+      const held = [];
+      if (st.canNegate) held.push('<strong>Negate!</strong>');
+      if (st.canReset) held.push('<strong>Reset!</strong>');
+      const actions = [];
+      if (st.canNegate) actions.push({ label: '≠ Pakai Negate!', cls: 'primary', onClick: () => {
+        const c = myHand.find((x) => x.kind === 'negate');
+        if (c) send('uno_negate', { cardId: c.id });
+      } });
+      if (st.canReset) actions.push({ label: '⏻ Pakai Reset!', cls: 'primary', onClick: () => {
+        const c = myHand.find((x) => x.kind === 'reset');
+        if (c) send('uno_reset', { cardId: c.id });
+      } });
+      actions.push({ label: 'Lewati', cls: 'ghost', onClick: () => { S.negateDismissed = st.negateSeq; } });
+      showModal('Ada yang teriak UNO!', `<p>${victim ? victim.nickname : 'Seseorang'} tinggal 1 kartu! Kamu pegang ${held.join(' dan ')} — respons UNO-nya?</p><p class="muted">Jendela ini hanya 5 detik. Siapa cepat dia dapat.</p>`, actions);
+    } else if (!st.canNegate && !st.canReset && S.negateToasted !== st.negateSeq) {
       S.negateToasted = st.negateSeq;
-      toast('⏳ Tunggu respons Negate… (5 detik)');
+      toast('⏳ Tunggu respons UNO!… (5 detik)');
     }
   }
 }
@@ -651,6 +665,7 @@ function onUnoCardClick(card) {
   }
   if (st && st.negateWindow) {
     if (st.canNegate && card.kind === 'negate') send('uno_negate', { cardId: card.id });
+    else if (st.canReset && card.kind === 'reset') send('uno_reset', { cardId: card.id });
     return;
   }
   const doPlay = (wildColor) => {

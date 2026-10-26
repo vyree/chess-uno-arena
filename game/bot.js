@@ -32,11 +32,12 @@ function nextSeat(st, idx) {
 function chooseCard(st, idx, playable) {
   if (st.pendingDraw > 0) {
     // Pile answers (Misi 5): stack first — it grows the pile for the next
-    // victim. Bounce a big pile back with Reverse Black; Reset a huge
-    // pile instead of taking it (fresh hand beats a 6+ tax); Null White
-    // only for a huge pile when no Reset is held (it taxes everyone,
-    // bot included). Below those thresholds the bot keeps its specials:
-    // return null and takeTurn takes the pile instead.
+    // victim. Bounce a big pile back with Reverse Black; Null White
+    // only for a huge pile (it taxes everyone, bot included). Below
+    // those thresholds the bot keeps its specials: return null and
+    // takeTurn takes the pile instead. (Reset is NOT a pile answer
+    // since 2026-10-26 — it only answers a UNO! window, and bots never
+    // auto-fire it; only Negate! is auto-played by bots in windows.)
     const stack = playable.find((c) => c.kind === 'draw2' || c.kind === 'wild4');
     if (stack) return stack;
     if (st.pendingDraw >= 4) {
@@ -44,12 +45,10 @@ function chooseCard(st, idx, playable) {
       if (rb) return rb;
     }
     if (st.pendingDraw >= 6) {
-      const rs = playable.find((c) => c.kind === 'reset');
-      if (rs) return rs;
       const nw = playable.find((c) => c.kind === 'nullWhite');
       if (nw) return nw;
     }
-    if (playable.some((c) => c.kind === 'reverseBlack' || c.kind === 'nullWhite' || c.kind === 'reset')) return null;
+    if (playable.some((c) => c.kind === 'reverseBlack' || c.kind === 'nullWhite')) return null;
   }
   if (playable.length === 1) return playable[0];
   const isWild = (c) => c.kind === 'wild' || c.kind === 'wild4';

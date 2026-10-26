@@ -977,7 +977,9 @@ function clearNegateTimer(room) {
 function openNegateWindowFlow(room) {
   const u = room.uno;
   if (!u || !u.st.negateWindow) return;
-  // bots that hold Negate! fire at once (Sensei: bot otomatis memakai Negate)
+  // bots that hold Negate! fire at once (Sensei: bot otomatis memakai Negate).
+  // Bots never auto-fire Reset (revised 2026-10-26): it is a human
+  // decision card — a bot holding only Reset simply lets the clock run.
   for (let s = 0; s < u.st.hands.length; s++) {
     if (!u.active[s]) continue;
     const p = room.players[s];
@@ -1068,6 +1070,33 @@ function handleUnoNegate(player, room, data) {
   afterNegatePlayed(room, player, r);
 }
 
+// Reset (revised 2026-10-26): a UNO! window card, NOT a pile answer.
+// Resolves immediately — reshuffle, redeal, caster moves first — then
+// the turn clock restarts on the caster.
+function handleUnoReset(player, room, data) {
+  if (!mustBePlaying(player)) return;
+  const u = room.uno;
+  if (room.status !== 'playing' || !u) { sendError(player.socket, 'Game belum berjalan'); return; }
+  const r = uno.playReset(u.st, player.seat, data.cardId);
+  if (!r.ok) {
+    const msgs = {
+      'tidak ada jendela Uno!': 'Tidak ada jendela Uno! saat ini',
+      'jatah reset habis': 'Jatah Reset sudah habis (maks 2 per game)',
+      'bukan kartu reset': 'Itu bukan kartu Reset!',
+      'reset butuh minimal 2 kartu di tangan': 'Reset tidak bisa dimainkan sebagai kartu terakhir',
+    };
+    sendError(player.socket, msgs[r.error] || 'Tidak bisa memakai Reset');
+    return;
+  }
+  clearNegateTimer(room);
+  sendGameState(room);
+  if (r.events) broadcast(room, { type: 'uno_events', events: r.events });
+  unoFixTurn(room);
+  startTurnTimer(room);
+  sendGameState(room);
+  scheduleBotIfNeeded(room);
+}
+
 function handleUnoGift(player, room, data) {
   if (!mustBePlaying(player)) return;
   const u = room.uno;
@@ -1090,13 +1119,13 @@ function handleUnoPlay(player, room, data) {
   if (!mustBePlaying(player)) return;
   const u = room.uno;
   if (room.status !== 'playing' || !u) { sendError(player.socket, 'Game belum berjalan'); return; }
-  if (u.st.negateWindow || u.st.giftPhase) { sendError(player.socket, 'Tunggu dulu — jendela Negate sedang berjalan'); return; }
+  if (u.st.negateWindow || u.st.giftPhase) { sendError(player.socket, 'Tunggu dulu — jendela Uno! sedang berjalan'); return; }
   if (u.st.turn !== player.seat) { sendError(player.socket, 'Bukan giliranmu'); return; }
   const isDrawn = u.st.drewThisTurn && u.st.drawnCard === data.cardId;
   const playFn = isDrawn ? uno.playDrawnCard : uno.playCard;
   const r = playFn(u.st, player.seat, data.cardId, { saidUno: data.saidUno, wildColor: data.wildColor });
   if (!r.ok) {
-    const msgs = { 'bukan giliranmu': 'Bukan giliranmu', 'kartu tidak cocok': 'Kartu tidak cocok', 'pilih warna dulu': 'Pilih warna dulu untuk kartu wild', 'kartu tidak ada di tanganmu': 'Kartu tidak ada di tanganmu', 'hanya kartu sejenis yang bisa menumpuk': 'Hanya kartu sejenis yang bisa menumpuk tumpukan ini', '+4 tidak bisa ditumpuk di mode normal': 'Mode Normal: +4 tidak bisa ditumpuk — ambil kartunya!', 'tumpukan +4 hanya bisa dijawab +4': 'Tumpukan +4 hanya bisa dijawab +4', 'kartu spesial hanya bisa dipakai melawan tumpukan': 'Kartu spesial hanya bisa dipakai melawan tumpukan', 'negate hanya bisa dipakai saat ada yang teriak Uno!': 'Negate hanya bisa dipakai saat ada yang teriak Uno!' };
+    const msgs = { 'bukan giliranmu': 'Bukan giliranmu', 'kartu tidak cocok': 'Kartu tidak cocok', 'pilih warna dulu': 'Pilih warna dulu untuk kartu wild', 'kartu tidak ada di tanganmu': 'Kartu tidak ada di tanganmu', 'hanya kartu sejenis yang bisa menumpuk': 'Hanya kartu sejenis yang bisa menumpuk tumpukan ini', '+4 tidak bisa ditumpuk di mode normal': 'Mode Normal: +4 tidak bisa ditumpuk — ambil kartunya!', 'tumpukan +4 hanya bisa dijawab +4': 'Tumpukan +4 hanya bisa dijawab +4', 'kartu spesial hanya bisa dipakai melawan tumpukan': 'Kartu spesial hanya bisa dipakai melawan tumpukan', 'negate hanya bisa dipakai saat ada yang teriak Uno!': 'Negate hanya bisa dipakai saat ada yang teriak Uno!', 'reset hanya bisa dipakai saat ada yang teriak Uno!': 'Reset hanya bisa dipakai saat ada yang teriak Uno!' };
     sendError(player.socket, msgs[r.error] || 'Langkah tidak valid');
     return;
   }
@@ -1107,7 +1136,7 @@ function handleUnoDraw(player, room) {
   if (!mustBePlaying(player)) return;
   const u = room.uno;
   if (room.status !== 'playing' || !u) { sendError(player.socket, 'Game belum berjalan'); return; }
-  if (u.st.negateWindow || u.st.giftPhase) { sendError(player.socket, 'Tunggu dulu — jendela Negate sedang berjalan'); return; }
+  if (u.st.negateWindow || u.st.giftPhase) { sendError(player.socket, 'Tunggu dulu — jendela Uno! sedang berjalan'); return; }
   const r = uno.drawCard(u.st, player.seat);
   if (!r.ok) {
     const msgs = { 'bukan giliranmu': 'Bukan giliranmu', 'sudah ambil kartu giliran ini': 'Kamu sudah ambil kartu' };
@@ -1126,7 +1155,7 @@ function handleUnoPass(player, room) {
   if (!mustBePlaying(player)) return;
   const u = room.uno;
   if (room.status !== 'playing' || !u) { sendError(player.socket, 'Game belum berjalan'); return; }
-  if (u.st.negateWindow || u.st.giftPhase) { sendError(player.socket, 'Tunggu dulu — jendela Negate sedang berjalan'); return; }
+  if (u.st.negateWindow || u.st.giftPhase) { sendError(player.socket, 'Tunggu dulu — jendela Uno! sedang berjalan'); return; }
   const r = uno.passTurn(u.st, player.seat);
   if (!r.ok) { sendError(player.socket, 'Ambil kartu dulu atau mainkan kartumu'); return; }
   clearTurnTimer(room);
@@ -1779,6 +1808,12 @@ async function route(ws, type, data) {
       const room = needRoom(); if (!room) return;
       if (room.game !== 'uno') { sendError(ws, 'Ini bukan room UNO'); return; }
       handleUnoNegate(player, room, data);
+      return;
+    }
+    case 'uno_reset': {
+      const room = needRoom(); if (!room) return;
+      if (room.game !== 'uno') { sendError(ws, 'Ini bukan room UNO'); return; }
+      handleUnoReset(player, room, data);
       return;
     }
     case 'uno_gift': {
