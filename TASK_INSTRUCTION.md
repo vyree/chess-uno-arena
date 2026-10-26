@@ -932,8 +932,7 @@ sampai Sensei membuka lagi diskusinya.**
   respons pertama menang, yang lain ditolak karena jendela tertutup.
 - Uncounterable; 2 kopi, maks 2 kali pakai per game.
 - (Trigger lama — "hanya saat terkena stack +2/+4" — SUDAH TIDAK
-  BERLAKU; versi live hasil deploy 26 Okt 2026 masih memakai trigger
-  lama sampai deploy berikutnya.)
+  BERLAKU di live sejak deploy 975d89b, 26 Okt 2026.)
 
 ### Kartu Negate! (Hell saja, x2 — deck Hell bertambah 128 -> 132)
 - Kartu hitam berlogo.
@@ -958,8 +957,9 @@ sudah dikonfirmasi Sensei).
 **Status: DIBANGUN 26 Okt 2026 atas perintah Sensei ("tambahkan misi 10,
 build skrg") — DEPLOYED 26 Okt 2026 malam (commit 58b13f2; server Fly
 v7 + klien Firebase live; smoke test browser lulus). REVISI trigger
-Reset 26 Okt 2026 ±23:31 WIB — LOKAL, BELUM deploy (menunggu perintah
-deploy berikutnya).**
+Reset DEPLOYED 26 Okt 2026 ±23:51 WIB (commit 975d89b; Fly v8 +
+Firebase live; verifikasi browser live lulus: `uno_reset` 3× di
+kedua host).**
 
 ### Catatan build (26 Okt 2026 — adaptasi dari spek, dicatat agar tidak hilang)
 - Baseline deck berubah karena kartu ungu (26 Okt 2026): Hell 155, bukan
