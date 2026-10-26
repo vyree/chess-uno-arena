@@ -979,7 +979,7 @@ kedua host).**
   perintah Sensei yang mengubahnya).
 - Jendela Uno! = satu respons per jendela (Negate! ATAU Reset, siapa
   cepat dia dapat); engine menutup jendela pada respons pertama.
-- **BUG LIVE 2026-10-27 (diperbaiki lokal, belum deploy):** route
+- **BUG LIVE 2026-10-27 (diperbaiki + DEPLOYED commit 4cbec44, Fly v9):** route
   uno_negate/uno_gift/uno_reset ada di switch server.js tapi TIDAK ada
   di VALIDATORS game/validate.js — server memvalidasi SETIAP pesan
   sebelum routing, sehingga semua aksi jendela ditolak live dengan
@@ -987,7 +987,7 @@ kedua host).**
   WAJIB didaftarkan di DUA tempat (VALIDATORS + switch case), dan tes
   regresi validateMessage wajib ada.** Tes regresi: `test/uno_misi10.test.js`
   bagian "WS validate allowlist".
-- **BUG VISUAL 2026-10-27 (diperbaiki lokal):** kartu Reset tidak punya
+- **BUG VISUAL 2026-10-27 (diperbaiki + DEPLOYED commit 4cbec44):** kartu Reset tidak punya
   override warna teks — label sudut putih (#fff bawaan .uno-card) di
   atas kartu off-white (#f5f5f0) = tidak terlihat; pola nullwhite
   (color + border-color gelap) diterapkan ke .uno-card.reset.
