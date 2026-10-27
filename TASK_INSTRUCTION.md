@@ -996,7 +996,7 @@ kedua host).**
 - Keluar saat jendela/hadiah berjalan: jendela ditutup / hadiah
   dibatalkan (kartu kembali ke pemilik), timer giliran dimulai ulang.
 
-## UNO: Waktu Bermain + Tanda Turn (Sensei, 27 Okt 2026 — DIBANGUN LOKAL, BELUM DEPLOY)
+## UNO: Waktu Bermain + Tanda Turn (Sensei, 27 Okt 2026 — DEPLOYED Fly v10)
 
 Perintah Sensei: (1) waktu bermain dari game start sampai akhir game;
 (2) tanda turn — 1 turn = 1x giliran pemain bermain, skip/reverse tetap
@@ -1045,5 +1045,11 @@ terhitung 1 turn.
   game selesai, `game_over` membawa `playDurationMs=15068` (±15 detik)
   dan `turnCount=52`; turnCount payload = state terakhir sebelum kartu
   kemenangan (51) + 1 untuk kartu kemenangan itu sendiri.
-- **BELUM DEPLOY**: menunggu perintah "gas deploy" Sensei (Fly v9 +
-  Firebase tetap versi lama sampai saat itu).
+- **DEPLOYED 27 Okt 2026 (perintah "gas deploy" Sensei)**: commit
+  `90009c0`, server Fly `ayo-nge` **v10** (mesin 82de14c70e2568, sin,
+  started; image `img_2wokpyqmmj5yv3g1`, config `bb9ebc7d25cb`) +
+  klien Firebase `fir-pro2-d77c3` release complete. Isi image
+  ter-deploy dibuktikan via container (turnCount, uno-play-meta,
+  playDurationMs, fmtPlayTime ada). Catatan: restart server mematikan
+  room yang sedang berjalan; deploy sempat menampilkan peringatan DNS
+  sementara untuk ayo-nge.fly.dev (propagasi, mesin sendiri sehat).
