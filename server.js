@@ -114,6 +114,18 @@ function lobbySnapshot(room, forPlayer) {
 
 function chessColor(seat) { return seat === 0 ? 'w' : 'b'; }
 
+// UNO playing time (2026-10-27, Sensei): the server owns the clock.
+// startedAt is set whenever a fresh UNO state is created; endedAt is
+// frozen the first time the game ends, so a finished game's duration
+// never keeps growing. A new round is a new game: it gets a fresh
+// startedAt (see the four room.uno creation sites below).
+function unoPlayDurationMs(room) {
+  const u = room.uno;
+  if (!u || !u.startedAt) return null;
+  if (u.st && u.st.over && !u.endedAt) u.endedAt = Date.now();
+  return Math.max(0, (u.endedAt || Date.now()) - u.startedAt);
+}
+
 function gameSnapshot(room, player) {
   const base = {
     type: 'game_state', code: room.code, game: room.game, status: room.status,
@@ -136,6 +148,8 @@ function gameSnapshot(room, player) {
   } else if (room.uno) {
     const u = room.uno;
     base.state = uno.toClient(u.st, player.seat);
+    base.playStartedAt = u.startedAt || null;
+    base.playDurationMs = unoPlayDurationMs(room);
     base.round = u.round;
     base.negateEndsAt = room.negateEndsAt || null;
     base.giftEndsAt = room.giftEndsAt || null;
@@ -185,6 +199,8 @@ function gameOverPayload(room, result) {
     });
   }
   if (room.game === 'uno') {
+    payload.playDurationMs = unoPlayDurationMs(room);
+    payload.turnCount = room.uno ? (room.uno.st.turnCount || 0) : 0;
     payload.winnerSeat = result.winner;
     const w = room.players[result.winner];
     payload.winnerNickname = w ? dispName(w) : null;
@@ -553,7 +569,7 @@ function startSession(room) {
     rooms.shuffleSeats(room);
     const prevRound = room.uno ? room.uno.round : 0;
     const n = room.players.length;
-    room.uno = { st: uno.newGame(n, { mode: room.unoMode || 'normal', unlimited: !!room.unoUnlimited }), active: new Array(n).fill(true), round: prevRound + 1 };
+    room.uno = { st: uno.newGame(n, { mode: room.unoMode || 'normal', unlimited: !!room.unoUnlimited }), active: new Array(n).fill(true), round: prevRound + 1, startedAt: Date.now() };
     if (!room.scoreBoard) room.scoreBoard = {};
     for (const p of room.players) {
       if (room.scoreBoard[p.id] === undefined) room.scoreBoard[p.id] = 0;
@@ -631,7 +647,7 @@ function handleStartGame(player, room, data) {
     room.unoMode = (data && data.mode) || 'normal';
     room.unoUnlimited = !!(data && data.unlimited);
     const n = room.players.length;
-    room.uno = { st: uno.newGame(n, { mode: room.unoMode, unlimited: room.unoUnlimited }), active: new Array(n).fill(true), round: 1 };
+    room.uno = { st: uno.newGame(n, { mode: room.unoMode, unlimited: room.unoUnlimited }), active: new Array(n).fill(true), round: 1, startedAt: Date.now() };
     room.scoreBoard = {};
     for (const p of room.players) room.scoreBoard[p.id] = 0;
     room.status = 'playing';
@@ -1189,7 +1205,7 @@ function handleUnoNewRound(player, room) {
   // UNO: seats are re-shuffled every new round (Sensei, Misi 2)
   rooms.shuffleSeats(room);
   const n = room.players.length;
-  room.uno = { st: uno.newGame(n, { mode: room.unoMode || 'normal', unlimited: !!room.unoUnlimited }), active: new Array(n).fill(true), round: room.uno.round + 1 };
+  room.uno = { st: uno.newGame(n, { mode: room.unoMode || 'normal', unlimited: !!room.unoUnlimited }), active: new Array(n).fill(true), round: room.uno.round + 1, startedAt: Date.now() };
   room.status = 'playing';
   startTurnTimer(room);
   sendGameState(room);
@@ -1622,7 +1638,7 @@ async function route(ws, type, data) {
       }
       rooms.shuffleSeats(room);
       const n = room.players.length;
-      room.uno = { st: uno.newGame(n, { mode: room.unoMode, unlimited: room.unoUnlimited }), active: new Array(n).fill(true), round: 1 };
+      room.uno = { st: uno.newGame(n, { mode: room.unoMode, unlimited: room.unoUnlimited }), active: new Array(n).fill(true), round: 1, startedAt: Date.now() };
       room.scoreBoard = {};
       for (const p of room.players) room.scoreBoard[p.id] = 0;
       room.status = 'playing';

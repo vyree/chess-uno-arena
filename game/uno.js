@@ -131,6 +131,15 @@ function newGame(numPlayers, opts) {
     drewThisTurn: false,
     over: null,
     round: 1,
+    // Playing time + turn marker (2026-10-27, Sensei): turnCount counts
+    // COMPLETED turns only. A play, a pass after drawing, a penalty
+    // draw, and a timeout-advanced turn each count as 1. A skip or
+    // reverse counts as 1 for the caster only — the skipped player
+    // gets no turn and adds nothing. Negate!/Reset!/gift actions are
+    // window interventions, not turns, and never count. Failed plays
+    // never count. Playing time itself is server-owned (room.uno
+    // startedAt/endedAt in server.js); the engine only owns the count.
+    turnCount: 0,
   };
   return st;
 }
@@ -310,12 +319,14 @@ function playCard(st, playerIdx, cardId, opts) {
       const left = activeSeats(st);
       if (left.length <= 1) {
         st.over = { winner: st.finished[0].player, loser: left[0] ?? -1, reason: 'unlimited' };
+        st.turnCount++;
         return { ok: true, finished: finishedInfo, gameOver: true, penalty, events };
       }
       // game continues: the finishing card's effects still apply, then
       // the turn moves on (advanceTurn skips finished seats below).
     } else {
       st.over = { winner: playerIdx, reason: 'habis' };
+      st.turnCount++;
       return { ok: true, won: true, penalty, events };
     }
   }
@@ -341,6 +352,10 @@ function playCard(st, playerIdx, cardId, opts) {
     if (stacking) events.push({ type: 'stack', player: playerIdx, total: st.pendingDraw });
   }
   advanceTurn(st, skip);
+  // The caster's turn counts as exactly 1, whatever the card did:
+  // skip advances 2 seats but the skipped seat gets no turn, reverse
+  // flips direction but is still the caster's single turn.
+  st.turnCount++;
   return { ok: true, penalty, events, finished: finishedInfo };
 }
 
@@ -358,6 +373,9 @@ function drawCard(st, playerIdx) {
     st.pendingKind = null;
     for (let i = 0; i < n && st.deck.length; i++) st.hands[playerIdx].push(st.deck.pop());
     advanceTurn(st, 1);
+    // The victim's turn is consumed by the penalty draw, so it counts
+    // as 1 completed turn even though no card was played.
+    st.turnCount++;
     return { ok: true, drew: n, lostTurn: true, events: [{ type: 'drawPenalty', player: playerIdx, n }] };
   }
   const card = st.deck.pop();
@@ -387,6 +405,9 @@ function passTurn(st, playerIdx) {
   st.drewThisTurn = false;
   st.drawnCard = null;
   advanceTurn(st, 1);
+  // Draw-then-pass completes here (the draw alone is mid-turn, so it
+  // must not count); playing the drawn card counts via playCard.
+  st.turnCount++;
   return { ok: true };
 }
 
@@ -584,6 +605,11 @@ function toClient(st, playerIdx) {
     deckCount: st.deck.length,
     over: st.over,
     round: st.round,
+    // Turn marker (2026-10-27): turnCount = completed turns; the turn
+    // currently in progress is turnCount + 1 (at game over it is just
+    // turnCount, since no turn is in progress anymore).
+    turnCount: st.turnCount || 0,
+    turnNumber: st.over ? (st.turnCount || 0) : (st.turnCount || 0) + 1,
     numPlayers: st.hands.length,
     // Misi 10 (client reads only its own eligibility — never others'):
     unlimited: !!st.unlimited,

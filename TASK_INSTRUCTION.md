@@ -2,6 +2,8 @@
 
 > Worksheet Raphael. Satu fase dalam satu waktu. JANGAN loncat fase.
 
+> **PEMBATALAN 27 Okt 2026 (perintah Sensei):** semua planning yang belum naik ke prod DIBATALKAN — login Google, Jalur B chat LLM, migrasi Firestore, proposal Keluar Room showModal, sfx khusus Truth, redeploy Railway. Jangan dibangun, jangan ditagih lagi. Prod tetap Fly v9 + Firebase apa adanya.
+
 ## Keputusan / Asumsi Tercatat (AGENTS.md: don't guess)
 
 1. **`ws` disetujui eksplisit oleh misi** ("pakai `ws`, ringan") — ini approval user via Arona, override aturan "no new packages". Versi di-pin di package.json.
@@ -993,3 +995,55 @@ kedua host).**
   (color + border-color gelap) diterapkan ke .uno-card.reset.
 - Keluar saat jendela/hadiah berjalan: jendela ditutup / hadiah
   dibatalkan (kartu kembali ke pemilik), timer giliran dimulai ulang.
+
+## UNO: Waktu Bermain + Tanda Turn (Sensei, 27 Okt 2026 — DIBANGUN LOKAL, BELUM DEPLOY)
+
+Perintah Sensei: (1) waktu bermain dari game start sampai akhir game;
+(2) tanda turn — 1 turn = 1x giliran pemain bermain, skip/reverse tetap
+terhitung 1 turn.
+
+### Spesifikasi yang dipakai (asumsi Arona, tercatat agar bisa dikoreksi)
+- **Waktu bermain**: milik server (`room.uno.startedAt` di 4 titik
+  pembuatan UNO baru: start_game, startSession, uno_new_round,
+  create_bot_room; `endedAt` dibekukan saat game berakhir pertama kali).
+  Satu ronde baru = game baru, waktunya mulai dari nol lagi. Klien
+  hanya memformat + men-tick lokal di antara snapshot server.
+- **Turn**: `st.turnCount` = turn yang SUDAH selesai. Tampilan saat
+  main = `turnCount + 1` (turn yang sedang berjalan); di layar akhir =
+  total `turnCount`.
+- Yang dihitung 1 turn: main kartu (termasuk kartu kemenangan/finis),
+  lewati setelah ambil kartu, tarik penalti +N (turn korban habis),
+  turn yang maju karena timeout. Ambil kartu saja belum dihitung
+  (masih tengah turn). Main gagal tidak dihitung.
+- Skip = 1 untuk pemain yang main saja (pemain yang diskip tidak dapat
+  turn); reverse = 1 untuk pemain yang main saja (arah berbalik, tetap
+  1 turn; di 2 pemain giliran kembali ke pemain yang sama, tetap 1).
+- Negate!/Reset!/hadiah BUKAN turn, tidak menambah hitungan. Setelah
+  Reset, pemain yang main berikutnya dihitung sebagai turn baru yang
+  normal (Reset sendiri tidak dihitung).
+- Tampilan: bar game UNO `🕐 MM:SS · 🔄 Turn N` (di samping timer
+  giliran 60 detik yang sudah ada — beda fungsi, jangan dicampur);
+  layar akhir game `🕐 Waktu bermain` + `🔄 Total turn`.
+- Cakupan: UNO saja (catur/Truth tidak disentuh).
+
+### File yang diubah (lokal, belum commit/deploy)
+- `game/uno.js`: `turnCount` di `newGame`, increment di `playCard`
+  (menang/finis/akhir), `drawCard` penalti, `passTurn`; `toClient`
+  mengekspos `turnCount` + `turnNumber`.
+- `server.js`: `unoPlayDurationMs`, `startedAt` di 4 titik, `game_state`
+  membawa `playStartedAt`/`playDurationMs`, `game_over` membawa
+  `playDurationMs`/`turnCount`.
+- `public/index.html` + `public/app.js`: elemen `#uno-play-meta`,
+  `fmtPlayTime`/`updateUnoPlayMeta`, tick interval 500 ms, baris waktu
+  + total turn di `onGameOver`.
+- Tes baru `test/uno_playtime_turn.test.js` (9 tes), didaftarkan di
+  `package.json` test script.
+
+### Verifikasi lokal (27 Okt 2026)
+- `npm test`: **153/153 lulus** (144 lama + 9 baru).
+- Sim WS nyata (server lokal, `UNO_BOT_THINK_MS=0`, manusia vs 1 bot):
+  game selesai, `game_over` membawa `playDurationMs=15068` (±15 detik)
+  dan `turnCount=52`; turnCount payload = state terakhir sebelum kartu
+  kemenangan (51) + 1 untuk kartu kemenangan itu sendiri.
+- **BELUM DEPLOY**: menunggu perintah "gas deploy" Sensei (Fly v9 +
+  Firebase tetap versi lama sampai saat itu).

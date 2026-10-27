@@ -546,8 +546,34 @@ function cardHTML(c) {
     + `<i class="cnr br">${label}</i>`;
 }
 
+// ---------- uno playing time + turn marker (2026-10-27, Sensei) ----------
+// Playing time is server-owned (playStartedAt / playDurationMs in the
+// game_state); the client only formats it and ticks it locally between
+// snapshots. Turn shown during play = the turn in progress
+// (turnCount + 1); at game over it is the finished total (turnCount).
+function fmtPlayTime(ms) {
+  if (ms == null || ms < 0) ms = 0;
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+  const ss = String(s % 60).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+function updateUnoPlayMeta() {
+  const el = $('uno-play-meta');
+  if (!el || !S.uno) return;
+  const st = S.uno;
+  const meta = S.unoMeta || {};
+  let ms = meta.playDurationMs;
+  if (ms == null && meta.playStartedAt) ms = Date.now() - meta.playStartedAt;
+  if (ms == null) ms = 0;
+  const turn = st.over ? (st.turnCount || 0) : (st.turnNumber || ((st.turnCount || 0) + 1));
+  el.textContent = `🕐 ${fmtPlayTime(ms)} · 🔄 Turn ${turn}`;
+}
+
 function renderUno(m) {
   const st = m.state;
+  updateUnoPlayMeta();
   const me = m.players.find((p) => p.id === m.you);
   const spectating = !!m.spectating;
   const mySeat = me ? me.seat : -1;
@@ -987,6 +1013,16 @@ function onGameOver(m) {
   const reason = REASONS_ID[m.result.reason] || m.reasonText || m.result.reason;
   let body = `<p style="font-size:18px">${reason}</p>`;
   if (m.winnerNickname) body += `<p>🏆 Pemenang: <strong>${m.winnerNickname}</strong></p>`;
+  // UNO playing time + turn total (2026-10-27): server-frozen values
+  // from the game_over payload, falling back to the last game_state.
+  if (m.game === 'uno') {
+    const durMs = m.playDurationMs != null ? m.playDurationMs
+      : (S.unoMeta ? S.unoMeta.playDurationMs : null);
+    const totalTurns = m.turnCount != null ? m.turnCount
+      : (S.uno ? (S.uno.turnCount || 0) : null);
+    if (durMs != null) body += `<p>🕐 Waktu bermain: <strong>${fmtPlayTime(durMs)}</strong></p>`;
+    if (totalTurns != null) body += `<p>🔄 Total turn: <strong>${totalTurns}</strong></p>`;
+  }
   else body += '<p>🤝 Seri!</p>';
   if (m.finished && m.finished.length) {
     body += '<p><strong>🏁 Peringkat finis:</strong></p><table class="score-table">'
@@ -1056,6 +1092,14 @@ setInterval(() => {
     const left = Math.max(0, Math.ceil((S.deadline - Date.now()) / 1000));
     el.textContent = '⏱️ ' + left;
     el.classList.toggle('low', left <= 15 && left > 0);
+  }
+  // UNO playing time ticks locally between server snapshots; once the
+  // game is over the server-frozen duration is shown instead.
+  if (S.game === 'uno' && S.uno && !(S.unoMeta && S.unoMeta.playDurationMs != null && S.uno.over)) {
+    if (S.unoMeta && S.unoMeta.playStartedAt && !S.uno.over) {
+      const el = $('uno-play-meta');
+      if (el) el.textContent = `🕐 ${fmtPlayTime(Date.now() - S.unoMeta.playStartedAt)} · 🔄 Turn ${(S.uno.turnNumber || ((S.uno.turnCount || 0) + 1))}`;
+    }
   }
 }, 500);
 
