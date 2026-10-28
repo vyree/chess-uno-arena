@@ -1495,3 +1495,22 @@ miring -22 derajat di tengah dengan nilai diputar balik +22 derajat).
   dikenal sejak dulu) — uji WS akhir tetap di perangkat Sensei.
 - Commit 438a1c6 + dokumen ini belum di-push ke GitHub saat deploy (deploy memakai
   image lokal); push dilakukan terpisah setelah verifikasi prod.
+
+## Home cards disamakan — DEPLOYED 28 Okt 2026 (Fly v12, commit 2dba65d)
+- Perintah Sensei 28 Okt 2026 (dari screenshot home): samakan warna + bentuk kartu,
+  jadi 4 grid kotak; Ludo + Truth masing-masing dapat DUA label.
+- Perubahan (hanya public/index.html + public/style.css): keempat kartu memakai
+  satu gradasi ungu (#8f7fe0 -> #6750c2) dan grid 2x2 yang sama (Truth tidak lagi
+  melebar penuh, Ludo tidak lagi gelap); Ludo + Truth masing-masing memakai dua
+  badge: ( Under Construction ) kuning + ( Limited Access ) putih-pink. Badge
+  lama ( Beta Test ) di kartu home Truth DIGANTI kedua badge ini.
+- Pelajaran visual: versi pertama badge absolute pojok kanan MENUTUPI nama game
+  di kartu setengah lebar (desktop + mobile) — diperbaiki jadi baris footer
+  (margin-top:auto, di bawah art), terverifikasi screenshot desktop 900px + mobile
+  390px sebelum deploy. Badge hanya label visual, kedua game tetap bisa dimainkan.
+- Sisa: pill ( Beta Test ) di header MENU game Truth (gm-beta, tampil saat menu
+  Truth dibuka) TIDAK diubah — itu bukan kartu home; tanyakan Sensei bila mau
+  diganti juga.
+- Deploy: buildah -> Fly v12 (sin started) + Firebase Hosting; verifikasi prod:
+  style.css memuat gc-badges/badge-limited, index memuat 2x Under Construction +
+  2x Limited Access.
