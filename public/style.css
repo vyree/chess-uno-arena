@@ -557,18 +557,19 @@ body.on-tabs { padding-bottom: 84px; }
 #tabbar .tab.active { background: rgba(255, 255, 255, .18); color: #fff; }
 
 /* Home: Truth card uses the same grid cell as the others, with a little CSS wheel. */
-/* Badges sit as a footer row (margin-top:auto pushes them below the art),
-   so they never cover the game name on narrow half-width cards. */
+/* Single small badge in the top-right corner. It is absolute, so it adds
+   no height to the card; the header on badged cards gets top padding so
+   the game name starts below the badge instead of sliding under it. */
 .gc-badges {
-  position: static; margin-top: auto; padding-bottom: 14px;
-  display: flex; flex-wrap: wrap; gap: 5px;
+  position: absolute; top: 10px; right: 10px; z-index: 3;
+  display: flex; gap: 5px;
 }
 .gc-badge {
   background: #ffe9a8; color: #6b4e00;
-  font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: var(--radius-full);
-  letter-spacing: .05em; white-space: nowrap;
+  font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: var(--radius-full);
+  letter-spacing: .04em; white-space: nowrap;
 }
-.gc-badge.badge-limited { background: #fff; color: #b3126b; border: 2px solid #ff2e93; }
+.card-ludo .gc-head, .card-truth .gc-head { padding-top: 20px; }
 .beta-pill {
   display: inline-block; margin-top: 4px; background: #fff; color: #b3126b;
   border: 2px solid #ff2e93; font-size: 11px; font-weight: 800;
