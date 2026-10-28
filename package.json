@@ -10,11 +10,11 @@
   "main": "server.js",
   "name": "chess-uno-arena",
   "scripts": {
-    "check": "node --check server.js && node --check game/chess.js && node --check game/uno.js && node --check game/bot.js && node --check game/chessbot.js && node --check game/slang.js && node --check game/textbrain.js && node --check game/personachat.js && node --check game/auth.js && node --check game/truth.js && node --check game/questions.js && node --check game/rooms.js && node --check game/validate.js && node --check public/app.js && node --check test/simulate.js && node --check test/sim_truth.js && node --check test/takeover.test.js && node --check test/heartbeat.test.js && node --check test/session.test.js",
+    "check": "node --check server.js && node --check game/chess.js && node --check game/uno.js && node --check game/ludo.js && node --check game/bot.js && node --check game/chessbot.js && node --check game/slang.js && node --check game/textbrain.js && node --check game/personachat.js && node --check game/auth.js && node --check game/truth.js && node --check game/questions.js && node --check game/rooms.js && node --check game/validate.js && node --check public/app.js && node --check test/simulate.js && node --check test/sim_truth.js && node --check test/takeover.test.js && node --check test/heartbeat.test.js && node --check test/session.test.js && node --check test/ludo.test.js && node --check test/ludo_bot_attack.test.js",
     "simulate": "node test/simulate.js",
     "sim:truth": "node test/sim_truth.js",
     "start": "node server.js",
-    "test": "node --test test/chess.test.js test/chessbot.test.js test/textbrain.test.js test/personachat.test.js test/uno.test.js test/uno_stacking.test.js test/uno_misi10.test.js test/uno_playtime_turn.test.js test/bot.test.js test/auth.test.js test/rooms.test.js test/truth.test.js test/truth_bank.test.js test/takeover.test.js test/heartbeat.test.js test/session.test.js"
+    "test": "node --test test/chess.test.js test/chessbot.test.js test/textbrain.test.js test/personachat.test.js test/uno.test.js test/uno_stacking.test.js test/uno_misi10.test.js test/uno_playtime_turn.test.js test/bot.test.js test/auth.test.js test/rooms.test.js test/truth.test.js test/truth_bank.test.js test/takeover.test.js test/heartbeat.test.js test/session.test.js test/ludo.test.js test/ludo_bot_attack.test.js"
   },
   "version": "1.0.0"
 }

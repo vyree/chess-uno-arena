@@ -252,6 +252,66 @@ const VALIDATORS = {
   },
   truth_kurang_greget() { return { ok: true, data: {} }; },
   truth_next() { return { ok: true, data: {} }; },
+  // ---- Ludo Jahat (Fase 1) ----
+  create_ludo_bot_room() { return { ok: true, data: {} }; },
+  ludo_roll() { return { ok: true, data: {} }; },
+  ludo_move(d) {
+    if (!Number.isInteger(d.token) || d.token < 0 || d.token > 3) {
+      return { ok: false, error: 'token harus 0-3' };
+    }
+    return { ok: true, data: { token: d.token } };
+  },
+  ludo_use_neutral(d) {
+    const c = validCardId(d.cardId);
+    if (!c.ok) return c;
+    if (d.choice !== undefined && d.choice !== null
+      && (!Number.isInteger(d.choice) || d.choice < 1 || d.choice > 6)) {
+      return { ok: false, error: 'pilihan langkah harus 1-6' };
+    }
+    return { ok: true, data: { cardId: c.value, choice: d.choice } };
+  },
+  ludo_attack(d) {
+    // The attack card itself lives server-side in pendingAttack; the
+    // client only names the target, so cardId is optional here.
+    const out = {};
+    if (d.cardId !== undefined && d.cardId !== null) {
+      const c = validCardId(d.cardId);
+      if (!c.ok) return c;
+      out.cardId = c.value;
+    }
+    if (d.targetAbs !== undefined && d.targetAbs !== null) {
+      if (!Number.isInteger(d.targetAbs) || d.targetAbs < 0 || d.targetAbs > 51) {
+        return { ok: false, error: 'petak target tidak valid' };
+      }
+      out.targetAbs = d.targetAbs;
+    }
+    if (d.targetPlayer !== undefined && d.targetPlayer !== null) {
+      if (!Number.isInteger(d.targetPlayer) || d.targetPlayer < 0 || d.targetPlayer > 3) {
+        return { ok: false, error: 'pemain target tidak valid' };
+      }
+      out.targetPlayer = d.targetPlayer;
+    }
+    if (d.targetToken !== undefined && d.targetToken !== null) {
+      if (!Number.isInteger(d.targetToken) || d.targetToken < 0 || d.targetToken > 3) {
+        return { ok: false, error: 'token target tidak valid' };
+      }
+      out.targetToken = d.targetToken;
+    }
+    return { ok: true, data: out };
+  },
+  ludo_defense(d) {
+    if (d.cardId === undefined || d.cardId === null) return { ok: true, data: { cardId: null } };
+    const c = validCardId(d.cardId);
+    if (!c.ok) return c;
+    return { ok: true, data: { cardId: c.value } };
+  },
+  ludo_swap(d) {
+    if (d.oldCardId === undefined || d.oldCardId === null) return { ok: true, data: { oldCardId: null } };
+    const c = validCardId(d.oldCardId);
+    if (!c.ok) return c;
+    return { ok: true, data: { oldCardId: c.value } };
+  },
+  ludo_pass_attack() { return { ok: true, data: {} }; },
 };
 
 function validateMessage(raw) {

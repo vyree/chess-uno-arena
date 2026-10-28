@@ -762,3 +762,98 @@ body.low-gfx * {
 .avatar-big { border-color: var(--color-neon-deep); }
 .react-btn strong { color: var(--color-neon-deep); }
 .big-code { color: var(--color-neon-deep); }
+
+/* ============ Ludo Jahat (Fase 1, dark board) ============ */
+.card-ludo { background: #1b2436; color: #fff; }
+.art-ludo { display: flex; gap: 6px; font-size: 30px; }
+.ludo-pawn.p-red { color: #ff5a5a; }
+.ludo-pawn.p-green { color: #3ddc84; }
+.ludo-pawn.p-yellow { color: #ffcf3d; }
+.ludo-pawn.p-blue { color: #5aa8ff; }
+.ludo-wrap { position: relative; max-width: 480px; margin: 0 auto; }
+.ludo-board { position: relative; aspect-ratio: 1; background: #111827; border-radius: 12px; overflow: hidden; }
+.ludo-board-bg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border-radius: 12px; }
+/* Player name in the top band of each yard (outer edge to inner box):
+   40% wide, 6.667% tall, so it never reaches the first pawn row. */
+.ludo-base-name { position: absolute; width: 40%; height: 6.667%; box-sizing: border-box; padding: 1% 2%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: clamp(10px, 3.4vw, 14px); font-weight: 700; line-height: 1.3; color: #fff; text-shadow: 0 1px 2px #000, 0 0 4px #000; pointer-events: none; z-index: 1; }
+.ludo-token-wrap { position: absolute; width: 6.2%; aspect-ratio: 1; transform: translate(-50%, -50%); z-index: 1; }
+.ludo-token-img { width: 100%; height: 100%; display: block; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
+.ludo-token-wrap.clickable { cursor: pointer; outline: 2px solid #fff; border-radius: 50%; animation: ludo-pulse .8s infinite; }
+.ludo-token-wrap.targetable { cursor: crosshair; outline: 2px solid #ff2e93; border-radius: 50%; }
+.ludo-token-wrap.frozen { filter: drop-shadow(0 0 4px #7dd3fc); }
+.ludo-frozen-badge { position: absolute; right: -20%; top: -20%; font-size: 12px; line-height: 1; }
+.ludo-skill-target { position: absolute; width: 6.667%; aspect-ratio: 1; transform: translate(-50%, -50%); background: transparent; border: 2px dashed #fff; border-radius: 8px; cursor: pointer; z-index: 1; }
+@keyframes ludo-pulse { 50% { transform: translate(-50%, -50%) scale(1.25); } }
+.ludo-dice { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 11%; aspect-ratio: 1; padding: 0; border: none; background: transparent; cursor: pointer; z-index: 2; }
+.ludo-dice img { width: 100%; height: 100%; display: block; border-radius: 12px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.5)); }
+.ludo-dice:disabled { opacity: .6; cursor: default; }
+.ludo-dice-idle { opacity: .85; }
+/* Ludo header on one line, even at 390px: scoped to #screen-ludo so
+   other games keep their own game-bar layout. */
+#screen-ludo .game-bar { flex-wrap: nowrap; gap: 6px; }
+#screen-ludo .game-bar > div:first-child { min-width: 0; display: flex; align-items: center; gap: 6px; }
+#screen-ludo .game-bar strong { white-space: nowrap; }
+#screen-ludo .turn-badge { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; margin-left: 0; }
+#screen-ludo .game-bar-right { flex-shrink: 0; gap: 6px; }
+#screen-ludo #btn-leave-ludo { white-space: nowrap; }
+@media (max-width: 480px) {
+  #screen-ludo .game-bar { padding: 8px 10px; font-size: 14px; }
+  #screen-ludo .turn-badge { font-size: 10px; padding: 2px 6px; max-width: 96px; }
+  #screen-ludo .timer { font-size: 14px; }
+  #screen-ludo #btn-leave-ludo { padding: 6px 8px; font-size: 12px; }
+}
+.ludo-status { text-align: center; margin: 8px 0; }
+.ludo-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; }
+.ludo-hand { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Ludo skill cards, UNO-style face (Sensei, 2026-10-27): upright
+   card with a white border, corner indices, and a tilted oval in
+   the middle carrying the big symbol — the same visual language
+   as .uno-card. Group colours are unchanged (attack black, defense
+   white, neutral purple); only the presentation changed. */
+.ludo-card {
+  width: 78px; height: 112px; flex: 0 0 auto;
+  border: 3px solid #fff; border-radius: 10px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-weight: 800; color: #fff; cursor: pointer; user-select: none;
+  box-shadow: 0 3px 10px rgba(0,0,0,.25); position: relative; padding: 0;
+}
+.ludo-card .cnr {
+  position: absolute; font-style: normal; font-weight: 800; line-height: 1;
+  font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,.35); z-index: 2;
+}
+.ludo-card .cnr.tl { top: 5px; left: 6px; }
+.ludo-card .cnr.br { bottom: 5px; right: 6px; transform: rotate(180deg); }
+.ludo-card .oval {
+  width: 84%; height: 52%; background: #fff; border-radius: 50%;
+  transform: rotate(-22deg);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,.05);
+}
+.ludo-card .oval .val { transform: rotate(22deg); font-size: 26px; }
+.ludo-card-name {
+  font-size: 10px; font-weight: 700; line-height: 1.2; text-align: center;
+  padding: 0 4px; margin-top: 6px; max-height: 24px; overflow: hidden;
+}
+.ludo-card.card-attack { background: #17171c; }
+.ludo-card.card-attack .oval .val { color: #17171c; }
+.ludo-card.card-defense { background: #f5f5f0; color: #1c1c1e; border-color: #cfcfda; }
+.ludo-card.card-defense .oval { background: #17171c; }
+.ludo-card.card-defense .oval .val { color: #fff; }
+.ludo-card.card-neutral { background: #7b2fbe; }
+.ludo-card.card-neutral .oval .val { color: #7b2fbe; }
+.ludo-card.mini { width: 60px; height: 86px; margin: 0 auto 8px; cursor: default; }
+.ludo-card.mini .oval .val { font-size: 20px; }
+.ludo-card.mini .ludo-card-name { font-size: 9px; }
+.ludo-card.mini .cnr { font-size: 11px; }
+.ludo-card-wrap { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+.ludo-announce-card {
+  display: inline-flex; width: 22px; height: 22px; border-radius: 50%;
+  background: #fff; border: 1px solid #ff2e93; align-items: center; justify-content: center;
+  font-size: 13px; margin-right: 6px; vertical-align: middle;
+}
+.ludo-bubble { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); max-width: 92vw; background: #fff; border: 2px solid #ff2e93; border-radius: 14px; padding: 14px; box-shadow: 0 12px 30px rgba(0,0,0,.35); z-index: 50; }
+.ludo-announce { text-align: center; font-weight: 700; padding: 10px; border-radius: 10px; background: #fff7ed; border: 2px solid #ff2e93; margin-bottom: 10px; }
+.ludo-announce.fx-sniper { animation: ludo-shake .5s; }
+.ludo-announce.fx-bom { animation: ludo-shake .5s; background: #fef2f2; }
+.ludo-announce.fx-beku { background: #eff6ff; }
+@keyframes ludo-shake { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }

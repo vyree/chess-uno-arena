@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ludo Jahat — Demo Assets Bersih (ludo-clean)</title>
+<style>
+  body{font-family:system-ui,sans-serif;background:#0f172a;color:#f9fafb;margin:0;padding:24px}
+  h1{font-size:20px} h2{font-size:17px;margin-top:32px} p{color:#d1d5db;line-height:1.6;max-width:760px}
+  code{background:#1f2937;padding:2px 6px;border-radius:6px}
+  .board-wrap{position:relative;width:min(720px,92vw);aspect-ratio:1;margin:20px 0}
+  .board-wrap>img.bg{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .pawn{position:absolute;width:6.2%;aspect-ratio:1;transform:translate(-50%,-50%);filter:drop-shadow(0 2px 3px rgba(0,0,0,.6))}
+  .dice-demo{position:absolute;left:50%;top:50%;width:9.5%;aspect-ratio:1;transform:translate(-50%,-50%)}
+  .parts{display:grid;grid-template-columns:360fr 180fr 360fr;grid-template-rows:360fr 180fr 360fr;width:min(720px,92vw);aspect-ratio:1;margin:20px 0;background:#0f172a}
+  .parts img{width:100%;height:100%;display:block}
+  .gallery{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+  .gallery img{width:56px;height:56px}
+</style>
+</head>
+<body>
+<h1>🎲 Ludo Jahat — Demo assets bersih</h1>
+<p>Folder ini berisi aset baru yang digambar ulang sebagai SVG (bukan potongan JPEG lama).
+Papan di bawah adalah <code>board-full.svg</code> sebagai latar, dengan 16 pion di posisi base
+dan 1 dadu di tengah — semuanya elemen HTML terpisah di atas latar, <b>bukan</b> menempel di SVG papan.
+Jadi token bisa dipindah-pindah tanpa merusak latar, dan tidak ada pion/dadu ganda.</p>
+
+<h2>1. Board-full + pion base + dadu tengah</h2>
+<div class="board-wrap">
+  <img class="bg" src="./board-full.svg" alt="Papan Ludo Jahat utuh">
+    <img class="pawn" src="./pawn-red.svg" alt="pawn red" style="left:13.333%;top:13.333%;">
+    <img class="pawn" src="./pawn-red.svg" alt="pawn red" style="left:26.667%;top:13.333%;">
+    <img class="pawn" src="./pawn-red.svg" alt="pawn red" style="left:13.333%;top:26.667%;">
+    <img class="pawn" src="./pawn-red.svg" alt="pawn red" style="left:26.667%;top:26.667%;">
+    <img class="pawn" src="./pawn-green.svg" alt="pawn green" style="left:73.333%;top:13.333%;">
+    <img class="pawn" src="./pawn-green.svg" alt="pawn green" style="left:86.667%;top:13.333%;">
+    <img class="pawn" src="./pawn-green.svg" alt="pawn green" style="left:73.333%;top:26.667%;">
+    <img class="pawn" src="./pawn-green.svg" alt="pawn green" style="left:86.667%;top:26.667%;">
+    <img class="pawn" src="./pawn-yellow.svg" alt="pawn yellow" style="left:73.333%;top:73.333%;">
+    <img class="pawn" src="./pawn-yellow.svg" alt="pawn yellow" style="left:86.667%;top:73.333%;">
+    <img class="pawn" src="./pawn-yellow.svg" alt="pawn yellow" style="left:73.333%;top:86.667%;">
+    <img class="pawn" src="./pawn-yellow.svg" alt="pawn yellow" style="left:86.667%;top:86.667%;">
+    <img class="pawn" src="./pawn-blue.svg" alt="pawn blue" style="left:13.333%;top:73.333%;">
+    <img class="pawn" src="./pawn-blue.svg" alt="pawn blue" style="left:26.667%;top:73.333%;">
+    <img class="pawn" src="./pawn-blue.svg" alt="pawn blue" style="left:13.333%;top:86.667%;">
+    <img class="pawn" src="./pawn-blue.svg" alt="pawn blue" style="left:26.667%;top:86.667%;">
+  <img class="dice-demo" src="./dice-6.svg" alt="Dadu 6">
+</div>
+<p>Posisi pion base di demo ini adalah SLOT TAMPIL simetris (bukan pusat sel grid engine): yard 0–360, kotak dalam 60–300 (konsentris, margin 60), slot di 120 dan 240 relatif yard (13.333% dan 26.667% dari papan). Lihat TASK_INSTRUCTION.md bagian Ludo Jahat untuk pemetaan lengkap. Jika pion meleset dari lingkaran slot, itu cacat yang harus dilaporkan — di screenshot cek, pion harus tepat di tengah lingkaran.</p>
+
+<h2>2. Rakitan per-part 3×3 (cek seam)</h2>
+<p>Jika ada garis sambungan yang meleset/ganda di antara part, itu akan terlihat di sini.
+Part-part ini memakai koordinat papan yang sama dengan board-full, tanpa stroke luar part.</p>
+<div class="parts">
+  <img src="./yard-red.svg" alt="yard-red"><img src="./track-top.svg" alt="track-top"><img src="./yard-green.svg" alt="yard-green">
+  <img src="./track-left.svg" alt="track-left"><img src="./center.svg" alt="center"><img src="./track-right.svg" alt="track-right">
+  <img src="./yard-blue.svg" alt="yard-blue"><img src="./track-bottom.svg" alt="track-bottom"><img src="./yard-yellow.svg" alt="yard-yellow">
+</div>
+
+<h2>3. Pion &amp; dadu</h2>
+<div class="gallery">
+  <img src="./pawn-red.svg" alt="pawn red"><img src="./pawn-green.svg" alt="pawn green">
+  <img src="./pawn-yellow.svg" alt="pawn yellow"><img src="./pawn-blue.svg" alt="pawn blue">
+  <img src="./dice-1.svg" alt="dice 1"><img src="./dice-2.svg" alt="dice 2"><img src="./dice-3.svg" alt="dice 3">
+  <img src="./dice-4.svg" alt="dice 4"><img src="./dice-5.svg" alt="dice 5"><img src="./dice-6.svg" alt="dice 6">
+</div>
+<p>Catatan geometri: kolom home 6 petak per warna di spesifikasi — 5 petak pertama adalah sel grid,
+petak ke-6 menyatu dengan segitiga tengah warna yang sama (papan klasik: 144 yard + 52 jalur + 20 home + 9 tengah = 225 sel).
+Sel home ke-6 itu tidak digambar sebagai kotak terpisah, melainkan sebagai segitiga tengahnya.</p>
+</body>
+</html>

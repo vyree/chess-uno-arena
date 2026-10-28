@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="360 360 180 180" width="900" height="900" role="img" aria-label="Ludo Jahat board">
+<defs>
+<pattern id="stripes-red" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="14" height="14" fill="#ff4d6e"/><line x1="0" y1="0" x2="0" y2="14" stroke="#ffffff" stroke-opacity="0.10" stroke-width="5"/></pattern>
+<pattern id="stripes-green" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="14" height="14" fill="#2ed98f"/><line x1="0" y1="0" x2="0" y2="14" stroke="#ffffff" stroke-opacity="0.10" stroke-width="5"/></pattern>
+<pattern id="stripes-yellow" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="14" height="14" fill="#ffb81e"/><line x1="0" y1="0" x2="0" y2="14" stroke="#ffffff" stroke-opacity="0.10" stroke-width="5"/></pattern>
+<pattern id="stripes-blue" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="14" height="14" fill="#3aa0ff"/><line x1="0" y1="0" x2="0" y2="14" stroke="#ffffff" stroke-opacity="0.10" stroke-width="5"/></pattern>
+</defs>
+
+<rect x="360" y="360" width="180" height="180" fill="#0f172a"/>
+<g><polygon points="360,360 360,540 450,450" fill="#ff4d6e"/><polygon points="360,360 540,360 450,450" fill="#2ed98f"/><polygon points="540,360 540,540 450,450" fill="#ffb81e"/><polygon points="360,540 540,540 450,450" fill="#3aa0ff"/><circle cx="450" cy="450" r="56" fill="#0f172a" stroke="#ff2e93" stroke-width="3"/><circle cx="450" cy="450" r="44" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="4 5"/></g>
+</svg>

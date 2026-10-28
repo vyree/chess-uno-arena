@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 
 const chess = require('./game/chess');
+const ludo = require('./game/ludo');
 const uno = require('./game/uno');
 const truth = require('./game/truth');
 const questions = require('./game/questions');
@@ -140,7 +141,9 @@ function gameSnapshot(room, player) {
       connected: p.connected || !!p.takenOver,
     })),
   };
-  if (room.game === 'chess') {
+  if (room.game === 'ludo' && room.ludo) {
+    base.state = ludo.toClient(room.ludo.st, player.seat);
+  } else if (room.game === 'chess') {
     base.state = chess.toClient(room.chess);
   } else if (room.game === 'truth' && room.truth) {
     base.state = truth.snapshot(room.truth.st);
@@ -198,6 +201,11 @@ function gameOverPayload(room, result) {
       return { playerId: p.id, nickname: rp ? dispName(rp) : p.id, points: p.points };
     });
   }
+  if (room.game === 'ludo') {
+    payload.winnerSeat = result.winner;
+    const w = room.players[result.winner];
+    payload.winnerNickname = w ? dispName(w) : null;
+  }
   if (room.game === 'uno') {
     payload.playDurationMs = unoPlayDurationMs(room);
     payload.turnCount = room.uno ? (room.uno.st.turnCount || 0) : 0;
@@ -244,6 +252,9 @@ function onTurnTimeout(room) {
     const payload = gameOverPayload(room, { ...room.chess.over, winnerColor });
     broadcast(room, payload);
     enterDecision(room);
+  } else if (room.game === 'ludo') {
+    if (!room.ludo || room.ludo.st.over) return;
+    ludoAutoStep(room);
   } else {
     const u = room.uno;
     if (!u || u.st.over) return;
@@ -553,6 +564,7 @@ function backToLobby(room) {
   for (const p of [...room.spectators]) moveToPlayers(room, p);
   for (const p of room.players) p.inSession = true;
   room.uno = null;
+  room.ludo = null;
   room.chess = null;
   room.truth = null;
   room.truthStage = null;
@@ -1540,6 +1552,292 @@ function teardownBotRoom(room) {
   rooms.destroy(room.code);
 }
 
+// ---------------- Ludo Jahat (Fase 1) ----------------
+// Server owns every rule; the client only sends intent. Card hands
+// are never broadcast: gameSnapshot -> ludo.toClient hides other
+// hands and the deck order. Announcements reveal only the card used.
+function ludoBotThinkMs() {
+  const fixed = parseInt(process.env.LUDO_BOT_THINK_MS || '', 10);
+  if (Number.isFinite(fixed) && fixed >= 0) return fixed;
+  return 800;
+}
+function ludoAnnounce(room, text, cardKind) {
+  broadcast(room, { type: 'ludo_announce', text, cardKind: cardKind || null });
+}
+function ludoSync(room) {
+  if (!room.ludo || room.ludo.st.over) return;
+  startTurnTimer(room);
+  sendGameState(room);
+  scheduleLudoBot(room);
+}
+function ludoFinish(room) {
+  const st = room.ludo.st;
+  room.status = 'over';
+  clearTurnTimer(room);
+  broadcast(room, gameOverPayload(room, { winner: st.winner, reason: 'ludo' }));
+}
+function scheduleLudoBot(room) {
+  if (room.game !== 'ludo' || room.status !== 'playing' || !room.ludo || room.ludo.st.over) return;
+  if (room.botTimer) return;
+  // Defense belongs to the defender, not the attacker: the engine
+  // turn stays with the attacker during a defense, so scheduling
+  // must key on the defender in that phase (otherwise a bot
+  // defender behind a human attacker is never scheduled, and a
+  // bot attacker would auto-play a human defender's defense).
+  const st = room.ludo.st;
+  const actor = (st.phase === 'defense' && st.pendingDefense) ? st.pendingDefense.defender : st.turn;
+  const p = room.players[actor];
+  if (!seatDriven(p)) return;
+  room.botTimer = setTimeout(() => {
+    room.botTimer = null;
+    if (!rooms.get(room.code) || room.status !== 'playing') return;
+    ludoBotStep(room);
+  }, ludoBotThinkMs());
+}
+function ludoAfterMove(room, moveResult) {
+  const st = room.ludo.st;
+  const seat = st.turn;
+  const player = room.players[seat];
+  if (st.over) { ludoFinish(room); return; }
+  if (moveResult.landedSkill) {
+    const abs = ludo.absOf(seat, moveResult.move.to);
+    const cooled = abs !== null && st.blockCooldown[abs];
+    if (!cooled && st.deck.length) {
+      const card = ludo.drawCard(st);
+      ludo.startBlockCooldown(st, abs);
+      room.ludo.lastMove = moveResult;
+      if (card.group === 'attack') {
+        st.phase = 'attack';
+        st.pendingAttack = { kind: card.kind, attacker: seat, card };
+        ludoSync(room);
+        return;
+      }
+      if (st.players[seat].hand.length < ludo.MAX_HAND) {
+        st.players[seat].hand.push(card);
+        ludoAnnounce(room, `${dispName(player)} mendapat kartu ${ludo.CARD_DEFS[card.kind].name}.`, card.kind);
+      } else {
+        st.phase = 'swap';
+        st.pendingDraw = { player: seat, card };
+        ludoSync(room);
+        return;
+      }
+    }
+  }
+  const before = st.turn;
+  const flow = ludo.afterMoveFlow(st, moveResult);
+  if (flow.over) { ludoFinish(room); return; }
+  if (st.turn !== before) ludo.tickBlockCooldown(st);
+  ludoSync(room);
+}
+function ludoContinueAfterAttack(room) {
+  const st = room.ludo.st;
+  const moveResult = room.ludo.lastMove || { captured: [], enteredHome: false };
+  room.ludo.lastMove = null;
+  st.pendingAttack = null;
+  st.pendingDefense = null;
+  const before = st.turn;
+  const flow = ludo.afterMoveFlow(st, moveResult);
+  if (flow.over) { ludoFinish(room); return; }
+  if (st.turn !== before) ludo.tickBlockCooldown(st);
+  ludoSync(room);
+}
+function doLudoRoll(room) {
+  const st = room.ludo.st;
+  if (st.phase !== 'roll' || st.over) return { ok: false, error: 'bukan waktunya kocok' };
+  st.dice = ludo.rollDice(st);
+  if (st.dice === 6) st.sixCount += 1;
+  st.steps = st.dice;
+  st.neutralUsed = false;
+  st.phase = 'move';
+  const moves = ludo.legalMoves(st, st.turn, st.steps, st.dice);
+  if (!moves.length) {
+    ludo.endTurn(st);
+    ludo.tickBlockCooldown(st);
+    return { ok: true, noMove: true };
+  }
+  return { ok: true };
+}
+function doLudoMove(room, tokenIdx) {
+  const st = room.ludo.st;
+  if (st.phase !== 'move' || st.over) return { ok: false, error: 'bukan waktunya jalan' };
+  const r = ludo.applyMove(st, st.turn, tokenIdx, st.steps, st.dice);
+  if (!r.ok) return r;
+  if (r.captured.length) {
+    const names = r.captured.map((v) => dispName(room.players[v.player])).join(', ');
+    ludoAnnounce(room, `${dispName(room.players[st.turn])} memakan bidak ${names}!`);
+  }
+  ludoAfterMove(room, r);
+  return { ok: true };
+}
+function doLudoNeutral(room, cardId, choice) {
+  const st = room.ludo.st;
+  const r = ludo.useNeutral(st, st.turn, cardId, choice);
+  if (!r.ok) return r;
+  ludoAnnounce(room, `${dispName(room.players[st.turn])} memakai ${ludo.CARD_DEFS[r.card.kind].name}.`, r.card.kind);
+  ludoSync(room);
+  return { ok: true };
+}
+function doLudoAttack(room, data) {
+  const st = room.ludo.st;
+  if (st.phase !== 'attack' || !st.pendingAttack || st.over) return { ok: false, error: 'tidak ada kartu attack yang menunggu' };
+  const card = st.pendingAttack.card;
+  const seat = st.turn;
+  const target = card.kind === 'bom' ? { abs: data.targetAbs } : { player: data.targetPlayer, token: data.targetToken };
+  const b = ludo.beginAttack(st, seat, card, target);
+  if (!b.ok) return b;
+  if (b.needsDefense) {
+    st.phase = 'defense';
+    st.pendingDefense = { attack: b.attack, defender: b.defender, victim: b.victim };
+    ludoAnnounce(room, `${dispName(room.players[seat])} memakai ${ludo.CARD_DEFS[card.kind].name}!`, card.kind);
+    ludoSync(room);
+    return { ok: true };
+  }
+  ludoAnnounce(room, `${dispName(room.players[seat])} memakai ${ludo.CARD_DEFS[card.kind].name}!`, card.kind);
+  ludoContinueAfterAttack(room);
+  return { ok: true };
+}
+function doLudoPassAttack(room) {
+  const st = room.ludo.st;
+  if (st.phase !== 'attack' || !st.pendingAttack) return { ok: false, error: 'tidak ada kartu attack yang menunggu' };
+  ludo.returnHangus(st, st.pendingAttack.card);
+  ludoContinueAfterAttack(room);
+  return { ok: true };
+}
+function doLudoDefense(room, cardId) {
+  const st = room.ludo.st;
+  if (st.phase !== 'defense' || !st.pendingDefense) return { ok: false, error: 'tidak ada serangan yang menunggu defense' };
+  const defender = st.pendingDefense.defender;
+  if (st.turn !== defender && room.ludo.st.turn !== defender) {
+    // Defense is the defender's choice, not the attacker's turn.
+    // The engine turn stays with the attacker; validate by defender seat.
+  }
+  const r = ludo.resolveDefenseStep(st, st.pendingDefense, cardId);
+  if (!r.ok) return r;
+  if (r.card) ludoAnnounce(room, `${dispName(room.players[defender])} memakai ${ludo.CARD_DEFS[r.card.kind].name}!`, r.card.kind);
+  if (r.done) {
+    ludoContinueAfterAttack(room);
+  } else {
+    st.pendingDefense = { attack: st.pendingDefense.attack, defender: r.defender, victim: r.victim };
+    ludoSync(room);
+  }
+  return { ok: true };
+}
+function doLudoSwap(room, oldCardId) {
+  const st = room.ludo.st;
+  if (st.phase !== 'swap' || !st.pendingDraw) return { ok: false, error: 'tidak ada kartu yang menunggu tukar' };
+  const seat = st.turn;
+  const hand = st.players[seat].hand;
+  if (oldCardId === null) {
+    ludo.returnHangus(st, st.pendingDraw.card);
+  } else {
+    const idx = hand.findIndex((c) => c.id === oldCardId);
+    if (idx < 0) return { ok: false, error: 'kartu lama tidak ada di tangan' };
+    const old = hand.splice(idx, 1)[0];
+    ludo.returnHangus(st, old);
+    hand.push(st.pendingDraw.card);
+  }
+  st.pendingDraw = null;
+  const moveResult = room.ludo.lastMove || { captured: [], enteredHome: false };
+  room.ludo.lastMove = null;
+  const before = st.turn;
+  const flow = ludo.afterMoveFlow(st, moveResult);
+  if (flow.over) { ludoFinish(room); return { ok: true }; }
+  if (st.turn !== before) ludo.tickBlockCooldown(st);
+  ludoSync(room);
+  return { ok: true };
+}
+function ludoBotStep(room) {
+  const st = room.ludo.st;
+  if (room.status !== 'playing' || st.over) return;
+  const seat = st.turn;
+  // Same defense-actor rule as scheduleLudoBot: during a defense
+  // the acting seat is the defender, not the turn holder.
+  const actor = (st.phase === 'defense' && st.pendingDefense) ? st.pendingDefense.defender : seat;
+  const p = room.players[actor];
+  if (!seatDriven(p)) return;
+  if (st.phase === 'roll') {
+    const r = doLudoRoll(room);
+    if (r.ok && !r.noMove) ludoSync(room);
+    else if (r.ok) ludoSync(room);
+    return;
+  }
+  if (st.phase === 'move') {
+    const neutral = ludo.botChooseNeutral(st, seat);
+    if (neutral) {
+      const nr = doLudoNeutral(room, neutral.cardId, neutral.choice);
+      if (nr.ok) { ludoBotStepContinue(room); return; }
+    }
+    const moves = ludo.legalMoves(st, seat, st.steps, st.dice);
+    const mv = ludo.botChooseMove(st, seat, moves);
+    if (mv) doLudoMove(room, mv.token);
+    else { ludo.endTurn(st); ludoSync(room); }
+    return;
+  }
+  if (st.phase === 'attack') {
+    const card = st.pendingAttack.card;
+    const target = ludo.botChooseAttack(st, seat, card);
+    if (!target) doLudoPassAttack(room);
+    else {
+      // botChooseAttack returns the engine shape {player, token} /
+      // {abs}, but doLudoAttack expects the human-client shape
+      // {targetPlayer, targetToken} / {targetAbs} (it translates
+      // that shape into the engine shape for beginAttack). Passing
+      // the bot shape through raw made beginAttack fail with
+      // "target serangan tidak valid" / "tidak ada bidak di petak
+      // itu", and the failure was ignored without a sync or a new
+      // timer — so the game hung in phase 'attack' until the 60s
+      // turn timer passed the card. Translate here, at the single
+      // bot call site, so the human path is untouched.
+      const data = card.kind === 'bom'
+        ? { targetAbs: target.abs }
+        : { targetPlayer: target.player, targetToken: target.token };
+      const r = doLudoAttack(room, data);
+      // A stale target must never hang the game: fall back to a
+      // legal pass (card returns to the deck, as a pass does).
+      if (!r.ok && !doLudoPassAttack(room).ok) ludoSync(room);
+    }
+    return;
+  }
+  if (st.phase === 'defense') {
+    const defender = st.pendingDefense.defender;
+    const cardId = ludo.botChooseDefense(st, defender, st.pendingDefense);
+    doLudoDefense(room, cardId);
+    return;
+  }
+  if (st.phase === 'swap') {
+    const oldId = ludo.botSwapChoice(st, seat, st.pendingDraw.card);
+    doLudoSwap(room, oldId);
+    return;
+  }
+}
+function ludoBotStepContinue(room) {
+  // After a bot neutral, the bot still has to move in the same turn.
+  const st = room.ludo.st;
+  if (st.phase !== 'move') return;
+  const moves = ludo.legalMoves(st, st.turn, st.steps, st.dice);
+  const mv = ludo.botChooseMove(st, st.turn, moves);
+  if (mv) doLudoMove(room, mv.token);
+}
+function ludoAutoStep(room) {
+  // Timeout: take the first legal, safe action repeatedly (max 10).
+  for (let i = 0; i < 10; i++) {
+    const st = room.ludo.st;
+    if (room.status !== 'playing' || st.over) break;
+    if (st.phase === 'roll') { doLudoRoll(room); continue; }
+    if (st.phase === 'move') {
+      const moves = ludo.legalMoves(st, st.turn, st.steps, st.dice);
+      if (!moves.length) { ludo.endTurn(st); break; }
+      doLudoMove(room, moves[0].token);
+      continue;
+    }
+    if (st.phase === 'attack') { doLudoPassAttack(room); continue; }
+    if (st.phase === 'defense') { doLudoDefense(room, null); continue; }
+    if (st.phase === 'swap') { doLudoSwap(room, null); continue; }
+    break;
+  }
+  ludoSync(room);
+}
+
 // ---------------- message router ----------------
 // Returns the verified Firebase uid for a token, or null (error already sent).
 async function checkToken(ws, idToken) {
@@ -1665,6 +1963,88 @@ async function route(ws, type, data) {
       }
       const started = startTruthGame(room);
       if (!started.ok) { teardownBotRoom(room); sendError(ws, started.error); }
+      return;
+    }
+    case 'create_ludo_bot_room': {
+      // Ludo Jahat Fase 1: human (red, seat 0) + 3 Komputer seats.
+      // Seat order is fixed clockwise (red/green/yellow/blue) to match
+      // the dark board design — no seat shuffle for Ludo.
+      if (player.roomCode) { sendError(ws, 'Kamu sudah di sebuah room'); return; }
+      const created = rooms.create('ludo', player);
+      if (!created.ok) { sendError(ws, created.error); return; }
+      const room = created.room;
+      room.isBotRoom = true;
+      const botNames = ['Komputer Hijau', 'Komputer Kuning', 'Komputer Biru'];
+      for (const name of botNames) {
+        const bp = {
+          id: 'bot-' + crypto.randomUUID(), nickname: name,
+          isBot: true, socket: null, roomCode: room.code, seat: 0, connected: true, active: true,
+        };
+        players.set(bp.id, bp);
+        rooms.addPlayer(room, bp);
+      }
+      room.ludo = { st: ludo.newGame(), lastMove: null };
+      room.status = 'playing';
+      startTurnTimer(room);
+      sendGameState(room);
+      scheduleLudoBot(room);
+      return;
+    }
+    case 'ludo_roll': {
+      const room = needRoom(); if (!room) return;
+      if (room.game !== 'ludo' || room.status !== 'playing' || !room.ludo) { sendError(ws, 'Game Ludo belum berjalan'); return; }
+      if (player.seat !== room.ludo.st.turn) { sendError(ws, 'Bukan giliranmu'); return; }
+      const r = doLudoRoll(room);
+      if (!r.ok) { sendError(ws, r.error); return; }
+      ludoSync(room);
+      return;
+    }
+    case 'ludo_move': {
+      const room = needRoom(); if (!room) return;
+      if (room.game !== 'ludo' || room.status !== 'playing' || !room.ludo) { sendError(ws, 'Game Ludo belum berjalan'); return; }
+      if (player.seat !== room.ludo.st.turn) { sendError(ws, 'Bukan giliranmu'); return; }
+      const r = doLudoMove(room, data.token);
+      if (!r.ok) { sendError(ws, r.error); return; }
+      return;
+    }
+    case 'ludo_use_neutral': {
+      const room = needRoom(); if (!room) return;
+      if (room.game !== 'ludo' || room.status !== 'playing' || !room.ludo) { sendError(ws, 'Game Ludo belum berjalan'); return; }
+      if (player.seat !== room.ludo.st.turn) { sendError(ws, 'Bukan giliranmu'); return; }
+      const r = doLudoNeutral(room, data.cardId, data.choice);
+      if (!r.ok) { sendError(ws, r.error); return; }
+      return;
+    }
+    case 'ludo_attack': {
+      const room = needRoom(); if (!room) return;
+      if (room.game !== 'ludo' || room.status !== 'playing' || !room.ludo) { sendError(ws, 'Game Ludo belum berjalan'); return; }
+      if (player.seat !== room.ludo.st.turn) { sendError(ws, 'Bukan giliranmu'); return; }
+      const r = doLudoAttack(room, data);
+      if (!r.ok) { sendError(ws, r.error); return; }
+      return;
+    }
+    case 'ludo_pass_attack': {
+      const room = needRoom(); if (!room) return;
+      if (room.game !== 'ludo' || room.status !== 'playing' || !room.ludo) { sendError(ws, 'Game Ludo belum berjalan'); return; }
+      if (player.seat !== room.ludo.st.turn) { sendError(ws, 'Bukan giliranmu'); return; }
+      const r = doLudoPassAttack(room);
+      if (!r.ok) { sendError(ws, r.error); return; }
+      return;
+    }
+    case 'ludo_defense': {
+      const room = needRoom(); if (!room) return;
+      if (room.game !== 'ludo' || room.status !== 'playing' || !room.ludo) { sendError(ws, 'Game Ludo belum berjalan'); return; }
+      if (!room.ludo.st.pendingDefense || player.seat !== room.ludo.st.pendingDefense.defender) { sendError(ws, 'Bukan kamu yang diserang'); return; }
+      const r = doLudoDefense(room, data.cardId);
+      if (!r.ok) { sendError(ws, r.error); return; }
+      return;
+    }
+    case 'ludo_swap': {
+      const room = needRoom(); if (!room) return;
+      if (room.game !== 'ludo' || room.status !== 'playing' || !room.ludo) { sendError(ws, 'Game Ludo belum berjalan'); return; }
+      if (player.seat !== room.ludo.st.turn) { sendError(ws, 'Bukan giliranmu'); return; }
+      const r = doLudoSwap(room, data.oldCardId);
+      if (!r.ok) { sendError(ws, r.error); return; }
       return;
     }
     case 'ping': {

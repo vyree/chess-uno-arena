@@ -211,6 +211,7 @@ function route(m) {
     case 'room_list': renderRoomList(m.rooms); break;
     case 'lobby_update': onLobby(m); break;
     case 'game_state': onGameState(m); break;
+    case 'ludo_announce': showLudoAnnounce(m); break;
     case 'uno_events': handleUnoEvents(m.events); break;
     case 'truth_event': handleTruthEvents(m.events); break;
     case 'chess_legal': onChessLegal(m); break;
@@ -267,6 +268,7 @@ const GAME_MENU = {
   chess: ['♟️ Catur', '2 pemain · klasik, timer per giliran'],
   uno: ['🃏 UNO', '2–8 pemain · tumpuk +2/+4, jangan lupa teriak UNO!'],
   truth: ['🎡 Truth or Truth', '2–8 pemain · roda acak, jawab jujur, kumpulkan reaksi!'],
+  ludo: ['🎲 Ludo Jahat', '4 pemain · kartu skill attack, defense & netral'],
 };
 
 function openGameMenu() {
@@ -275,6 +277,8 @@ function openGameMenu() {
   $('gm-sub').textContent = sub;
   $('bot-card').classList.toggle('hidden', S.game !== 'uno');
   $('ai-card').classList.toggle('hidden', S.game !== 'chess');
+  $('ludo-card').classList.toggle('hidden', S.game !== 'ludo');
+  $('room-card').classList.toggle('hidden', S.game === 'ludo');
   $('gm-beta').classList.toggle('hidden', S.game !== 'truth');
   // Sensei's playtest door (2026-10-22): a quiet "( test bot )" entry in
   // the Truth menu footer — solo Truth against simulated bot answers.
@@ -421,6 +425,10 @@ function onGameState(m) {
     S.truth = m.state; S.game = 'truth';
     showScreen('screen-truth');
     renderTruth(m);
+  } else if (m.game === 'ludo') {
+    S.ludo = m.state; S.game = 'ludo';
+    showScreen('screen-ludo');
+    renderLudo(m);
   } else {
     S.uno = m.state; S.unoMeta = m; S.game = 'uno';
     showScreen('screen-uno');
@@ -1023,7 +1031,7 @@ function onGameOver(m) {
     if (durMs != null) body += `<p>🕐 Waktu bermain: <strong>${fmtPlayTime(durMs)}</strong></p>`;
     if (totalTurns != null) body += `<p>🔄 Total turn: <strong>${totalTurns}</strong></p>`;
   }
-  else body += '<p>🤝 Seri!</p>';
+  else if (m.game !== 'ludo') body += '<p>🤝 Seri!</p>';
   if (m.finished && m.finished.length) {
     body += '<p><strong>🏁 Peringkat finis:</strong></p><table class="score-table">'
       + m.finished.map((f) => `<tr><td>#${f.rank} ${f.nickname}</td><td><strong>${f.points}</strong></td></tr>`).join('')
@@ -1085,7 +1093,7 @@ setInterval(() => {
   if (dc && S.decision && S.decision.endsAt) {
     dc.textContent = Math.max(0, Math.ceil((S.decision.endsAt - Date.now()) / 1000));
   }
-  for (const id of ['chess-timer', 'uno-timer', 'truth-timer']) {
+  for (const id of ['chess-timer', 'uno-timer', 'truth-timer', 'ludo-timer']) {
     const el = $(id);
     if (!el) continue;
     if (!S.deadline) { el.textContent = '⏱️ --'; el.classList.remove('low'); continue; }
@@ -1528,6 +1536,304 @@ function onTruthGameOver(m) {
     [{ label: '🚪 Keluar Room', cls: 'primary', onClick: () => send('leave_room') }]);
 }
 
+// ---------- Ludo Jahat (display only — rules live on the server) ----------
+// Board geometry for rendering: main-track squares in clockwise order
+// starting at the red start, then each color's home column (6 cells).
+const LUDO_PATH = [[6,1],[6,2],[6,3],[6,4],[6,5],[5,6],[4,6],[3,6],[2,6],[1,6],[0,6],[0,7],[0,8],[1,8],[2,8],[3,8],[4,8],[5,8],[6,9],[6,10],[6,11],[6,12],[6,13],[6,14],[7,14],[8,14],[8,13],[8,12],[8,11],[8,10],[8,9],[9,8],[10,8],[11,8],[12,8],[13,8],[14,8],[14,7],[14,6],[13,6],[12,6],[11,6],[10,6],[9,6],[8,5],[8,4],[8,3],[8,2],[8,1],[8,0],[7,0],[6,0]];
+const LUDO_HOME = {
+  red: [[7,1],[7,2],[7,3],[7,4],[7,5],[7,6]],
+  green: [[1,7],[2,7],[3,7],[4,7],[5,7],[6,7]],
+  yellow: [[7,13],[7,12],[7,11],[7,10],[7,9],[7,8]],
+  blue: [[13,7],[12,7],[11,7],[10,7],[9,7],[8,7]],
+};
+const LUDO_BASE = {
+  red: [[2,2],[2,4],[4,2],[4,4]],
+  green: [[2,10],[2,12],[4,10],[4,12]],
+  yellow: [[10,10],[10,12],[12,10],[12,12]],
+  blue: [[10,2],[10,4],[12,2],[12,4]],
+};
+const LUDO_COLORS = ['red', 'green', 'yellow', 'blue'];
+function ludoCellFor(player, progress, tokenIdx) {
+  if (progress === -1) return [LUDO_BASE[LUDO_COLORS[player]][tokenIdx]];
+  if (progress >= 0 && progress <= 50) {
+    const start = [0, 13, 26, 39][player];
+    return [LUDO_PATH[(start + progress) % 52]];
+  }
+  if (progress >= 51 && progress <= 56) return [LUDO_HOME[LUDO_COLORS[player]][progress - 51]];
+  return [[7, 7]];
+}
+// Display-only base slots, symmetric by design (see TASK_INSTRUCTION.md).
+// Engine base cells (2,2),(2,4)... average toward the board centre, so
+// they are NOT symmetric inside a yard. Display slots instead use a
+// concentric inner box: yard 0-360, inner 60-300 (margin 60 all sides),
+// slots at 1/4 and 3/4 of the inner box (120 and 240, yard-relative).
+// Values below are board coordinates (0-900), per colour, tokenIdx order.
+const LUDO_BASE_DISPLAY = {
+  red: [[120, 120], [240, 120], [120, 240], [240, 240]],
+  green: [[660, 120], [780, 120], [660, 240], [780, 240]],
+  yellow: [[660, 660], [780, 660], [660, 780], [780, 780]],
+  blue: [[120, 660], [240, 660], [120, 780], [240, 780]],
+};
+// Player-name labels sit in the top band of each yard (between the
+// outer yard edge and the inner box), so they never cover a pawn.
+// Left yards (red, blue) align left; right yards align right.
+const LUDO_BASE_NAME_POS = {
+  red: { left: 0, top: 0, align: 'left' },
+  green: { left: 60, top: 0, align: 'right' },
+  yellow: { left: 60, top: 60, align: 'right' },
+  blue: { left: 0, top: 60, align: 'left' },
+};
+function ludoTokenPos(player, progress, tokenIdx) {
+  if (progress === -1) {
+    const [x, y] = LUDO_BASE_DISPLAY[LUDO_COLORS[player]][tokenIdx];
+    return { left: x / 9, top: y / 9 };
+  }
+  const [r, c] = ludoCellFor(player, progress, tokenIdx)[0];
+  return { left: (c + 0.5) / 15 * 100, top: (r + 0.5) / 15 * 100 };
+}
+function ludoMySeat(m) {
+  return m.players.findIndex((p) => p.id === m.you);
+}
+// UNO-style face for a Ludo skill card: corner index + tilted oval
+// with the big symbol + card name below (same language as cardHTML
+// for UNO). Group colours live in CSS; this only supplies the face.
+const LUDO_CARD_ICON = {
+  sniper: '🎯', bom: '💣', seret: '⛓️', beku: '❄️',
+  perisai: '🛡️', cermin: '🪞', teleport: '🌀', kulit: '🪨',
+  x2: '×2', plus1: '+1', plus2: '+2', plus3: '+3',
+  minus1: '−1', minus2: '−2', minus3: '−3', bebas: '1–6',
+};
+function ludoCardFace(card, info) {
+  const icon = LUDO_CARD_ICON[card.kind] || '?';
+  return `<i class="cnr tl">${icon}</i>`
+    + `<span class="oval"><span class="val">${icon}</span></span>`
+    + `<span class="ludo-card-name">${info.name}</span>`
+    + `<i class="cnr br">${icon}</i>`;
+}
+function showLudoBubble(card, state) {
+  const info = state.cardInfo[card.kind];
+  const box = $('ludo-card-bubble');
+  const groupLabel = card.group === 'attack' ? 'Attack (hitam)' : card.group === 'defense' ? 'Defense (putih)' : 'Netral (ungu)';
+  let actions = '';
+  const mySeat = ludoMySeat({ players: S.players, you: S.playerId });
+  const isMyTurn = state.turn === mySeat;
+  if (card.group === 'neutral' && state.phase === 'move' && isMyTurn && !state.neutralUsed) {
+    actions = `<button class="btn primary small" id="ludo-bubble-use">▶️ Pakai kartu ini</button>`;
+  }
+  box.innerHTML = `<div class="ludo-card card-${card.group} mini" aria-hidden="true">${ludoCardFace(card, info)}</div><strong>${info.name}</strong> <span class="muted">${groupLabel}</span><p>${info.desc}</p>${actions}<button class="btn ghost small" id="ludo-bubble-close">Tutup</button>`;
+  box.classList.remove('hidden');
+  $('ludo-bubble-close').onclick = () => box.classList.add('hidden');
+  const useBtn = $('ludo-bubble-use');
+  if (useBtn) useBtn.onclick = () => {
+    box.classList.add('hidden');
+    let choice;
+    if (card.kind === 'bebas') {
+      const v = prompt('Pilih jumlah langkah (1-6):', '6');
+      choice = parseInt(v, 10);
+      if (!choice || choice < 1 || choice > 6) { toast('Pilih 1-6 ya'); return; }
+    }
+    send('ludo_use_neutral', { cardId: card.id, choice });
+  };
+}
+let ludoAnnounceTimer = null;
+function showLudoAnnounce(m) {
+  const el = $('ludo-announce');
+  el.textContent = m.text;
+  // Small card icon chip in front of the text (kept as textContent
+  // + a DOM node, never innerHTML, so nicknames stay unescaped).
+  if (m.cardKind && LUDO_CARD_ICON[m.cardKind]) {
+    const chip = document.createElement('span');
+    chip.className = 'ludo-announce-card';
+    chip.textContent = LUDO_CARD_ICON[m.cardKind];
+    el.prepend(chip);
+  }
+  el.className = 'ludo-announce' + (m.cardKind ? ` fx-${m.cardKind}` : '');
+  if (ludoAnnounceTimer) clearTimeout(ludoAnnounceTimer);
+  ludoAnnounceTimer = setTimeout(() => el.classList.add('hidden'), 3000);
+}
+function renderLudo(m) {
+  const st = m.state;
+  const board = $('ludo-board');
+  // Board background is the ludo-clean SVG (stars, skill blocks, home
+  // columns and centre are already drawn inside it). No 225-cell grid
+  // is rendered any more; only an absolute token layer on top of it.
+  if (!board.dataset.built) {
+    board.innerHTML = '';
+    const bg = document.createElement('img');
+    bg.className = 'ludo-board-bg';
+    bg.src = '/assets/ludo-clean/board-full.svg';
+    bg.alt = 'Papan Ludo Jahat';
+    board.appendChild(bg);
+    LUDO_COLORS.forEach((color) => {
+      const pos = LUDO_BASE_NAME_POS[color];
+      const name = document.createElement('div');
+      name.className = 'ludo-base-name';
+      name.dataset.color = color;
+      name.style.left = `${pos.left}%`;
+      name.style.top = `${pos.top}%`;
+      name.style.textAlign = pos.align;
+      board.appendChild(name);
+    });
+    board.dataset.built = '1';
+  }
+  board.querySelectorAll('.ludo-token-wrap, .ludo-skill-target').forEach((el) => el.remove());
+  const mySeat = ludoMySeat(m);
+  const isMyTurn = st.turn === mySeat;
+  const legal = new Set((st.legalMoves || []).map((x) => x.token));
+  // Collect token positions first so tokens sharing one spot get a
+  // small symmetric offset instead of overlapping exactly.
+  const tokenList = [];
+  st.players.forEach((pl, pi) => {
+    pl.tokens.forEach((t, ti) => {
+      tokenList.push({ pl, pi, ti, pos: ludoTokenPos(pi, t.progress, ti) });
+    });
+  });
+  const stackAt = {};
+  tokenList.forEach((item) => {
+    const key = `${item.pos.left.toFixed(3)},${item.pos.top.toFixed(3)}`;
+    stackAt[key] = (stackAt[key] || 0) + 1;
+  });
+  const stackSeen = {};
+  tokenList.forEach((item) => {
+    const key = `${item.pos.left.toFixed(3)},${item.pos.top.toFixed(3)}`;
+    const n = stackAt[key];
+    const idx = stackSeen[key] || 0;
+    stackSeen[key] = idx + 1;
+    const dx = n > 1 ? (idx - (n - 1) / 2) * 1.4 : 0;
+    const wrap = document.createElement('span');
+    wrap.className = `ludo-token-wrap tok-${item.pl.color}` + (item.pl.frozen.includes(item.ti) ? ' frozen' : '');
+    wrap.style.left = `${item.pos.left + dx}%`;
+    wrap.style.top = `${item.pos.top}%`;
+    wrap.title = `${m.players[item.pi] ? m.players[item.pi].nickname : item.pl.color} #${item.ti + 1}` + (item.pl.frozen.includes(item.ti) ? ' (beku)' : '');
+    const img = document.createElement('img');
+    img.className = 'ludo-token-img';
+    img.src = `/assets/ludo-clean/pawn-${item.pl.color}.svg`;
+    img.alt = `Pion ${item.pl.color}`;
+    wrap.appendChild(img);
+    if (item.pl.frozen.includes(item.ti)) {
+      const badge = document.createElement('span');
+      badge.className = 'ludo-frozen-badge';
+      badge.textContent = '❄️';
+      wrap.appendChild(badge);
+    }
+    if (isMyTurn && st.phase === 'move' && legal.has(item.ti) && item.pi === mySeat) {
+      wrap.classList.add('clickable');
+      wrap.onclick = () => send('ludo_move', { token: item.ti });
+    }
+    if (st.phase === 'attack' && st.pendingAttack && st.pendingAttack.kind !== 'bom' && item.pi !== mySeat) {
+      wrap.classList.add('targetable');
+      wrap.onclick = () => send('ludo_attack', { cardId: st.pendingAttack.cardId, targetPlayer: item.pi, targetToken: item.ti });
+    }
+    board.appendChild(wrap);
+  });
+  // Bom targets: invisible clickable cells at skill-block centres.
+  if (st.phase === 'attack' && st.pendingAttack && st.pendingAttack.kind === 'bom') {
+    for (const abs of st.skillBlocks) {
+      const [r, c] = LUDO_PATH[abs];
+      const btn = document.createElement('button');
+      btn.className = 'ludo-skill-target';
+      btn.style.left = `${(c + 0.5) / 15 * 100}%`;
+      btn.style.top = `${(r + 0.5) / 15 * 100}%`;
+      btn.title = 'Target Bom Petak';
+      btn.onclick = () => send('ludo_attack', { cardId: st.pendingAttack.cardId, targetAbs: abs });
+      board.appendChild(btn);
+    }
+  }
+  // Names come from the live roster (never hardcoded): seat order is
+  // red, green, yellow, blue, so index = colour index. Re-set on every
+  // render so a renamed player is reflected without a reload.
+  board.querySelectorAll('.ludo-base-name').forEach((el) => {
+    const pi = LUDO_COLORS.indexOf(el.dataset.color);
+    el.textContent = m.players[pi] ? m.players[pi].nickname : '';
+  });
+  const turnPlayer = m.players[st.turn];
+  $('ludo-turn-badge').textContent = turnPlayer ? `Giliran: ${turnPlayer.nickname}` : '';
+  const diceBtn = $('ludo-dice');
+  const diceImg = $('ludo-dice-img');
+  if (diceImg) {
+    diceImg.src = st.dice ? `/assets/ludo-clean/dice-${st.dice}.svg` : '/assets/ludo-clean/dice-blank.svg';
+    diceImg.alt = st.dice ? `Dadu ${st.dice}` : 'Dadu belum dikocok';
+    diceImg.classList.toggle('ludo-dice-idle', !st.dice);
+  }
+  diceBtn.disabled = !(isMyTurn && st.phase === 'roll');
+  diceBtn.onclick = () => send('ludo_roll');
+  let status = '';
+  if (st.over) status = st.winner !== null ? `🏆 Pemenang: ${m.players[st.winner].nickname}` : 'Game selesai.';
+  else if (st.phase === 'roll') status = isMyTurn ? 'Giliranmu — kocok dadu di tengah papan.' : `Menunggu ${turnPlayer.nickname} mengocok dadu…`;
+  else if (st.phase === 'move') status = isMyTurn ? `Dadu: ${st.dice} → langkah: ${st.steps}. Klik tokenmu yang menyala, atau pakai 1 kartu netral dulu.` : `Menunggu ${turnPlayer.nickname} jalan ${st.steps} langkah…`;
+  else if (st.phase === 'attack') status = isMyTurn ? `Kamu mendapat kartu attack ${st.pendingAttack ? st.pendingAttack.kind : ''} — klik targetnya, atau Lewati.` : `${turnPlayer.nickname} sedang memakai kartu attack…`;
+  else if (st.phase === 'defense') status = st.pendingDefense && st.pendingDefense.defender === mySeat ? 'Bidakmu diserang! Pilih 1 kartu defense, atau Tolak (terima serangan).' : 'Ada serangan — menunggu defense…';
+  else if (st.phase === 'swap') status = isMyTurn ? 'Tanganmu sudah penuh (3). Pilih 1 kartu lama untuk ditukar, atau Pertahankan tanganmu.' : 'Menunggu keputusan tukar kartu…';
+  $('ludo-status').textContent = status;
+  const actions = $('ludo-actions');
+  actions.innerHTML = '';
+  if (isMyTurn && st.phase === 'roll') {
+    const b = document.createElement('button');
+    b.className = 'btn primary'; b.textContent = '🎲 Kocok Dadu';
+    b.onclick = () => send('ludo_roll');
+    actions.appendChild(b);
+  }
+  if (isMyTurn && st.phase === 'attack') {
+    const b = document.createElement('button');
+    b.className = 'btn ghost'; b.textContent = '⏭️ Lewati (kartu hangus, balik ke deck)';
+    b.onclick = () => send('ludo_pass_attack');
+    actions.appendChild(b);
+  }
+  if (st.phase === 'defense' && st.pendingDefense && st.pendingDefense.defender === mySeat) {
+    const b = document.createElement('button');
+    b.className = 'btn ghost'; b.textContent = '❌ Tolak defense (terima serangan)';
+    b.onclick = () => send('ludo_defense', { cardId: null });
+    actions.appendChild(b);
+  }
+  if (isMyTurn && st.phase === 'swap' && st.pendingDraw) {
+    const b = document.createElement('button');
+    b.className = 'btn ghost'; b.textContent = 'Pertahankan tangan (kartu baru hangus)';
+    b.onclick = () => send('ludo_swap', { oldCardId: null });
+    actions.appendChild(b);
+  }
+  $('ludo-deck').textContent = `· deck: ${st.deckCount} kartu`;
+  const handBox = $('ludo-hand');
+  handBox.innerHTML = '';
+  const myHand = st.players[mySeat] ? (st.players[mySeat].hand || []) : [];
+  if (!myHand.length) handBox.innerHTML = '<p class="muted">Belum ada kartu simpanan.</p>';
+  for (const card of myHand) {
+    const info = st.cardInfo[card.kind];
+    const el = document.createElement('button');
+    el.className = `ludo-card card-${card.group}`;
+    el.title = info.name;
+    el.innerHTML = ludoCardFace(card, info);
+    el.onclick = () => showLudoBubble(card, st);
+    if (isMyTurn && st.phase === 'swap') {
+      const swapBtn = document.createElement('button');
+      swapBtn.className = 'btn secondary small';
+      swapBtn.textContent = 'Tukar kartu ini';
+      swapBtn.onclick = (e) => { e.stopPropagation(); send('ludo_swap', { oldCardId: card.id }); };
+      const wrap = document.createElement('span');
+      wrap.className = 'ludo-card-wrap';
+      wrap.appendChild(el); wrap.appendChild(swapBtn);
+      handBox.appendChild(wrap);
+    } else if (st.phase === 'defense' && st.pendingDefense && st.pendingDefense.defender === mySeat && card.group === 'defense') {
+      const useBtn = document.createElement('button');
+      useBtn.className = 'btn primary small';
+      useBtn.textContent = 'Pakai defense ini';
+      useBtn.onclick = (e) => { e.stopPropagation(); send('ludo_defense', { cardId: card.id }); };
+      const wrap = document.createElement('span');
+      wrap.className = 'ludo-card-wrap';
+      wrap.appendChild(el); wrap.appendChild(useBtn);
+      handBox.appendChild(wrap);
+    } else {
+      handBox.appendChild(el);
+    }
+  }
+  if (isMyTurn && st.phase === 'swap' && st.pendingDraw) {
+    const info = st.cardInfo[st.pendingDraw.kind];
+    const div = document.createElement('div');
+    div.className = 'muted';
+    div.textContent = `Kartu baru: ${info.name} (${st.pendingDraw.group === 'defense' ? 'Defense' : 'Netral'}). Tukar dengan 1 kartu di atas, atau pertahankan tanganmu.`;
+    handBox.appendChild(div);
+  }
+}
+
 // ---------- wire up ----------
 document.addEventListener('DOMContentLoaded', () => {
   for (const b of document.querySelectorAll('.game-card')) {
@@ -1548,6 +1854,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('btn-ping').onclick = runPing;
   $('btn-testbot').onclick = openTestBot;
+  $('btn-ludo-bot').onclick = () => {
+    if (!ensureHello()) return;
+    send('create_ludo_bot_room', {});
+  };
+  $('btn-leave-ludo').onclick = () => { if (confirm('Keluar dari room?')) send('leave_room'); };
   document.querySelectorAll('.ai-btn').forEach((b) => {
     b.onclick = () => send('create_chess_ai_room', { persona: b.dataset.persona });
   });

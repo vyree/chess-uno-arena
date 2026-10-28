@@ -9,7 +9,7 @@ const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I/L
 // Misi 9: this is ROOM MEMBER capacity (Sensei: max 8 per room for
 // every game, joinable any time). Session sizes are smaller per game
 // (a chess session is always 2) and are enforced by the server.
-const MAX_PLAYERS = { chess: 8, uno: 8, truth: 8 };
+const MAX_PLAYERS = { chess: 8, uno: 8, truth: 8, ludo: 8 };
 
 function genCode(existing) {
   let code;

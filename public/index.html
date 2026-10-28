@@ -28,6 +28,10 @@
         <span class="gc-head"><span class="gc-name">UNO</span><span class="gc-meta"><i class="dot"></i>2–8 pemain</span></span>
         <span class="gc-art art-uno" aria-hidden="true"><span class="mini-card mc-red"><span class="oval"><span class="val">7</span></span></span><span class="mini-card mc-yellow"><span class="oval"><span class="val">3</span></span></span><span class="mini-card mc-blue"><span class="oval"><span class="val">5</span></span></span></span>
       </button>
+      <button id="pick-ludo" class="game-card card-ludo" data-game="ludo">
+        <span class="gc-head"><span class="gc-name">Ludo Jahat</span><span class="gc-meta"><i class="dot"></i>4 pemain · kartu skill</span></span>
+        <span class="gc-art art-ludo" aria-hidden="true"><span class="ludo-pawn p-red">♟</span><span class="ludo-pawn p-green">♟</span><span class="ludo-pawn p-yellow">♟</span><span class="ludo-pawn p-blue">♟</span></span>
+      </button>
       <button id="pick-truth" class="game-card card-truth" data-game="truth">
         <span class="gc-head"><span class="gc-name">Truth or Truth</span><span class="gc-meta"><i class="dot"></i>2–8 pemain</span></span>
         <span class="gc-art art-wheel" aria-hidden="true"><span class="wheel"><span class="wheel-needle"></span></span></span>
@@ -145,7 +149,13 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card hidden" id="ludo-card">
+      <h3 class="card-title">🎲 Ludo Jahat — Lawan Komputer</h3>
+      <p class="muted">Kamu (merah) melawan 3 Komputer. Mendarat tepat di block skill untuk dapat kartu — attack langsung dipakai, defense &amp; netral bisa disimpan maks 3.</p>
+      <button id="btn-ludo-bot" class="btn primary big">▶️ Mulai Ludo Jahat</button>
+    </div>
+
+    <div class="card" id="room-card">
       <button id="btn-create" class="btn primary big">🚪 Buat Room</button>
       <div class="divider"><span>atau gabung room teman</span></div>
       <div class="join-row">
@@ -316,6 +326,30 @@
       </div>
     </div>
     <div id="truth-popup" class="truth-popup hidden"></div>
+  </section>
+
+  <!-- ============ LUDO JAHAT ============ -->
+  <section id="screen-ludo" class="screen hidden">
+    <div class="game-bar">
+      <div><strong>🎲 Ludo Jahat</strong> <span id="ludo-turn-badge" class="turn-badge"></span></div>
+      <div class="game-bar-right">
+        <div id="ludo-timer" class="timer">⏱️ --</div>
+        <button id="btn-leave-ludo" class="btn ghost small">Keluar Room</button>
+      </div>
+    </div>
+    <div id="ludo-announce" class="ludo-announce hidden"></div>
+    <div class="ludo-wrap">
+      <div id="ludo-board" class="ludo-board"></div>
+      <button id="ludo-dice" class="ludo-dice" title="Kocok dadu"><img id="ludo-dice-img" src="/assets/ludo-clean/dice-blank.svg" alt="Dadu belum dikocok"></button>
+    </div>
+    <div id="ludo-status" class="ludo-status muted"></div>
+    <div id="ludo-actions" class="ludo-actions"></div>
+    <div class="card">
+      <h3 class="card-title">🃏 Kartu Kamu <span id="ludo-deck" class="muted"></span></h3>
+      <div id="ludo-hand" class="ludo-hand"></div>
+      <p class="muted">Klik kartu untuk melihat penjelasannya. Kartu attack dipakai langsung saat didapat; kartu defense hanya aktif saat kamu diserang.</p>
+    </div>
+    <div id="ludo-card-bubble" class="ludo-bubble hidden"></div>
   </section>
 
 </div>

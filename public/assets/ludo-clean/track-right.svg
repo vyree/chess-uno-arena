@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="540 360 360 180" width="900" height="900" role="img" aria-label="Ludo Jahat board">
+<defs>
+<pattern id="stripes-red" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="14" height="14" fill="#ff4d6e"/><line x1="0" y1="0" x2="0" y2="14" stroke="#ffffff" stroke-opacity="0.10" stroke-width="5"/></pattern>
+<pattern id="stripes-green" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="14" height="14" fill="#2ed98f"/><line x1="0" y1="0" x2="0" y2="14" stroke="#ffffff" stroke-opacity="0.10" stroke-width="5"/></pattern>
+<pattern id="stripes-yellow" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="14" height="14" fill="#ffb81e"/><line x1="0" y1="0" x2="0" y2="14" stroke="#ffffff" stroke-opacity="0.10" stroke-width="5"/></pattern>
+<pattern id="stripes-blue" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="14" height="14" fill="#3aa0ff"/><line x1="0" y1="0" x2="0" y2="14" stroke="#ffffff" stroke-opacity="0.10" stroke-width="5"/></pattern>
+</defs>
+
+<rect x="540" y="360" width="360" height="180" fill="#0f172a"/>
+<rect x="540" y="360" width="60" height="60" fill="#7c3aed" stroke="#0f172a" stroke-width="1"/><rect x="555" y="371" width="30" height="38" rx="5" fill="#ffffff" stroke="#5b21b6" stroke-width="1.5"/><rect x="555" y="371" width="30" height="10" rx="4" fill="#7c3aed"/><circle cx="570" cy="396" r="5" fill="#7c3aed"/>
+<rect x="600" y="360" width="60" height="60" fill="#232f45" stroke="#0f172a" stroke-width="1"/>
+<rect x="660" y="360" width="60" height="60" fill="#232f45" stroke="#0f172a" stroke-width="1"/>
+<rect x="720" y="360" width="60" height="60" fill="#fde9b8" stroke="#0f172a" stroke-width="1"/><polygon points="750.0,370.0 754.7,383.5 769.0,383.8 757.6,392.5 761.8,406.2 750.0,398.0 738.2,406.2 742.4,392.5 731.0,383.8 745.3,383.5" fill="#ffffff" stroke="#d97706" stroke-width="1.5" stroke-linejoin="round"/>
+<rect x="780" y="360" width="60" height="60" fill="#232f45" stroke="#0f172a" stroke-width="1"/>
+<rect x="840" y="360" width="60" height="60" fill="#232f45" stroke="#0f172a" stroke-width="1"/>
+<rect x="540" y="420" width="60" height="60" fill="#ffb81e" stroke="#0f172a" stroke-width="1"/>
+<rect x="600" y="420" width="60" height="60" fill="#ffb81e" stroke="#0f172a" stroke-width="1"/>
+<rect x="660" y="420" width="60" height="60" fill="#ffb81e" stroke="#0f172a" stroke-width="1"/>
+<rect x="720" y="420" width="60" height="60" fill="#ffb81e" stroke="#0f172a" stroke-width="1"/>
+<rect x="780" y="420" width="60" height="60" fill="#ffb81e" stroke="#0f172a" stroke-width="1"/>
+<rect x="840" y="420" width="60" height="60" fill="#232f45" stroke="#0f172a" stroke-width="1"/>
+<rect x="540" y="480" width="60" height="60" fill="#232f45" stroke="#0f172a" stroke-width="1"/>
+<rect x="600" y="480" width="60" height="60" fill="#232f45" stroke="#0f172a" stroke-width="1"/>
+<rect x="660" y="480" width="60" height="60" fill="#232f45" stroke="#0f172a" stroke-width="1"/>
+<rect x="720" y="480" width="60" height="60" fill="#232f45" stroke="#0f172a" stroke-width="1"/>
+<rect x="780" y="480" width="60" height="60" fill="#fde9b8" stroke="#0f172a" stroke-width="1"/><polygon points="810.0,490.0 814.7,503.5 829.0,503.8 817.6,512.5 821.8,526.2 810.0,518.0 798.2,526.2 802.4,512.5 791.0,503.8 805.3,503.5" fill="#ffffff" stroke="#d97706" stroke-width="1.5" stroke-linejoin="round"/>
+<rect x="840" y="480" width="60" height="60" fill="#232f45" stroke="#0f172a" stroke-width="1"/>
+</svg>

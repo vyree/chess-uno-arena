@@ -1053,3 +1053,423 @@ terhitung 1 turn.
   playDurationMs, fmtPlayTime ada). Catatan: restart server mematikan
   room yang sedang berjalan; deploy sempat menampilkan peringatan DNS
   sementara untuk ayo-nge.fly.dev (propagasi, mesin sendiri sehat).
+
+---
+
+# LUDO JAHAT — Fase 1 (Sensei, 27 Okt 2026 — BUILD LOKAL SAJA, TANPA DEPLOY/PUSH)
+
+Perintah Sensei: "gas dibuild ludo kitaaa", nama game "Ludo Jahat".
+Status fase ini: build lokal untuk dimainkan vs bot; TIDAK deploy ke
+Fly/Firebase, TIDAK push ke GitHub, prod tidak disentuh. Working tree
+boleh kotor untuk direview Sensei.
+
+## Spek terkunci (sumber kebenaran: docs/ludo-skill-rules.md — jangan diubah)
+- Nama UI: "Ludo Jahat". Klasik: 4 token/pemain, keluar base hanya
+  dadu asli 6, jalur utama 52 petak, mendarat tepat di token lawan =
+  makan (pulang ke base), petak aman = petak start + petak bintang,
+  masuk home butuh angka pas, menang = semua 4 token home.
+- Dadu 6 diubah: dapat 6 = jalan dulu pakai 6 itu, lalu kocok lagi;
+  maks 3x dapat 6 dalam satu giliran, kocokan ke-4 dalam rantai yang
+  sama TIDAK PERNAH 6. ATURAN TERSEMBUNYI: jangan tampilkan di UI
+  maupun teks aturan manapun (juga bukan di popup kartu/aturan game).
+- Block skill: 4 buah, 1 di tengah tiap sisi, jauh dari petak bintang,
+  BUKAN petak aman, kartu hanya didapat kalau mendarat TEPAT (bukan
+  lewat), visual jelas beda dari bintang (ikon kartu), kartu yang
+  sudah didapat tidak hilang kalau tokennya dimakan.
+- Deck bersama 64 kartu, tiap jenis 4 copy: attack hitam 4x4=16,
+  defense putih 4x4=16, netral ungu 8x4=32.
+- Attack (Sniper, Bom Petak, Rantai Seret, Es Beku): TIDAK bisa
+  disimpan, harus dipakai saat itu juga setelah didapat atau hangus.
+  Bom Petak: 1 petak jalur utama, semua bidak di petak itu pulang ke
+  base, kena bidak sendiri juga (friendly fire), kecuali petak aman;
+  sekali pakai, instan, bukan ranjau. Attack tidak bisa menyerang token
+  di base, petak aman, jalur home, atau rumah. Seret = mundur 10.
+  Beku = token tidak bisa digerakkan di giliran pemiliknya berikutnya.
+- Defense (Perisai Baja, Cermin Pantul, Teleport Darurat, Kulit Batu):
+  disimpan, trigger HANYA saat diserang, pemain pilih 1 per serangan,
+  habis sekali pakai. Cermin hanya target-tunggal (Sniper/Seret/Beku),
+  TIDAK untuk Bom Petak. Teleport ke petak aman terdekat di depan,
+  kalau tidak ada ke petak start warnanya. Kulit Batu: serangan
+  membunuh diubah jadi mundur 6 petak.
+- Netral ungu (x2, +1, +2, +3, -1, -2, -3, bebas pilih langkah 1-6):
+  disimpan, HANYA untuk diri sendiri, HANYA mengubah jumlah langkah —
+  dadu asli menentukan keluar base/kocok lagi. Dipakai setelah kocok,
+  sebelum token jalan, maks 1 kartu per kocokan.
+- Simpanan: defense + netral GABUNGAN maks 3/pemain. Tangan sudah 3 dan
+  dapat kartu simpanan baru: boleh buang 1 kartu lama untuk menukar;
+  kalau tidak mau tukar, kartu baru yang hangus.
+- Hangus vs terpakai: hangus (tidak dipakai/ditolak/dibuang saat tukar,
+  efek tidak terjadi) KEMBALI ke deck dan dikocok lagi. Terpakai (efek
+  sudah terjadi) hilang permanen. Deck habis (0 kartu) = TIDAK ada
+  restore/reshuffle, block tidak memberi kartu lagi selamanya di game
+  itu, game lanjut dengan simpanan yang masih dipegang sampai habis.
+- Animasi simple (<1 detik, CSS/emoji) tiap efek kartu (docs bagian 6).
+- Bubble popup penjelasan: SEMUA kartu bisa diklik, isi cara pakai +
+  kegunaan. Popup pengumuman: saat pemain memakai kartu, muncul ke
+  SEMUA pemain (nama kartu + siapa + efek/target), hilang sendiri
+  setelah beberapa detik, tidak memblokir giliran, tidak membocorkan
+  tangan yang belum dipakai.
+
+## Asumsi eksplisit Fase 1 (BUKAN aturan kunci — Sensei boleh koreksi)
+- Fase 1 = mode Vs Bot 4 pemain (1 manusia + 3 Komputer) dulu; mode
+  room teman ditunda ke fase berikutnya, struktur kode tidak menutup
+  kemungkinan itu (engine tidak bergantung pada isBot).
+- Urutan kursi searah jarum jam sesuai gambar desain: merah (Kamu,
+  kiri atas) -> hijau (kanan atas) -> kuning (kanan bawah) -> biru
+  (kiri bawah). Ini yang menentukan offset start 0/13/26/39 dan kolom
+  home tiap warna; bukan urutan merah-hijau-biru-kuning.
+- Blokade TIDAK dipakai: token sewarna menumpuk tidak membentuk
+  blokade, lawan tetap bisa lewat; lawan yang mendarat di petak
+  non-aman memakan SEMUA token lawan di petak itu.
+- Pemenang: game berhenti di pemenang pertama (semua 4 token home).
+- Cooldown block: block yang sudah memberi kartu tidur 1 putaran penuh
+  (semua pemain dapat giliran) sebelum bisa memberi kartu lagi.
+- Sniper: penyerang harus punya minimal 1 bidak di jalur utama.
+- Kartu -: langkah akhir tidak boleh di bawah 1; kartu - tidak bisa
+  dipakai kalau hasilnya <1.
+- Posisi petak block (absolut jalur utama 0..51): [5, 18, 31, 44].
+  Alasan: masing-masing di tengah segmen 13 petak tiap sisi (segmen
+  merah 0-12, hijau 13-25, biru 26-38, kuning 39-51); jarak ke petak
+  aman terdekat minimal 3 petak (5 ke 8 = 3, ke 0 = 5; 18 ke 21 = 3,
+  ke 13 = 5; 31 ke 34 = 3, ke 26 = 5; 44 ke 47 = 3, ke 39 = 5) — jadi
+  jauh dari bintang/start sesuai perintah, dan tidak ada block yang
+  menempel petak aman. Petak aman absolut = [0, 8, 13, 21, 26, 34, 39, 47].
+- Extra roll klasik (makan lawan / token sampai home) tetap berlaku,
+  dan rantai 6 dihitung per giliran yang sama (termasuk roll ekstra
+  dari makan/home). Implementasi cap: begitu 6 sudah keluar 3x dalam
+  satu giliran pemain, SEMUA kocokan berikutnya di giliran yang sama
+  dibatasi 1-5 sampai giliran berpindah (ini bacaan literal "maks 3x
+  dapat 6 dalam satu giliran"; kalau Sensei maksudnya rantai putus
+  setelah satu kocokan non-6, aturan ini harus dikoreksi).
+- Keluar base: token dari base yang dadu aslinya 6 ditempatkan di
+  petak start (progress 0); langkah 6 itu dipakai untuk keluar, bukan
+  ditambah jalan 6 petak dari start. Pemain boleh memilih jalan token
+  lain yang sudah di jalur dengan langkah hasil modifikasi, sebagai
+  ganti keluar base.
+- Bot: sederhana dan sah (tidak mengintip tangan lawan/deck): pilih
+  token dengan prioritas keluar base (6) > makan > masuk home >
+  mendarat block skill > petak aman > maju terjauh; attack dipakai
+  langsung saat dapat; defense dipilih saat diserang (Perisai untuk
+  Sniper/Bom, Cermin untuk target-tunggal bila ada bidak penyerang di
+  jalur, Teleport bila terdesak, Kulit Batu sebagai fallback); netral
+  sederhana (+/x2 untuk mengejar home, - untuk pas masuk home, bebas
+  pilih untuk pas masuk home/keluar dari kejaran). UI lawan bot TIDAK
+  PERNAH menyebut kata "bot" — label "Komputer" seperti desain.
+- Timer giliran: mengikuti pola UNO, 60 detik (TURN_TIMEOUT_MS yang
+  sama); timeout = aksi otomatis yang sah (kocok + jalan pertama /
+  lewati attack / tolak defense / pertahankan tangan), lalu giliran
+  lanjut — bukan forfeit langsung, agar game bot tidak mati karena
+  satu timeout.
+
+## File yang diubah/dibuat (Fase 1)
+- [x] TASK_INSTRUCTION.md (bagian ini)
+- [x] game/ludo.js (baru, engine murni, tanpa DOM)
+- [x] game/validate.js (validator ludo_* — aturan permanen repo)
+- [x] game/rooms.js (minimal: MAX_PLAYERS.ludo = 8, agar create('ludo') lolos)
+- [x] server.js (minimal: snapshot ludo, create_ludo_bot_room, handler
+      ludo_roll/ludo_move/ludo_use_neutral/ludo_attack/ludo_defense/
+      ludo_swap/ludo_pass_attack, timer 60 dtk, driver bot, pengumuman)
+- [x] public/index.html (kartu game Ludo Jahat, layar screen-ludo)
+- [x] public/app.js (render Ludo, dadu, kartu, popup, animasi — tanpa aturan main)
+- [x] public/style.css (minimal: papan gelap Ludo, kartu, popup, animasi)
+- [x] test/ludo.test.js (baru) + package.json (daftarkan tes + node --check)
+- [x] TIDAK diubah: Dockerfile, fly.toml, CI, kode UNO/Catur/Truth
+      kecuali titik integrasi minimal di atas (satu baris room.ludo
+      di backToLobby + cabang snapshot/game_over/timeout di server.js).
+
+## Verifikasi Fase 1 (27 Okt 2026, lokal saja — TIDAK deploy/push)
+- `npm run check`: bersih. `npm test`: **174/174 lulus**
+  (153 lama + 21 baru di test/ludo.test.js).
+- Sim WS lokal (server port lokal, LUDO_BOT_THINK_MS=0, 1 manusia
+  otomatis + 3 Komputer): game penuh sampai pemenang — **Komputer
+  Kuning menang**, 709 aksi manusia, 48 pengumuman (draw kartu,
+  pakai netral, makan bidak). Sim pertama sempat kena rate limit
+  20 pesan/detik server karena aksi otomatis terlalu cepat (bukan
+  bug game untuk pemain manusia; sim diperlambat jadi <10 pesan/
+  detik, socket tidak lagi ditutup).
+- YANG BELUM TERBUKTI DI SIM WS: pasangan attack+defense yang
+  terekam eksplisit di log pengumuman (log sim hanya mencetak 20
+  pengumuman pertama; attack/defense teruji di unit test engine:
+  Perisai membatalkan Sniper, Cermin ditolak untuk Bom, Bom friendly
+  fire). Perlu uji manual di browser: klik kartu attack, pilih
+  target, lihat defense lawan ter-trigger + popup pengumuman.
+- YANG BELUM DIVERIFIKASI: tampilan papan di browser sungguhan
+  (subagen ini tidak punya live browser; render papan hanya dicek
+  lewat node --check + logika koordinat, bukan screenshot).
+  Sensei perlu cek visual: yard merah kiri atas, dadu tengah,
+  petak bintang, block skill ikon kartu, token pion.
+
+## Integrasi assets ludo-clean (27 Okt 2026 — LOKAL SAJA, TANPA DEPLOY/PUSH)
+Perintah Sensei: terapkan assets ludo-clean ke game. Aturan game,
+engine, server, dan validator TIDAK diubah; yang diubah hanya tampilan
+(renderLudo, style, struktur dadu) + perbaikan geometri SVG.
+- Latar papan: `public/assets/ludo-clean/board-full.svg` (img, bukan
+  225 div grid CSS lagi). Bintang, block skill, kolom home, dan
+  segitiga tengah sudah ada di dalam SVG — tidak digambar ulang
+  sebagai div di atasnya. Token jalur/home/tengah tetap memakai
+  pemetaan grid yang sudah ada (LUDO_PATH / LUDO_HOME / [7,7]).
+- Perbaikan geometri SVG (board-full.svg + yard-*.svg, folder yang
+  sama, bukan folder baru): kotak dalam base dibuat KONSENTRIS
+  dengan kotak luar yard, sesuai syarat Sensei (pendekatan v2 lama
+  yang menggeser kotak dalam ke titik tengah slot DITOLAK dan tidak
+  dipakai lagi). Yard 0-360, kotak dalam 60-300 (lebar 240, pusat
+  180 = pusat yard, margin 60 di semua sisi). Per warna: merah
+  dalam (60,60), hijau (600,60), kuning (600,600), biru (60,600)
+  dalam koordinat papan 0-900.
+- Pemetaan SLOT TAMPIL base (display-only, BUKAN perubahan aturan):
+  token progress -1 dirender di slot tampil ini, urut tokenIdx
+  0..3, bukan di pusat sel grid engine (2,2),(2,4)... yang
+  rata-ratanya bergeser ke tengah papan dan tidak simetris di yard.
+  Koordinat papan 0-900: merah [[120,120],[240,120],[120,240],
+  [240,240]], hijau [[660,120],[780,120],[660,240],[780,240]],
+  kuning [[660,660],[780,660],[660,780],[780,780]], biru
+  [[120,660],[240,660],[120,780],[240,780]]. Dalam persen papan:
+  120/900=13.333%, 240/900=26.667%, 660/900=73.333%,
+  780/900=86.667%. Slot = 1/4 dan 3/4 kotak dalam (120 dan 240
+  relatif yard), jarak ke semua sisi sama, gap sama, tiap pion
+  tepat di tengah lingkaran slot (r=28 di SVG). Di app.js:
+  LUDO_BASE_DISPLAY + ludoTokenPos(); LUDO_BASE lama tetap ada
+  untuk referensi grid tapi tidak lagi dipakai untuk render base.
+- Token: `<img>` pawn-{color}.svg absolut (persen), bukan emoji.
+  Token jalur/home: pusat sel grid ((c+0.5)/15, (r+0.5)/15).
+  Token menumpuk di satu titik digeser simetris +-1.4 poin persen
+  agar tidak tumpang tindih persis. Target Bom: tombol transparan
+  di pusat sel block skill. Token beku: badge ❄️ + glow biru.
+- Dadu tengah: `<img>` dice-{n}.svg sesuai angka server (bukan
+  teks 🎲 + angka); saat belum ada dadu, tampil dice-6.svg redup
+  sebagai placeholder dekoratif (bukan hasil kocokan).
+- Perbaikan label kartu tangan (cacat cek visual sebelumnya):
+  `.ludo-card` menjadi inline-flex dengan gap 6px, sehingga nama
+  dan label grup tidak lagi menempel ("+3 Langkah Netral").
+- Ringan: yang dimuat di layar Ludo hanya board-full.svg 15.353
+  byte + 4 pion @420 byte + 1 dadu <=461 byte = sekitar 17,5 KB
+  total (folder ludo-clean utuh 104 KB termasuk demo/README/
+  per-part yang tidak dimuat di game). Tanpa PNG/JPG besar, tanpa
+  library baru, tanpa font eksternal, animasi tetap CSS <1 detik.
+
+## Perbaikan lingkaran slot + nama pemain di base (27 Okt 2026 — LOKAL SAJA)
+Perintah Sensei: lingkaran slot base dibuat simetris dan berimpit
+dengan pion; nama pemain di atas tiap kotak base.
+- Akar cacat screenshot sebelumnya: board-full.svg + yard-*.svg
+  berisi DUA set lingkaran per yard — lingkaran utama r=28 di
+  posisi slot tampil (120/240 dst.) DAN lingkaran samar r=20
+  fill=none di pusat sel grid engine (150/270 dst., bergeser
+  +30/+30 dari pion). Lingkaran samar itulah yang terlihat kosong
+  dan menggantung. Perbaikan: semua lingkaran r=20 samar DIHAPUS
+  dari board-full.svg dan keempat yard-*.svg (board-full: 38
+  lingkaran -> 22, yaitu 16 slot r=28 + 4 dot kartu skill r=5 +
+  2 lingkaran tengah; tiap yard: 8 -> 4). Lingkaran yang tersisa
+  persis sama dengan LUDO_BASE_DISPLAY di atas, r=28 (diameter 56
+  = lebar pion 6,2% papan), jadi pion menutupi isi lingkaran dan
+  stroke warnanya melingkari pion. Kotak dalam tetap konsentris
+  (60-300), tidak diubah.
+- Tafsir "samain dengan posisi dadu": dadu duduk tepat di tengah
+  lingkaran area dadu tengah papan; yang diminta untuk base
+  adalah hal yang sama — lingkaran slot harus berimpit dengan
+  pionnya, BUKAN dengan dadu tengah (dadu di 50%,50% tidak ada
+  hubungannya dengan slot base; menyamakan slot ke dadu akan
+  menumpuk semua pion di tengah papan, jadi tafsir itu ditolak
+  dan dicatat di sini).
+- Nama pemain: overlay teks HTML absolut `.ludo-base-name` di
+  dalam `#ludo-board` (bukan gambar/font/library baru), dibuat
+  sekali di renderLudo lalu diperbarui tiap render dari roster
+  live `m.players[pi].nickname` (urutan kursi = red, green,
+  yellow, blue; room bot: merah = nickname manusia, sisanya
+  "Komputer Hijau/Kuning/Biru" dari server). Posisi: pita atas
+  tiap yard, lebar 40%, tinggi 6,667% (tepi luar yard sampai tepi
+  kotak dalam), sehingga tidak menutupi pion baris pertama
+  (tepi atas pion di 10,2%). Perataan Sensei: merah (kiri atas,
+  left 0%, top 0%, rata kiri), hijau (kanan atas, left 60%, top
+  0%, rata kanan), kuning (kanan bawah, left 60%, top 60%, rata
+  kanan), biru (kiri bawah, left 0%, top 60%, rata kiri).
+  Gaya: teks putih tebal, bayangan hitam tipis, ukuran
+  clamp(10px, 3,4vw, 14px), ellipsis bila nama terlalu panjang.
+  Verifikasi: screenshot baru di
+  ~/workspace/your_files/ludo-clean-applied/names-v2/ .
+
+## Perbaikan kecil + uji attack/defense (27 Okt 2026 — LOKAL SAJA,
+## BELUM TERBUKTI attack+defense, BUG DRIVER BOT DITEMUKAN)
+Perintah Sensei (ACC via widget): lanjutkan sekarang, tetap lokal,
+tanpa deploy/push. Perbaikan kecil SELESAI dan terverifikasi:
+- Dadu placeholder: sebelum ada hasil kocokan, dadu tengah kini
+  memakai `dice-blank.svg` baru (kotak putus-putus + "?" abu-abu,
+  tanpa pip, ~318 byte, gaya sama dengan dice-*.svg). `dice-6.svg`
+  hanya tampil setelah hasil kocokan benar-benar 6. Perubahan:
+  `public/app.js` (diceImg.src/alt saat st.dice null),
+  `public/index.html` (src awal), README ludo-clean (baris baru).
+- Header mobile: aturan baru HANYA di `#screen-ludo .game-bar`
+  (game lain tidak tersentuh): nowrap, gap 6px, badge ellipsis
+  (max-width 260px desktop, 96px di <=480px), padding/font chip
+  dikecilkan di <=480px. Bukti: tinggi bar 46px di 390px (satu
+  baris, bukan dua), screenshot
+  `your_files/ludo-clean-applied/attack-defense/05-blank-dice-mobile-header.png`
+  (header 1 baris + dadu "?" di tengah) dan `06-blank-dice-desktop.png`.
+Uji attack+defense via browser: TIDAK TERBUKTI (jujur, bukan gagal
+otomasi semata). Permainan alami 10 menit di browser headless
+(1.695 aksi, deck 64 -> 50, 21 pengumuman) TIDAK PERNAH mendapat
+kartu attack — hanya defense/netral — lalu di menit ke-10 fase
+attack Komputer Biru muncul dan macet. Harness WS (2 room paralel,
+server asli, tanpa ubah repo) mereproduksi: SEMUA fase attack bot
+(turn 1/2/3: bom, seret, beku) bertahan TEPAT 60000-60005 ms lalu
+dilewati timer (ludoAutoStep -> pass, kartu hangus, tanpa
+pengumuman pemakaian). Akar masalah (dibaca dari kode, bukan
+tebakan): `server.js` ludoBotStep memanggil
+`doLudoAttack(room, botChooseAttack(...))`, tapi format targetnya
+tidak cocok — bot mengembalikan `{player, token}` / `{abs}`,
+sedangkan doLudoAttack membaca `data.targetPlayer/targetToken/
+targetAbs` (format klien manusia di `public/app.js`). Akibatnya
+beginAttack selalu gagal ("target serangan tidak valid" /
+tidak ada bidak di petak itu), botStep kembali tanpa ludoSync
+dan tanpa timer baru, game menunggu timer giliran 60 detik.
+Temuan terkait (belum diverifikasi terpisah): defense bot saat
+penyerangnya manusia juga tidak terjadwal — scheduleLudoBot hanya
+melihat kursi giliran (penyerang), bukan kursi defender, sehingga
+defense bot kemungkinan hanya terselesaikan lewat timeout
+(doLudoDefense null = terima serangan). PERBAIKAN INI TIDAK
+DITERAPKAN di tugas ini (di luar cakupan "uji", butuh ACC Sensei):
+pemetaan field target bot di doLudoBotStep + penjadwalan defense
+untuk defender bot, plus tes integrasi bot-attack. Sampai itu
+diperbaiki, pasangan attack+defense TIDAK BISA dibuktikan lewat
+browser — jangan diklaim terverifikasi. Bukti: screenshot
+`attack-defense/04-final.png` (fase attack Biru macet, toast
+"Bukan giliranmu" = klik di luar giliran ditolak server dengan
+benar) dan log `attack-defense/hunt-log.txt`.
+
+## LUDO JAHAT — Perbaikan bug driver bot attack + kartu gaya UNO (27 Okt 2026 malam, LOKAL SAJA, TANPA DEPLOY/PUSH)
+
+Perintah Sensei 27 Okt 2026 18:55 WIB: "boleh. perbaiki bugnya dengan
+mode debugger. lalu, utk kartu.. buat design nya supaya kaya kartu di
+game uno." Dikerjakan lokal saja; aturan/efek kartu TIDAK diubah
+(docs/ludo-skill-rules.md tidak disentuh); UNO/Catur/Truth tidak
+diubah kecuali gaya kartu Ludo yang meniru UNO.
+
+### Bug: format target bot vs format klien manusia (ROOT CAUSE)
+
+- `game/ludo.js` `botChooseAttack(st, attacker, card)` mengembalikan
+  bentuk engine: non-bom `{player, token}` (target progress tertinggi),
+  bom `{abs}` (petak skor musuh x10 - sendiri x8, hanya bila skor > 0).
+- `server.js` `doLudoAttack(room, data)` membangun target untuk
+  `ludo.beginAttack` dari format klien manusia: non-bom
+  `{player: data.targetPlayer, token: data.targetToken}`, bom
+  `{abs: data.targetAbs}`. `beginAttack` sendiri mengharapkan bentuk
+  engine `{player, token}` / `{abs}`.
+- `server.js` `ludoBotStep` cabang attack (sebelum perbaikan)
+  meneruskan hasil bot mentah: `else doLudoAttack(room, target);`
+  -> `doLudoAttack` membaca `target.targetPlayer/targetToken/targetAbs`
+  = `undefined` -> `beginAttack` gagal ("target serangan tidak valid"
+  non-bom / "tidak ada bidak di petak itu" bom) -> `doLudoAttack`
+  mengembalikan `{ok:false}` -> pemanggil MENGABAIKAN return tanpa
+  `ludoSync` dan tanpa timer baru -> game diam di fase `attack`
+  sampai timer giliran 60 detik memicu `ludoAutoStep` (cabang attack ->
+  `doLudoPassAttack`, kartu hangus kembali ke deck, tanpa pengumuman
+  pemakaian). Bukti lama: semua fase attack bot bertahan TEPAT
+  60000-60005 ms (hunt-log.txt tugas sebelumnya).
+
+### Perbaikan (server.js saja, satu tempat per masalah)
+
+1. ATTACK — terjemahan di SATU call-site bot, di cabang attack
+   `ludoBotStep` (jalur manusia `doLudoAttack` TIDAK disentuh, karena
+   `doLudoAttack` adalah kontrak klien manusia yang sudah divalidasi
+   di `game/validate.js`; melebarkannya menerima dua format akan
+   mengaburkan kontrak itu):
+   - bom: `doLudoAttack(room, { targetAbs: target.abs })`
+   - non-bom: `doLudoAttack(room, { targetPlayer: target.player, targetToken: target.token })`
+   - fallback anti-gantung: bila `doLudoAttack` gagal, panggil
+     `doLudoPassAttack` (pass sah: kartu hangus kembali ke deck);
+     bila pass pun gagal, `ludoSync(room)` sebagai jaring pengaman
+     terakhir. Jadi fase attack bot TIDAK PERNAH lagi diam tanpa
+     sync/timer baru.
+2. DEFENSE — dugaan tugas sebelumnya TERBUKTI dari kode (bukan
+   asumsi): `scheduleLudoBot` lama hanya memeriksa
+   `room.players[st.turn]` (penyerang). Selama fase defense, engine
+   turn tetap di penyerang, jadi defender bot di belakang penyerang
+   manusia tidak pernah dijadwalkan (hanya terselesaikan lewat
+   timeout `doLudoDefense(null)` = terima serangan); sebaliknya
+   penyerang bot + defender manusia membuat timer bot bisa
+   auto-memainkan defense manusia. Perbaikan di `scheduleLudoBot`
+   DAN di kepala `ludoBotStep` (konsisten di kedua tempat):
+   `actor = (phase === 'defense' && pendingDefense) ? pendingDefense.defender : turn`;
+   hanya jadwalkan/langkahkan bila `seatDriven(room.players[actor])`.
+   Timer giliran 60 detik tetap berjalan lewat `ludoSync` ->
+   `startTurnTimer`, jadi defender manusia yang diam tetap
+   diselesaikan timeout.
+3. TIDAK diubah: efek kartu, deck, cooldown, aturan lain, perilaku
+   attack manusia, `game/ludo.js`, Dockerfile/fly.toml/CI,
+   UNO/Catur/Truth.
+
+### Tes baru + hasil
+
+- `test/ludo.test.js` +4 tes engine (total file 25/25): (1) Sniper
+  format mentah bot gagal, format terjemahan server berhasil +
+  Perisai membatalkan; (2) Bom friendly fire (kedua token -> base);
+  (3) Seret + Cermin memantul ke penyerang; (4) Beku + Teleport ke
+  petak aman terdekat di depan (progress 10 -> 13).
+- `test/ludo_bot_attack.test.js` BARU (didaftarkan di package.json
+  script `test` + `check`): spawn server asli port 3221,
+  `LUDO_BOT_THINK_MS=0`, klien WS auto-main kursi manusia, melacak
+  fase attack bot + pengumuman `ludo_announce`. Kriteria: >=1 fase
+  attack bot selesai <20000 ms DAN ada pengumuman kartu attack itu.
+  Pelajaran harness (BUKAN bug server): (a) kirim create sebelum
+  welcome ditolak ("Kirim hello dulu ya") -> tambah waitWelcome;
+  (b) penjaga dedup state mematikan giliran manusia kedua -> dihapus
+  (pengiriman ganda aman karena server menolak aksi kedua setelah
+  fase berpindah); (c) pengumuman bisa tiba SEBELUM state fase attack
+  diproses loop tes (antrean diproses bergantian saat loop sleep),
+  sehingga versi awal tes membuangnya dan melaporkan announced=false
+  padahal attack selesai 0-1 ms -> perbaikan tes: log pengumuman
+  bertanda waktu (announceLog) dan cocokkan dalam jendela
+  [attackStart-1s, +5s]. Setelah itu tes LULUS dalam 608 ms:
+  "Komputer Biru memakai Es Beku!", attack selesai 0 ms (dulu 60000 ms).
+- HASIL AKHIR: `npm test` 179/179 lulus (174 lama + 4 engine baru +
+  1 WS baru); `npm run check` bersih.
+
+### Desain kartu gaya UNO (hanya presentasi, CSS + render saja)
+
+Referensi yang ditiru: `public/app.js` `cardHTML`/`cardClass` +
+`public/style.css` `.uno-card` (kartu tegak 84x120, border 3px putih,
+radius 10px, bayangan `0 3px 10px rgba(0,0,0,.25)`, indeks kecil
+`.cnr` kiri atas + kanan bawah terbalik 180 derajat, oval putih
+miring -22 derajat di tengah dengan nilai diputar balik +22 derajat).
+- `public/style.css` `.ludo-card` lama (chip horizontal) diganti
+  kartu tegak 78x112, border 3px putih, radius 10px, bayangan sama
+  dengan UNO, `.cnr` 13px tl/br (br rotate 180 derajat), `.oval`
+  84%x52% putih miring -22 derajat dengan `.val` 26px diputar balik,
+  `.ludo-card-name` 10px bold maks 2 baris; `.ludo-card.mini`
+  60x86 untuk bubble; `.ludo-announce-card` chip 22x22 bulat border
+  pink neon untuk ikon di banner pengumuman.
+- Warna jenis TIDAK diubah: attack `#17171c` (teks putih, oval putih,
+  val gelap); defense `#f5f5f0` (border `#cfcfda`, oval gelap, val
+  putih); netral `#7b2fbe` (oval putih, val ungu).
+- `public/app.js`: konstanta `LUDO_CARD_ICON` (sniper target, bom,
+  seret rantai, beku, perisai, cermin, teleport, kulit, x2, +1/+2/+3,
+  -1/-2/-3, bebas "1-6") + `ludoCardFace(card, info)` (cnr + oval/val
+  + nama + cnr, pola sama dengan `cardHTML` UNO). Tangan memakai
+  face ini; bubble diawali mini card yang sama; pengumuman tetap
+  `textContent` lalu `prepend` chip ikon (sengaja TIDAK innerHTML
+  supaya nickname tetap tidak ter-escape). Kartu baru di
+  `pendingDraw` masih teks, tidak diubah. Tanpa gambar raster baru,
+  tanpa font eksternal, tanpa library.
+- Verifikasi browser (headless-shell, server lokal port 3103,
+  endpoint sementara lalu DIKEMBALIKAN, `git diff
+  public/firebase-config.js` kosong): screenshot di
+  `~/workspace/your_files/ludo-clean-applied/attack-defense-fixed/`:
+  01-hand-desktop (kartu Perisai Baja gaya UNO di tangan),
+  02-bubble-desktop + 03-bubble-mobile 390px (mini card di bubble,
+  teks terbaca, tidak menutupi papan), 04-defense-ui (pengumuman
+  "Komputer Kuning memakai Bom Petak!" + status diserang + 2 kartu
+  defense gaya UNO dengan tombol "Pakai defense ini"),
+  06/07-defense-after (Perisai terpakai: tangan tinggal Teleport
+  Darurat, game lanjut ke giliran manusia, tanpa gantungan).
+  CATATAN JUJUR: banner "memakai Perisai Baja" sendiri tidak
+  tertangkap screenshot karena pada kecepatan think-0 banner
+  langsung ditimpa event berikutnya (<1 detik); yang terbukti
+  visual adalah pengumuman attack (04) + efek pemakaian defense
+  (06/07). Animasi kartu (Sniper/Bom/Beku) juga BELUM tertangkap
+  screenshot di tugas ini — hanya unit test + WS. Serangan kartu
+  attack TIDAK pernah duduk di tangan (by design, instan saat
+  didapat); wajah kartu attack di browser hanya muncul sebagai
+  chip ikon di banner pengumuman.
+- Sisa cacat dari tugas sebelumnya yang MASIH berlaku: dadu
+  placeholder sudah blank, header mobile 1 baris, tapi animasi
+  Sniper/Bom/Beku via browser + pasangan attack+defense untuk
+  Cermin/Kulit Batu via browser belum tertangkap (hanya tes).

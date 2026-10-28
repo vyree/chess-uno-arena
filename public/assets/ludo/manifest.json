@@ -1,0 +1,198 @@
+[
+  {
+    "name": "yard-red",
+    "file": "yard-red.png",
+    "box": [
+      0,
+      0,
+      192,
+      192
+    ],
+    "size": [
+      192,
+      192
+    ]
+  },
+  {
+    "name": "track-top",
+    "file": "track-top.png",
+    "box": [
+      192,
+      0,
+      289,
+      192
+    ],
+    "size": [
+      97,
+      192
+    ]
+  },
+  {
+    "name": "yard-green",
+    "file": "yard-green.png",
+    "box": [
+      289,
+      0,
+      481,
+      192
+    ],
+    "size": [
+      192,
+      192
+    ]
+  },
+  {
+    "name": "track-left",
+    "file": "track-left.png",
+    "box": [
+      0,
+      192,
+      192,
+      289
+    ],
+    "size": [
+      192,
+      97
+    ]
+  },
+  {
+    "name": "center",
+    "file": "center.png",
+    "box": [
+      192,
+      192,
+      289,
+      289
+    ],
+    "size": [
+      97,
+      97
+    ]
+  },
+  {
+    "name": "track-right",
+    "file": "track-right.png",
+    "box": [
+      289,
+      192,
+      481,
+      289
+    ],
+    "size": [
+      192,
+      97
+    ]
+  },
+  {
+    "name": "yard-blue",
+    "file": "yard-blue.png",
+    "box": [
+      0,
+      289,
+      192,
+      481
+    ],
+    "size": [
+      192,
+      192
+    ]
+  },
+  {
+    "name": "track-bottom",
+    "file": "track-bottom.png",
+    "box": [
+      192,
+      289,
+      289,
+      481
+    ],
+    "size": [
+      97,
+      192
+    ]
+  },
+  {
+    "name": "yard-yellow",
+    "file": "yard-yellow.png",
+    "box": [
+      289,
+      289,
+      481,
+      481
+    ],
+    "size": [
+      192,
+      192
+    ]
+  },
+  {
+    "name": "pawn-red",
+    "file": "pawn-red.png",
+    "box": [
+      34,
+      46,
+      82,
+      94
+    ],
+    "size": [
+      48,
+      48
+    ]
+  },
+  {
+    "name": "pawn-green",
+    "file": "pawn-green.png",
+    "box": [
+      398,
+      46,
+      446,
+      94
+    ],
+    "size": [
+      48,
+      48
+    ]
+  },
+  {
+    "name": "pawn-blue",
+    "file": "pawn-blue.png",
+    "box": [
+      34,
+      338,
+      82,
+      386
+    ],
+    "size": [
+      48,
+      48
+    ]
+  },
+  {
+    "name": "pawn-yellow",
+    "file": "pawn-yellow.png",
+    "box": [
+      398,
+      408,
+      446,
+      456
+    ],
+    "size": [
+      48,
+      48
+    ]
+  },
+  {
+    "name": "dice",
+    "file": "dice.png",
+    "box": [
+      215,
+      215,
+      265,
+      265
+    ],
+    "size": [
+      50,
+      50
+    ]
+  }
+]

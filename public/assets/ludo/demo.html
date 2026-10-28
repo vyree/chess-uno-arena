@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ludo Jahat — Demo Assets Slice</title>
+<style>
+  body{font-family:system-ui,sans-serif;background:#111827;color:#f9fafb;margin:0;padding:24px}
+  h1{font-size:20px;margin:0 0 8px} p{color:#d1d5db;line-height:1.6;max-width:720px}
+  code{background:#1f2937;padding:2px 6px;border-radius:6px}
+  .board{display:grid;grid-template-columns:192fr 97fr 192fr;grid-template-rows:192fr 97fr 192fr;width:min(480px,90vw);aspect-ratio:1;margin:24px 0;border:2px solid #ff2e93}
+  .board img{width:100%;height:100%;display:block;object-fit:cover}
+  .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:16px;margin-top:24px}
+  figure{margin:0;background:#1f2937;border-radius:12px;padding:12px;text-align:center}
+  figure img{max-width:100%;height:auto;border-radius:8px;background:#000}
+  figcaption{font-size:13px;color:#d1d5db;margin-top:8px;word-break:break-all}
+  .note{background:#422006;border:1px solid #f59e0b;border-radius:12px;padding:16px;max-width:720px}
+</style>
+</head>
+<body>
+<h1>🎲 Ludo Jahat — Assets hasil slice</h1>
+<p>Design referensi (481×481) di-slice jadi 9 part papan + 4 pion + dadu. Di game nanti, tiap part dipanggil seperti ini:</p>
+<p><code>&lt;img src="/assets/ludo/yard-red.png" alt="Yard merah"&gt;</code></p>
+
+<h2>1. Papan utuh dari 9 part (3×3, tanpa gap)</h2>
+<div class="board">
+  <img src="./yard-red.png" alt="yard-red">
+  <img src="./track-top.png" alt="track-top">
+  <img src="./yard-green.png" alt="yard-green">
+  <img src="./track-left.png" alt="track-left">
+  <img src="./center.png" alt="center">
+  <img src="./track-right.png" alt="track-right">
+  <img src="./yard-blue.png" alt="yard-blue">
+  <img src="./track-bottom.png" alt="track-bottom">
+  <img src="./yard-yellow.png" alt="yard-yellow">
+</div>
+
+<h2>2. Semua asset, satu per satu</h2>
+<div class="gallery">
+  <figure><img src="./yard-red.png" alt="yard-red"><figcaption>yard-red.png</figcaption></figure>
+  <figure><img src="./track-top.png" alt="track-top"><figcaption>track-top.png</figcaption></figure>
+  <figure><img src="./yard-green.png" alt="yard-green"><figcaption>yard-green.png</figcaption></figure>
+  <figure><img src="./track-left.png" alt="track-left"><figcaption>track-left.png</figcaption></figure>
+  <figure><img src="./center.png" alt="center"><figcaption>center.png (dadu)</figcaption></figure>
+  <figure><img src="./track-right.png" alt="track-right"><figcaption>track-right.png</figcaption></figure>
+  <figure><img src="./yard-blue.png" alt="yard-blue"><figcaption>yard-blue.png</figcaption></figure>
+  <figure><img src="./track-bottom.png" alt="track-bottom"><figcaption>track-bottom.png</figcaption></figure>
+  <figure><img src="./yard-yellow.png" alt="yard-yellow"><figcaption>yard-yellow.png</figcaption></figure>
+  <figure><img src="./pawn-red.png" alt="pawn-red"><figcaption>pawn-red.png</figcaption></figure>
+  <figure><img src="./pawn-green.png" alt="pawn-green"><figcaption>pawn-green.png</figcaption></figure>
+  <figure><img src="./pawn-blue.png" alt="pawn-blue"><figcaption>pawn-blue.png</figcaption></figure>
+  <figure><img src="./pawn-yellow.png" alt="pawn-yellow"><figcaption>pawn-yellow.png</figcaption></figure>
+  <figure><img src="./dice.png" alt="dice"><figcaption>dice.png</figcaption></figure>
+</div>
+
+<div class="note" style="margin-top:24px">
+  <strong>Catatan penting:</strong> gambar asli adalah JPEG 481×481 dengan token dan dadu sudah menempel di dalamnya.
+  Jadi yard-*.png masih berisi 4 pion di base, dan center.png masih berisi dadu + kursor.
+  Asset slice ini cocok sebagai acuan visual / placeholder, <b>bukan</b> latar papan interaktif final —
+  untuk papan final, yard harus digambar ulang bersih tanpa pion, atau pion harus digambar ulang transparan.
+  Daftar koordinat slice lengkap ada di <code>manifest.json</code> di folder yang sama.
+</div>
+</body>
+</html>
