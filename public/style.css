@@ -455,8 +455,8 @@ select {
 }
 .game-card:hover { transform: translateY(-3px); box-shadow: 0 16px 30px rgba(84, 64, 160, .28); }
 .game-card:active { transform: scale(.98); }
-.card-chess { background: linear-gradient(165deg, #8f7fe0, #6750c2); }
-.card-uno { background: linear-gradient(165deg, #ab90f7, #7c5cd6); }
+/* Home cards share one purple gradient and one shape (2x2 grid). */
+.card-chess, .card-uno, .card-ludo, .card-truth { background: linear-gradient(165deg, #8f7fe0, #6750c2); }
 .gc-head { display: flex; flex-direction: column; gap: 3px; position: relative; z-index: 2; }
 .gc-name { font-size: 24px; font-weight: 800; letter-spacing: -.01em; }
 .gc-meta { font-size: 12.5px; font-weight: 600; color: rgba(255, 255, 255, .88); display: inline-flex; align-items: center; gap: 6px; }
@@ -556,17 +556,19 @@ body.on-tabs { padding-bottom: 84px; }
 #tabbar .tab-label { font-size: 11px; font-weight: 700; letter-spacing: .05em; }
 #tabbar .tab.active { background: rgba(255, 255, 255, .18); color: #fff; }
 
-/* Home: Truth card spans the grid, with a little CSS wheel. */
-.card-truth {
-  grid-column: 1 / -1; min-height: 150px;
-  background: linear-gradient(160deg, #7d4fc9, #4a2d8f 62%, #37206e);
+/* Home: Truth card uses the same grid cell as the others, with a little CSS wheel. */
+/* Badges sit as a footer row (margin-top:auto pushes them below the art),
+   so they never cover the game name on narrow half-width cards. */
+.gc-badges {
+  position: static; margin-top: auto; padding-bottom: 14px;
+  display: flex; flex-wrap: wrap; gap: 5px;
 }
 .gc-badge {
-  position: absolute; top: 12px; right: 12px; background: #ffe9a8; color: #6b4e00;
+  background: #ffe9a8; color: #6b4e00;
   font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: var(--radius-full);
-  letter-spacing: .05em;
+  letter-spacing: .05em; white-space: nowrap;
 }
-.gc-badge.badge-beta { background: #fff; color: #b3126b; border: 2px solid #ff2e93; }
+.gc-badge.badge-limited { background: #fff; color: #b3126b; border: 2px solid #ff2e93; }
 .beta-pill {
   display: inline-block; margin-top: 4px; background: #fff; color: #b3126b;
   border: 2px solid #ff2e93; font-size: 11px; font-weight: 800;
@@ -764,7 +766,6 @@ body.low-gfx * {
 .big-code { color: var(--color-neon-deep); }
 
 /* ============ Ludo Jahat (Fase 1, dark board) ============ */
-.card-ludo { background: #1b2436; color: #fff; }
 .art-ludo { display: flex; gap: 6px; font-size: 30px; }
 .ludo-pawn.p-red { color: #ff5a5a; }
 .ludo-pawn.p-green { color: #3ddc84; }
