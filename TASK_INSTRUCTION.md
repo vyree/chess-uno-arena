@@ -1514,3 +1514,23 @@ miring -22 derajat di tengah dengan nilai diputar balik +22 derajat).
 - Deploy: buildah -> Fly v12 (sin started) + Firebase Hosting; verifikasi prod:
   style.css memuat gc-badges/badge-limited, index memuat 2x Under Construction +
   2x Limited Access.
+
+## Label kartu home direvisi — DEPLOYED 28 Okt 2026 (Fly v14, commit adfff70)
+- Perintah Sensei 28 Okt 2026 (dari screenshot prod): ukuran kartu beda karena
+  label; buang label Limited Access, label Under Construction saja, kecil, di
+  pojok kanan atas, supaya ukuran kartu sama.
+- Perubahan: kedua kartu hanya satu badge ( Under Construction ) kecil
+  (10px, absolute top:10px right:10px); header kartu berlabel diberi
+  padding-top 20px supaya nama game mulai di bawah badge, bukan tertutup
+  badge (pelajaran dari revisi sebelumnya). Badge absolute = tidak menambah
+  tinggi kartu; terverifikasi screenshot desktop 900px + mobile 390px.
+- Insiden deploy: VM recycle 28 Okt 12:03 WIB menghapus biner buildah sistem
+  (lagi) — deploy pertama jalan dengan image LAMA (Fly v13, tanpa perubahan
+  ini) karena `flyctl deploy --image` memakai tag latest yang sudah ada di
+  registry. Buildah diinstal ulang via apt (sources azure-only, salinan
+  tersimpan di ~/workspace/.apt-azure-only.sources), image dibangun ulang +
+  push + deploy menjadi Fly v14 yang benar, healthz 200. Pelajaran: SELALU
+  verifikasi image/tag yang ter-deploy (atau buildah tersedia) sebelum
+  mengklaim deploy; `flyctl deploy --image` tanpa build baru = redeploy lama.
+- Verifikasi prod: index memuat 2x Under Construction, 0x Limited Access;
+  style.css tanpa badge-limited, gc-badges absolute pojok kanan atas.
