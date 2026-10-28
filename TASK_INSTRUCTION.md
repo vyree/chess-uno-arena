@@ -1473,3 +1473,25 @@ miring -22 derajat di tengah dengan nilai diputar balik +22 derajat).
   placeholder sudah blank, header mobile 1 baris, tapi animasi
   Sniper/Bom/Beku via browser + pasangan attack+defense untuk
   Cermin/Kulit Batu via browser belum tertangkap (hanya tes).
+
+## Deploy Ludo Jahat — DEPLOYED 28 Okt 2026 (Fly v11, commit 438a1c6)
+- Perintah Sensei 28 Okt 2026: deploy Ludo supaya bisa dicoba langsung di prod.
+- Server: buildah (diinstal ulang via apt 28 Okt — biner lama hilang kena recycle VM;
+  depot builder Fly + Docker statis GAGAL dari sandbox: depot menggantung, Docker
+  gagal `setns: operation not permitted` saat RUN) -> push registry.fly.io/ayo-nge:latest
+  (login token deploy) -> `flyctl deploy --image ... -a ayo-nge --ha=false` -> Fly v11,
+  mesin sin started, health check lulus, root + /healthz 200.
+- Klien: `firebase deploy --only hosting` (fir-pro2-d77c3) — index memuat "Ludo Jahat",
+  app.js + board-full.svg 200. Link coba: https://fir-pro2-d77c3.web.app (default Fly).
+- Verifikasi pra-deploy: `npm run check` bersih, `git diff public/firebase-config.js`
+  kosong, npm test 179/180. SATU tes flaky: `test/ludo_bot_attack.test.js` gagal 3x
+  dan lulus 1x (631 ms) dalam 4 run 28 Okt — tes ini memburu event acak (bot mendarat
+  di block + menarik kartu attack) hanya dalam 3 room; perburuan WS terpisah 28 Okt
+  membuktikan mekanisme prod bekerja (7 fase attack bot, selesai 0-10 ms, 6/7
+  diumumkan). Tes ini perlu diperkeras (mis. seed/deterministik), BUKAN bukti
+  regresi driver bot — jangan jadikan satu-satunya gerbang deploy, tapi jangan
+  juga dihapus diam-diam.
+- Catatan: uji WS prod dari sandbox GAGAL TLS (keterbatasan proksi sandbox, sudah
+  dikenal sejak dulu) — uji WS akhir tetap di perangkat Sensei.
+- Commit 438a1c6 + dokumen ini belum di-push ke GitHub saat deploy (deploy memakai
+  image lokal); push dilakukan terpisah setelah verifikasi prod.
