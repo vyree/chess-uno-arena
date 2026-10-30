@@ -47,14 +47,21 @@ const COLORS = ['red', 'yellow', 'green', 'blue', 'purple'];
 const NUMBERS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 const ACTIONS = ['skip', 'reverse', 'draw2'];
 
+// Colors legal in a mode (2026-10-30, Sensei): normal/hard drop purple
+// (4 colors); chaos/hell keep all 5.
+function modeColors(mode) {
+  return (mode === 'normal' || mode === 'hard') ? COLORS.slice(0, 4) : COLORS.slice();
+}
+
 let cardSeq = 0;
 function mkCard(color, kind, value) {
   return { id: 'c' + (cardSeq++), color, kind, value };
 }
 
 function buildDeck(mode) {
+  if (!MODES.includes(mode)) mode = 'normal'; // default konsisten dengan newGame
   const deck = [];
-  for (const color of COLORS) {
+  for (const color of modeColors(mode)) {
     deck.push(mkCard(color, 'number', 0));
     for (let n = 1; n <= 9; n++) {
       deck.push(mkCard(color, 'number', n));
@@ -65,9 +72,21 @@ function buildDeck(mode) {
       deck.push(mkCard(color, a, null));
     }
   }
-  for (let i = 0; i < 4; i++) {
+  // wild counts: chaos gets 5 each (2026-10-30, Sensei); other modes 4 each
+  const wildCount = mode === 'chaos' ? 5 : 4;
+  for (let i = 0; i < wildCount; i++) {
     deck.push(mkCard(null, 'wild', null));
     deck.push(mkCard(null, 'wild4', null));
+  }
+  if (mode === 'chaos') {
+    // Chaos composition (2026-10-30, Sensei): 5 colors, wild x5 / wild4 x5,
+    // black & white specials x2 each (were x4 in hell), NO negate/reset,
+    // NO extra draw2 (2 per color is already 10 total). Total: 139 cards.
+    // Pile rules follow hard (escalation) — see isStackCard.
+    for (let i = 0; i < 2; i++) {
+      deck.push(mkCard(null, 'reverseBlack', null));
+      deck.push(mkCard(null, 'nullWhite', null));
+    }
   }
   if (mode === 'hell') {
     // Hell-only composition (Misi 5): draw cards doubled so piles ignite
@@ -100,7 +119,7 @@ function shuffle(arr, rand) {
   return arr;
 }
 
-const MODES = ['normal', 'hard', 'hell'];
+const MODES = ['normal', 'hard', 'chaos', 'hell'];
 
 function newGame(numPlayers, opts) {
   // opts: { rand, mode, unlimited } — a bare function is treated as rand
@@ -165,9 +184,9 @@ function topCard(st) { return st.discard[st.discard.length - 1]; }
 
 // Pile answers by mode (Misi 5):
 // - normal: a +2 pile answers only with +2; a +4 pile has NO answer.
-// - hard/hell: a +2 pile answers with +2 or +4 (escalation); a +4 pile
+// - hard/chaos/hell: a +2 pile answers with +2 or +4 (escalation); a +4 pile
 //   answers only with +4.
-// The hell specials (Reverse Black / Null White) answer ANY pending pile.
+// The hell/chaos specials (Reverse Black / Null White) answer ANY pending pile.
 // Reset is NOT a pile answer anymore (revised 2026-10-26: it answers a
 // UNO! window via playReset, like Negate! via playNegate).
 function isStackCard(st, card) {
@@ -283,7 +302,7 @@ function playCard(st, playerIdx, cardId, opts) {
     return { ok: false, error: 'kartu tidak cocok' };
   }
   if ((card.kind === 'wild' || card.kind === 'wild4' || card.kind === 'nullWhite' || lastCardSpecial)
-      && !COLORS.includes(opts.wildColor)) {
+      && !modeColors(st.mode).includes(opts.wildColor)) {
     return { ok: false, error: 'pilih warna dulu' };
   }
 
@@ -667,7 +686,7 @@ function toClient(st, playerIdx) {
 }
 
 module.exports = {
-  COLORS, MODES, buildDeck, shuffle, newGame, canPlay, isStackCard, playCard, drawCard,
+  COLORS, MODES, modeColors, buildDeck, shuffle, newGame, canPlay, isStackCard, playCard, drawCard,
   passTurn, playDrawnCard, scoreRound, cardPoints, toClient, topCard,
   playNegate, playReset, giveCard, resolveGiftTimeout, closeNegateWindow, cancelGiftPhase,
   isFinished, activeSeats,

@@ -1589,3 +1589,27 @@ miring -22 derajat di tengah dengan nilai diputar balik +22 derajat).
   mengklaim deploy; `flyctl deploy --image` tanpa build baru = redeploy lama.
 - Verifikasi prod: index memuat 2x Under Construction, 0x Limited Access;
   style.css tanpa badge-limited, gc-badges absolute pojok kanan atas.
+
+# Level Chaos + Normal/Hard 4 Warna (2026-10-30, perintah Sensei)
+
+Keputusan Sensei (5 jawaban, 30 Okt 2026):
+1. Chaos pakai 5 warna (bukan ungu-only).
+2. Urutan level: normal → hard → chaos → hell.
+3. Aturan tumpukan chaos ikut hard (eskalasi +2→+4).
+4. Tanpa extra draw2 di chaos (2 per warna × 5 warna = 10 total sudah cukup).
+5. Jendela teriakan UNO! tetap ada di chaos (tanpa kartu counter).
+
+Komposisi deck:
+- normal/hard: 4 warna × 25 + wild ×4 + wild4 ×4 = **108** (ungu dihapus total:
+  deck, color picker, pilihan warna bot; `playCard` menolak wildColor purple
+  via `modeColors(st.mode)`).
+- chaos: 5 warna × 25 + wild ×5 + wild4 ×5 + reverseBlack ×2 + nullWhite ×2,
+  TANPA negate/reset, TANPA extra draw2 = **139**. Tumpukan ikut hard
+  (otomatis — `isStackCard` hanya mengkhususkan normal).
+- hell: tidak berubah = **159**.
+
+Implementasi: `modeColors(mode)` di game/uno.js (diexport; dipakai bot.js,
+playCard, dan helper klien `unoModeColors()`); `MODES` = normal/hard/chaos/hell;
+validator `validMode` menerima chaos; opsi Chaos 🌀 di bot-mode & lobby-mode;
+badge 🌀 CHAOS di header meja. Tes: test/uno_chaos.test.js (8 tes).
+Status: implementasi + 195/195 tes lulus, BELUM commit/push/deploy.

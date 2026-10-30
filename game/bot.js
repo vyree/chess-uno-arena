@@ -11,12 +11,13 @@ const BOT_NAMES = [
   'Bot Dahlia', 'Bot Kamboja', 'Bot Flamboyan',
 ];
 
-// Color the bot wants when playing a wild: its most-held color.
+// Color the bot wants when playing a wild: its most-held color (only among
+// the mode's legal colors — 2026-10-30, Sensei: normal/hard drop purple).
 function chooseWildColor(st, idx) {
   const counts = { red: 0, yellow: 0, green: 0, blue: 0, purple: 0 };
   for (const c of st.hands[idx]) if (c.color) counts[c.color]++;
   let best = 'red';
-  for (const col of uno.COLORS) if (counts[col] > counts[best]) best = col;
+  for (const col of uno.modeColors(st.mode)) if (counts[col] > counts[best]) best = col;
   return best;
 }
 
@@ -79,10 +80,11 @@ function takeTurn(st, idx) {
       // (canPlay only admits these kinds at exactly 1 card, so the kind
       // check below always means the last-card path.)
       const isLastSpecial = card.kind === 'negate' || card.kind === 'reset';
+      const legalColors = uno.modeColors(st.mode);
       const r = uno.playCard(st, idx, card.id, {
         saidUno: hand.length === 2,
         wildColor: isLastSpecial
-          ? uno.COLORS[Math.floor(Math.random() * uno.COLORS.length)]
+          ? legalColors[Math.floor(Math.random() * legalColors.length)]
           : chooseWildColor(st, idx),
       });
       log.push({ action: 'play', r });

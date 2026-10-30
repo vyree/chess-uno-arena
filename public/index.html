@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>MABAR.io — Main Bareng ♟️🃏🎡</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -128,6 +131,7 @@
           <select id="bot-mode">
             <option value="normal" selected>Normal</option>
             <option value="hard">Hard</option>
+            <option value="chaos">Chaos 🌀</option>
             <option value="hell">Hell 🔥</option>
           </select>
         </label>
@@ -188,6 +192,7 @@
           <select id="lobby-mode">
             <option value="normal" selected>Normal</option>
             <option value="hard">Hard</option>
+            <option value="chaos">Chaos 🌀</option>
             <option value="hell">Hell 🔥</option>
           </select>
         </label>
@@ -286,7 +291,7 @@
         <button id="btn-uno-say" class="btn warning">📢 UNO!</button>
         <button id="btn-uno-pass" class="btn secondary hidden">⏭️ Lewati</button>
       </div>
-      <div id="uno-deck" class="uno-card deck" title="Ambil kartu"><span class="oval"><span class="val">🎴</span></span><small id="deck-count"></small></div>
+      <div id="uno-deck" class="uno-card deck" title="Ambil kartu"><div class="unologo"><span>UNO</span></div><small id="deck-count"></small></div>
     </div>
     <h3>Kartumu (<span id="hand-count">0</span>)</h3>
     <div id="uno-hand" class="uno-hand"></div>

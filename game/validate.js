@@ -62,7 +62,7 @@ function validCardId(id) {
 // UNO mode (Misi 5): 'normal' | 'hard' | 'hell'. Legacy Misi 2 clients
 // send `extreme: true`, which maps to 'hard'; anything else → 'normal'.
 function validMode(d) {
-  if (d && (d.mode === 'normal' || d.mode === 'hard' || d.mode === 'hell')) return d.mode;
+  if (d && (d.mode === 'normal' || d.mode === 'hard' || d.mode === 'chaos' || d.mode === 'hell')) return d.mode;
   return d && d.extreme === true ? 'hard' : 'normal';
 }
 

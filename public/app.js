@@ -524,6 +524,14 @@ function onChessLegal(m) {
 
 // ---------- uno ----------
 const UNO_COLORS = { red: 'Merah 🔴', yellow: 'Kuning 🟡', green: 'Hijau 🟢', blue: 'Biru 🔵', purple: 'Ungu 🟣' };
+// Legal wild colors for the current UNO mode (2026-10-30, Sensei:
+// normal/hard drop purple; chaos/hell keep all 5).
+function unoModeColors() {
+  const m = S.uno && S.uno.mode;
+  return (m === 'normal' || m === 'hard')
+    ? ['red', 'yellow', 'green', 'blue']
+    : ['red', 'yellow', 'green', 'blue', 'purple'];
+}
 
 function cardLabel(c) {
   if (c.kind === 'number') return String(c.value);
@@ -538,20 +546,23 @@ function cardClass(c) {
   return c.color || '';
 }
 
-// Classic card face (Sensei's reference, 2026-10-21): white tilted oval in
-// the middle with the big value, small values in the top-left and the
-// bottom-right (flipped) corners; wilds carry the 4-color motif instead.
+// Minimalista card faces (Sensei, 2026-10-30): flat color, white glyph
+// centered, small corner pips; wild = thin 4-color ring, wild4 = 4 outlined
+// color chips, draw2 = 2 outlined white rects.
 function cardHTML(c) {
   const label = cardLabel(c);
-  if (c.kind === 'wild' || c.kind === 'wild4') {
-    const corner = c.kind === 'wild4' ? '+4' : '<span class="mini-motif"></span>';
-    return `<i class="cnr tl">${corner}</i>`
-      + '<span class="oval"><span class="motif"></span></span>'
-      + `<i class="cnr br">${corner}</i>`;
+  const pips = (inner) => `<i class="cnr tl">${inner}</i><i class="cnr br">${inner}</i>`;
+  if (c.kind === 'wild') {
+    const ring = '<span class="miniring"></span>';
+    return pips(ring) + '<span class="ring"></span>';
   }
-  return `<i class="cnr tl">${label}</i>`
-    + `<span class="oval"><span class="val">${label}</span></span>`
-    + `<i class="cnr br">${label}</i>`;
+  if (c.kind === 'wild4') {
+    return pips('+4') + '<span class="rects4"><i></i><i></i><i></i><i></i></span>';
+  }
+  if (c.kind === 'draw2') {
+    return pips('+2') + '<span class="rects2"><i></i><i></i></span>';
+  }
+  return pips(label) + `<span class="glyph">${label}</span>`;
 }
 
 // ---------- uno playing time + turn marker (2026-10-27, Sensei) ----------
@@ -627,6 +638,7 @@ function renderUno(m) {
   const modeBadge = $('uno-mode-badge');
   const badgeParts = [];
   if (st.mode === 'hell') badgeParts.push('🔥 HELL');
+  else if (st.mode === 'chaos') badgeParts.push('🌀 CHAOS');
   else if (st.mode === 'hard') badgeParts.push('HARD');
   if (st.unlimited) badgeParts.push('∞ UNLIMITED');
   modeBadge.classList.toggle('hidden', badgeParts.length === 0);
@@ -687,7 +699,7 @@ function renderUno(m) {
 }
 
 function colorHex(c) {
-  return { red: '#d92323', yellow: '#e69c00', green: '#159947', blue: '#2266b8', purple: '#7b2fbe' }[c] || '#999';
+  return { red: '#c43c2a', yellow: '#f3d149', green: '#9cbf46', blue: '#4177b5', purple: '#9b59b6' }[c] || '#999';
 }
 
 function onUnoCardClick(card) {
@@ -714,7 +726,7 @@ function onUnoCardClick(card) {
   };
   if (card.kind === 'wild' || card.kind === 'wild4' || card.kind === 'nullWhite') {
     showModal('Pilih warna…', '<div class="color-pick">' +
-      ['red', 'yellow', 'green', 'blue', 'purple'].map((c) =>
+      unoModeColors().map((c) =>
         `<button data-c="${c}" style="background:${colorHex(c)}" title="${c}"></button>`).join('') +
       '</div>', [{ label: 'Batal', cls: 'ghost' }]);
     document.querySelectorAll('.color-pick button').forEach((b) => {
@@ -752,7 +764,7 @@ function showSpecialInfo(card) {
       label: 'Pakai kartu', cls: 'primary',
       onClick: () => {
         showModal('Pilih warna…', '<div class="color-pick">' +
-          ['red', 'yellow', 'green', 'blue', 'purple'].map((c) =>
+          unoModeColors().map((c) =>
             `<button data-c="${c}" style="background:${colorHex(c)}" title="${c}"></button>`).join('') +
           '</div>', [{ label: 'Batal', cls: 'ghost' }]);
         document.querySelectorAll('.color-pick button').forEach((b) => {
@@ -900,7 +912,7 @@ function flyCard(fromEl, toEl, card, back) {
   const b = toEl.getBoundingClientRect();
   const ghost = document.createElement('div');
   ghost.className = 'uno-card fly ' + (back ? 'deck' : cardClass(card || {}));
-  ghost.innerHTML = back ? '<span class="oval"><span class="val">🎴</span></span>' : (card ? cardHTML(card) : '?');
+  ghost.innerHTML = back ? '<div class="unologo"><span>UNO</span></div>' : (card ? cardHTML(card) : '?');
   ghost.style.left = (a.left + a.width / 2 - 24) + 'px';
   ghost.style.top = (a.top + a.height / 2 - 34) + 'px';
   document.body.appendChild(ghost);

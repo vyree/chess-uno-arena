@@ -17,11 +17,11 @@
   --color-felt-edge: #3a2a66;
   --color-board-light: #efe9fc;
   --color-board-dark: #b3a1e0;
-  --color-uno-red: #d92323;
-  --color-uno-yellow: #e69c00;
-  --color-uno-green: #159947;
-  --color-uno-blue: #2266b8;
-  --color-uno-purple: #7b2fbe;
+  --color-uno-red: #c43c2a;
+  --color-uno-yellow: #f3d149;
+  --color-uno-green: #9cbf46;
+  --color-uno-blue: #4177b5;
+  --color-uno-purple: #9b59b6;
   --radius-sm: 6px;
   --radius-md: 12px;
   --radius-lg: 20px;
@@ -242,70 +242,72 @@ input:focus { outline: none; border-color: var(--color-primary); }
   .seat-chip.turn { animation: none; }
   .uno-flash.pop { animation-duration: .01s; }
 }
+/* Minimalista card faces (Sensei, 2026-10-30): flat solid color, no border,
+   no oval — white glyph centered, small corner pips. Specials: wild = thin
+   4-color ring, wild4 = 4 outlined color chips, draw2 = 2 outlined rects;
+   reverseBlack/negate = black, nullWhite = white, reset = light gray. */
 .uno-card {
-  width: 84px; height: 120px; border-radius: 10px;
-  border: 3px solid #fff;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 84px; height: 120px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Nunito', Arial, sans-serif;
   font-size: 30px; font-weight: 800; color: #fff; cursor: pointer;
   box-shadow: 0 3px 10px rgba(0,0,0,.25); user-select: none; position: relative;
 }
-/* classic face: corner values + tilted white oval with the big value */
 .uno-card .cnr {
   position: absolute; font-style: normal; font-weight: 800; line-height: 1;
-  font-size: .44em; text-shadow: 0 1px 2px rgba(0,0,0,.35); z-index: 2;
+  font-size: .44em; z-index: 2;
 }
-.uno-card .cnr.tl { top: 5px; left: 6px; }
-.uno-card .cnr.br { bottom: 5px; right: 6px; transform: rotate(180deg); }
-.uno-card .oval {
-  width: 84%; height: 56%; background: #fff; border-radius: 50%;
-  transform: rotate(-22deg);
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: inset 0 0 0 2px rgba(0,0,0,.05);
-}
-.uno-card .oval .val { transform: rotate(22deg); font-size: .92em; }
-.uno-card.red .val { color: var(--color-uno-red); }
-.uno-card.yellow .val { color: var(--color-uno-yellow); }
-.uno-card.green .val { color: var(--color-uno-green); }
-.uno-card.blue .val { color: var(--color-uno-blue); }
-.uno-card.purple .val { color: var(--color-uno-purple); }
-.uno-card .motif {
-  width: 56%; height: 74%; border-radius: 5px; transform: rotate(22deg);
-  background: conic-gradient(from 45deg,
-    var(--color-uno-red) 0 20%, var(--color-uno-blue) 0 40%,
-    var(--color-uno-yellow) 0 60%, var(--color-uno-green) 0 80%,
-    var(--color-uno-purple) 0);
-}
-.uno-card .mini-motif {
-  display: inline-block; width: 11px; height: 11px; border-radius: 50%;
-  background: conic-gradient(from 45deg,
-    var(--color-uno-red) 0 20%, var(--color-uno-blue) 0 40%,
-    var(--color-uno-yellow) 0 60%, var(--color-uno-green) 0 80%,
-    var(--color-uno-purple) 0);
-}
-.uno-card small { font-size: 11px; font-weight: 600; }
+.uno-card .cnr.tl { top: 6px; left: 8px; }
+.uno-card .cnr.br { bottom: 6px; right: 8px; transform: rotate(180deg); }
+.uno-card .glyph { line-height: 1; font-size: 1.5em; }
 .uno-card.red { background: var(--color-uno-red); }
 .uno-card.yellow { background: var(--color-uno-yellow); }
 .uno-card.green { background: var(--color-uno-green); }
 .uno-card.blue { background: var(--color-uno-blue); }
 .uno-card.purple { background: var(--color-uno-purple); }
-.uno-card.wild { background: #1c1c1e; }
-/* Hell specials (Misi 5): Reverse Black = a black card with the classic
-   white oval + dark reverse glyph; Null White = a white card sealed by a
-   dark oval with a white X. */
-.uno-card.blackrev { background: #17171c; }
-.uno-card.blackrev .val { color: #17171c; }
-.uno-card.nullwhite { background: #f4f4f6; color: #1c1c1e; border-color: #cfcfda; }
-.uno-card.nullwhite .oval { background: #1c1c1e; }
-.uno-card.nullwhite .val { color: #fff; }
-.uno-card.deck { background: #3a3f4d; cursor: pointer; }
-.uno-card.deck small { position: absolute; bottom: 4px; left: 0; right: 0; text-align: center; }
+.uno-card.wild { background: #141416; }
+/* thin 4-color ring (wild) */
+.uno-card .ring {
+  width: 2.1em; height: 2.1em; border-radius: 50%;
+  background: conic-gradient(from -45deg,
+    var(--color-uno-yellow) 0 25%, var(--color-uno-green) 0 50%,
+    var(--color-uno-red) 0 75%, var(--color-uno-blue) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - .32em), #000 calc(100% - .28em));
+  mask: radial-gradient(farthest-side, transparent calc(100% - .32em), #000 calc(100% - .28em));
+}
+.uno-card .miniring {
+  display: inline-block; width: .95em; height: .95em; border-radius: 50%; vertical-align: -.12em;
+  background: conic-gradient(from -45deg,
+    var(--color-uno-yellow) 0 25%, var(--color-uno-green) 0 50%,
+    var(--color-uno-red) 0 75%, var(--color-uno-blue) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - .28em), #000 calc(100% - .22em));
+  mask: radial-gradient(farthest-side, transparent calc(100% - .28em), #000 calc(100% - .22em));
+}
+/* outlined chips: wild4 = 4 color chips, draw2 = 2 white rects */
+.uno-card .rects4 { position: relative; width: 2.1em; height: 2em; }
+.uno-card .rects4 i { position: absolute; width: .82em; height: 1.18em; border-radius: .22em; border: .12em solid; }
+.uno-card .rects4 i:nth-child(1) { left: .06em; top: .4em; border-color: var(--color-uno-yellow); }
+.uno-card .rects4 i:nth-child(2) { left: .66em; top: .06em; border-color: var(--color-uno-red); }
+.uno-card .rects4 i:nth-child(3) { left: .66em; top: .78em; border-color: var(--color-uno-green); }
+.uno-card .rects4 i:nth-child(4) { left: 1.26em; top: .4em; border-color: var(--color-uno-blue); }
+.uno-card .rects2 { position: relative; width: 1.7em; height: 1.45em; }
+.uno-card .rects2 i { position: absolute; width: .85em; height: 1.25em; border-radius: .22em; border: .12em solid #fff; }
+.uno-card .rects2 i:first-child { left: 0; top: 0; }
+.uno-card .rects2 i:last-child { right: 0; bottom: 0; }
+/* Hell specials */
+.uno-card.blackrev { background: #141416; }
+.uno-card.nullwhite { background: #f7f7f8; color: #2a2a30; }
+.uno-card.reset { background: #e4e4ea; color: #3a3a44; }
+.uno-card.negate { background: #141416; }
+.uno-card.deck { background: #141416; cursor: pointer; }
+.uno-card.deck small { position: absolute; bottom: 4px; left: 0; right: 0; text-align: center; font-size: 11px; font-weight: 700; color: #fff; }
+/* UNO logo on the card back */
+.uno-card .unologo {
+  border: .16em solid #d23c2e; border-radius: 50%;
+  transform: rotate(-14deg); padding: .22em .55em;
+}
+.uno-card .unologo span { color: #f3c62f; font-style: italic; font-weight: 900; font-size: .95em; letter-spacing: .02em; }
 .uno-card.playable { outline: 3px solid var(--color-success); }
-/* Misi 10: Reset (white power card) + Negate! (black card, ≠ glyph on
-   the classic white oval) + gift-phase pick highlight + finished seats. */
-.uno-card.reset { background: #f5f5f0; color: #1c1c1e; border-color: #cfcfda; }
-.uno-card.reset .val { color: #222; }
-.uno-card.negate { background: #17171c; }
-.uno-card.negate .val { color: #17171c; }
 .uno-card.giftable { outline: 3px solid var(--color-warning, #e69c00); }
 .seat-chip.finished { opacity: .65; }
 .color-badge {
@@ -517,12 +519,13 @@ select {
 /* UNO table: clean white by default with edge border lines (2026-10-30,
    Sensei — the table design will be revisited later). */
 .uno-arena {
-  background: #ffffff;
+  /* 2026-10-30 (Sensei): anime sunset wallpaper as the table felt */
+  background: #141a35 url('assets/uno-table-bg.webp') center / cover no-repeat;
   border: 2px solid var(--color-lav-2);
   border-radius: 26px;
-  box-shadow: inset 0 0 0 1px #ffffff, 0 12px 26px rgba(56, 40, 110, .12);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.18), 0 12px 26px rgba(56, 40, 110, .12);
 }
-.uno-card.deck { background: #2e2050; }
+.uno-card.deck { background: #141416; }
 .dir-badge { background: #2e2050; }
 .seat-chip { background: #fff; border-color: var(--color-lav-2); }
 .uno-hand { scrollbar-color: var(--color-lav-2) transparent; }

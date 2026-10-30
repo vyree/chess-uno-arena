@@ -1,7 +1,7 @@
 'use strict';
 // Misi 10 (Sensei 2026-10-23, built 2026-10-26): UNO Unlimited toggle +
-// Reset (Hell x2) + Negate! (Hell x2). Deck baseline after the purple
-// set: normal/hard 133, hell 159 (155 + Reset x2 + Negate! x2).
+// Reset (Hell x2) + Negate! (Hell x2). Deck: normal/hard 108 (4 warna),
+// chaos 139, hell 159 (155 + Reset x2 + Negate! x2).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const U = require('../game/uno.js');
@@ -23,7 +23,7 @@ const negate = (id) => ({ id, color: null, kind: 'negate', value: null });
 
 // ---------- deck ----------
 
-test('deck hell = 159: reset x2, negate x2, mode lain 133 tanpa keduanya', () => {
+test('deck hell = 159: reset x2, negate x2, chaos 139 tanpa keduanya, normal/hard 108', () => {
   const count = (deck, k) => deck.filter((c) => c.kind === k).length;
   const hell = U.buildDeck('hell');
   assert.equal(hell.length, 159);
@@ -31,10 +31,13 @@ test('deck hell = 159: reset x2, negate x2, mode lain 133 tanpa keduanya', () =>
   assert.equal(count(hell, 'negate'), 2);
   assert.equal(count(hell, 'draw2'), 20);
   assert.equal(count(hell, 'wild4'), 8);
-  assert.equal(U.buildDeck('normal').length, 133);
+  assert.equal(U.buildDeck('normal').length, 108);
   assert.equal(count(U.buildDeck('normal'), 'reset'), 0);
   assert.equal(count(U.buildDeck('normal'), 'negate'), 0);
-  assert.equal(U.buildDeck('hard').length, 133);
+  assert.equal(U.buildDeck('hard').length, 108);
+  assert.equal(U.buildDeck('chaos').length, 139);
+  assert.equal(count(U.buildDeck('chaos'), 'reset'), 0);
+  assert.equal(count(U.buildDeck('chaos'), 'negate'), 0);
 });
 
 // ---------- Reset (revised 2026-10-26: UNO! window card, NOT a pile answer) ----------
