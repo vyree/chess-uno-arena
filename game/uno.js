@@ -30,6 +30,13 @@
  *   reaches 1). It voids the UNO: every other active player gives 1
  *   card to the victim (10-second parallel gift phase; timeout picks
  *   each giver's lowest card), then the victim draws +2.
+ * - 2026-10-30 (Sensei, additive — the window rules above are unchanged):
+ *   Negate!/Reset! gain a last-card play path. On your own turn with
+ *   exactly 1 card left (the special itself) and no pending pile, they
+ *   play like a Wild: effect disabled, caster picks the color, then
+ *   finish (unlimited) or win (normal). Consumes the 2-uses-per-game
+ *   quota. This kills the softlock of holding an unplayable last-card
+ *   special.
  * Clock policy (engine is a pure state machine; the server owns the
  * clock): the engine RECORDS negateWindow/giftPhase but never blocks
  * play/draw/pass on them — the server pauses turns and runs the 5s/10s
@@ -180,14 +187,26 @@ function stackError(st, card) {
   return 'hanya kartu sejenis yang bisa menumpuk';
 }
 
+// hell specials are dead cards outside a pending pile; Negate!/Reset! are
+// window-only cards, EXCEPT as the very last card in hand (2026-10-30,
+// Sensei — additive rule, the window path is unchanged): on your own turn
+// with exactly 1 card left and no pending pile, they play like a Wild —
+// effect disabled, you pick the color. This kills the softlock where the
+// special is your only remaining card and therefore unplayable forever.
+function canPlayCheckSpecials(st, playerIdx, card) {
+  if (card.kind === 'reverseBlack' || card.kind === 'nullWhite') return false;
+  if (card.kind === 'reset' || card.kind === 'negate') {
+    const uses = card.kind === 'negate' ? st.negateUses : st.resetUses;
+    return st.pendingDraw === 0 && st.hands[playerIdx].length === 1 && uses < 2;
+  }
+  return null; // not a special — fall through to the normal rules
+}
+
 function canPlay(st, playerIdx, card) {
   if (st.over || st.turn !== playerIdx || st.drewThisTurn) return false;
   if (st.pendingDraw > 0) return isStackCard(st, card);
-  // hell specials are dead cards outside a pending pile; Negate! is
-  // never played via canPlay — it only fires inside a UNO! window
-  // (playNegate), so it is dead here in every situation.
-  if (card.kind === 'reverseBlack' || card.kind === 'nullWhite'
-    || card.kind === 'reset' || card.kind === 'negate') return false;
+  const special = canPlayCheckSpecials(st, playerIdx, card);
+  if (special !== null) return special;
   const top = topCard(st);
   if (card.kind === 'wild' || card.kind === 'wild4') return true;
   if (card.color === st.currentColor) return true;
@@ -234,15 +253,26 @@ function playCard(st, playerIdx, cardId, opts) {
   if (hi < 0) return { ok: false, error: 'kartu tidak ada di tanganmu' };
   const card = hand[hi];
   const stacking = st.pendingDraw > 0;
-  if (card.kind === 'negate') {
+  // 2026-10-30 (Sensei, additive rule): Negate!/Reset! gain a last-card
+  // play path — with exactly 1 card in hand and no pending pile they play
+  // like a Wild (effect disabled, color picked by the caster). The UNO!
+  // window path is unchanged.
+  const lastCardSpecial = (card.kind === 'negate' || card.kind === 'reset')
+    && hand.length === 1 && !stacking;
+  if (card.kind === 'negate' && !lastCardSpecial) {
     // Negate! never goes through a normal play — it only fires inside
-    // a UNO! window (playNegate). This keeps its trigger unambiguous.
-    return { ok: false, error: 'negate hanya bisa dipakai saat ada yang teriak Uno!' };
+    // a UNO! window (playNegate), except as the last card (above). This
+    // keeps its trigger unambiguous.
+    return { ok: false, error: 'negate hanya bisa dipakai saat ada yang teriak Uno! atau sebagai kartu terakhirmu' };
   }
-  if (card.kind === 'reset') {
+  if (card.kind === 'reset' && !lastCardSpecial) {
     // Reset never goes through a normal play either (revised 2026-10-26):
-    // it only fires inside a UNO! window (playReset).
-    return { ok: false, error: 'reset hanya bisa dipakai saat ada yang teriak Uno!' };
+    // it only fires inside a UNO! window (playReset), except as the last
+    // card (above).
+    return { ok: false, error: 'reset hanya bisa dipakai saat ada yang teriak Uno! atau sebagai kartu terakhirmu' };
+  }
+  if (lastCardSpecial && (card.kind === 'negate' ? st.negateUses : st.resetUses) >= 2) {
+    return { ok: false, error: 'jatah kartu spesial ini sudah habis' };
   }
   if (stacking) {
     // facing a draw pile: only the mode's stack answers (Misi 5) are legal
@@ -252,14 +282,20 @@ function playCard(st, playerIdx, cardId, opts) {
   } else if (!canPlay(st, playerIdx, card)) {
     return { ok: false, error: 'kartu tidak cocok' };
   }
-  if ((card.kind === 'wild' || card.kind === 'wild4' || card.kind === 'nullWhite') && !COLORS.includes(opts.wildColor)) {
+  if ((card.kind === 'wild' || card.kind === 'wild4' || card.kind === 'nullWhite' || lastCardSpecial)
+      && !COLORS.includes(opts.wildColor)) {
     return { ok: false, error: 'pilih warna dulu' };
   }
 
   hand.splice(hi, 1);
   st.discard.push(card);
-  // wild-class plays set the color; Reverse Black (colorless) preserves it
-  st.currentColor = (card.kind === 'wild' || card.kind === 'wild4' || card.kind === 'nullWhite')
+  // the 2-uses-per-game quota covers the last-card path too (2026-10-30)
+  if (card.kind === 'negate') st.negateUses++;
+  if (card.kind === 'reset') st.resetUses++;
+  // wild-class plays set the color; a last-card special also picks the
+  // color (its effect is disabled on this path); Reverse Black (colorless)
+  // preserves it
+  st.currentColor = (card.kind === 'wild' || card.kind === 'wild4' || card.kind === 'nullWhite' || lastCardSpecial)
     ? opts.wildColor : (card.color || st.currentColor);
   const events = [{ type: 'play', player: playerIdx, kind: card.kind }];
 

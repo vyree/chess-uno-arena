@@ -18,7 +18,7 @@ const PIECES = {
   wk: '♔', wq: '♕', wr: '♖', wb: '♗', wn: '♘', wp: '♙',
   bk: '♚', bq: '♛', br: '♜', bb: '♝', bn: '♞', bp: '♟',
 };
-const UNO_LABEL = { skip: '⊘', reverse: '⇄', draw2: '+2', wild: 'W', wild4: '+4', reverseBlack: '⇄', nullWhite: '✕', reset: '⏻', negate: '≠' };
+const UNO_LABEL = { skip: '⊘', reverse: '⇄', draw2: '+2', wild: 'W', wild4: '+4', reverseBlack: '⇄', nullWhite: '✕', reset: '↻', negate: '≠' };
 
 const $ = (id) => document.getElementById(id);
 
@@ -673,7 +673,7 @@ function renderUno(m) {
         const c = myHand.find((x) => x.kind === 'negate');
         if (c) send('uno_negate', { cardId: c.id });
       } });
-      if (st.canReset) actions.push({ label: '⏻ Pakai Reset!', cls: 'primary', onClick: () => {
+      if (st.canReset) actions.push({ label: '↻ Pakai Reset!', cls: 'primary', onClick: () => {
         const c = myHand.find((x) => x.kind === 'reset');
         if (c) send('uno_reset', { cardId: c.id });
       } });
@@ -702,6 +702,12 @@ function onUnoCardClick(card) {
     else if (st.canReset && card.kind === 'reset') send('uno_reset', { cardId: card.id });
     return;
   }
+  // 2026-10-30 (Sensei): tapping a Negate!/Reset! outside a window opens a
+  // short info popup (effect + how to use) instead of playing it at once.
+  if (card.kind === 'negate' || card.kind === 'reset') {
+    showSpecialInfo(card);
+    return;
+  }
   const doPlay = (wildColor) => {
     send('uno_play', { cardId: card.id, saidUno: S.saidUnoArmed, wildColor });
     S.saidUnoArmed = false;
@@ -715,6 +721,51 @@ function onUnoCardClick(card) {
       b.onclick = () => { hideModal(); doPlay(b.dataset.c); };
     });
   } else doPlay(undefined);
+}
+
+// 2026-10-30 (Sensei): info popup for Negate!/Reset! — short effect +
+// usage explanation. The [Pakai kartu] button only appears when the card
+// is actually playable as the last card (own turn, sole card in hand,
+// no window/gift phase running); the server remains the authority.
+function showSpecialInfo(card) {
+  const st = S.uno;
+  const me = (S.players || []).find((p) => p.id === S.playerId);
+  const mySeat = me ? me.seat : -1;
+  const myHand = st && mySeat >= 0 && Array.isArray(st.hands[mySeat]) ? st.hands[mySeat] : [];
+  const isNegate = card.kind === 'negate';
+  const canLast = !!st && !st.over && !st.negateWindow && !st.giftPhase
+    && st.turn === mySeat && myHand.length === 1;
+  const title = isNegate ? '≠ Negate!' : '↻ Reset';
+  const effect = isNegate
+    ? 'Batalkan teriakan UNO! lawan — setiap pemain lain memberi 1 kartu ke korban, lalu korban ambil +2.'
+    : 'Kocok ulang SEMUA kartu di meja (semua tangan + tumpukan buang), bagi ulang 7 kartu ke tiap pemain, kamu jalan duluan.';
+  const body = '<div class="special-info">'
+    + `<div class="special-glyph ${card.kind}">${isNegate ? '≠' : '↻'}</div>`
+    + `<p><strong>Efek:</strong> ${effect}</p>`
+    + '<p><strong>Cara pakai:</strong> klik saat jendela UNO! terbuka (tangan ≥2 kartu),'
+    + ' atau mainkan sebagai kartu <strong>TERAKHIR</strong> di giliranmu — efek nonaktif, kamu pilih warna lalu finis.</p>'
+    + (canLast ? '' : '<p class="muted">Belum bisa dipakai sekarang — tunggu giliranmu dengan kartu ini sebagai satu-satunya kartumu.</p>')
+    + '</div>';
+  const actions = [{ label: 'Tutup', cls: 'ghost' }];
+  if (canLast) {
+    actions.unshift({
+      label: 'Pakai kartu', cls: 'primary',
+      onClick: () => {
+        showModal('Pilih warna…', '<div class="color-pick">' +
+          ['red', 'yellow', 'green', 'blue', 'purple'].map((c) =>
+            `<button data-c="${c}" style="background:${colorHex(c)}" title="${c}"></button>`).join('') +
+          '</div>', [{ label: 'Batal', cls: 'ghost' }]);
+        document.querySelectorAll('.color-pick button').forEach((b) => {
+          b.onclick = () => {
+            hideModal();
+            send('uno_play', { cardId: card.id, saidUno: S.saidUnoArmed, wildColor: b.dataset.c });
+            S.saidUnoArmed = false;
+          };
+        });
+      },
+    });
+  }
+  showModal(title, body, actions);
 }
 
 // Seat ring around the table. Seats ascend clockwise; your seat sits at the
@@ -882,6 +933,10 @@ function handleUnoEvents(events) {
     if (ev.type === 'play') {
       flyCard(anchor, $('uno-discard'), S.uno ? S.uno.top : null, false);
       sfx('play');
+      // a 'play' carrying a negate/reset kind can only be the 2026-10-30
+      // last-card path (window plays emit their own event types)
+      if (ev.kind === 'negate') unoFlash('≠ NEGATE! keluar sebagai kartu terakhir');
+      else if (ev.kind === 'reset') unoFlash('↻ RESET keluar sebagai kartu terakhir');
     } else if (ev.type === 'draw') {
       flyCard($('uno-deck'), anchor, null, true);
       sfx('draw');
@@ -914,7 +969,7 @@ function handleUnoEvents(events) {
       unoFlash(`🏁 FINIS #${ev.rank}! +${ev.score}`);
     } else if (ev.type === 'reset') {
       sfx('penalty');
-      unoFlash('⏻ RESET! Semua kartu dikocok ulang');
+      unoFlash('↻ RESET! Semua kartu dikocok ulang');
     } else if (ev.type === 'negate') {
       sfx('penalty');
       unoFlash('≠ NEGATE! Uno dibatalkan');

@@ -996,6 +996,61 @@ kedua host).**
 - Keluar saat jendela/hadiah berjalan: jendela ditutup / hadiah
   dibatalkan (kartu kembali ke pemilik), timer giliran dimulai ulang.
 
+## Mode Kartu Terakhir — Reset & Negate! (Sensei, 30 Okt 2026 — DIIMPLEMENTASI, menunggu perintah deploy)
+
+Riwayat: dirancang 29 Okt 2026 (parkir), difinalisasi + diimplementasi
+30 Okt 2026 atas perintah Sensei ("kerjakan dengan ultimate skill",
+laporan dulu 10:34, jawaban Sensei 10:50). Keputusan final Sensei 30 Okt:
+(1) efek DISABLED bila dimainkan sebagai kartu terakhir; (2) jendela tetap
+butuh ≥2 kartu — aturan lama TIDAK dihapus; (3) main sebagai kartu terakhir
+MENGHABISKAN jatah 2×/game; (4) pertanyaan urutan warna-vs-reshuffle GUGUR
+(tidak ada reshuffle di jalur terakhir; warna pilihan langsung jadi warna
+berjalan); (5) bot memainkan kartu terakhir spesial dengan warna acak;
+(6) klik kartu membuka popup info (efek + cara pakai) dengan tombol
+[Pakai kartu]/[Tutup], tanpa badge kecil; (7) seluruh UI/UX in-game UNO
+dimodernisasi tapi tetap ringan; meja putih default + garis batas di
+pinggir (desain meja dipikirkan ulang nanti oleh Sensei).
+
+### Spesifikasi final (aditif — aturan jendela 26 Okt tidak berubah)
+- **Mode jendela (tetap):** hanya saat ada yang teriak "UNO!"; pemegang
+  butuh ≥2 kartu; respons pertama menang; maks 2× per game.
+- **Mode kartu terakhir (baru):** di giliran sendiri, bila tangan tersisa
+  tepat 1 kartu (si spesial itu sendiri) dan tidak ada tumpukan pending →
+  boleh dimainkan (selalu legal seperti Wild, abaikan warna kartu teratas).
+  Wajib pilih warna (error 'pilih warna dulu' bila absen). Efek kartu
+  DISABLED di jalur ini. Mode normal = langsung menang; Unlimited = finis
+  (rank + skor), game lanjut dengan warna pilihan.
+- Jatah 2×/game mencakup KEDUA mode (jendela + kartu terakhir) —
+  MEREVISI asumsi parkir 29 Okt yang membebaskan mode terakhir dari jatah.
+- Anti-stuck: sebelumnya kartu spesial sebagai satu-satunya kartu = kartu
+  mati selamanya (jendela butuh ≥2, giliran biasa menolak) — softlock di
+  Unlimited, tak bisa menang di normal. Bot kena juga.
+- Tidak butuh pesan WS baru: jalur terakhir memakai `uno_play` yang sudah
+  ada (+ `wildColor`, sudah diteruskan validator). Checklist permanen
+  (VALIDATORS + switch + tes regresi) tidak terpicu.
+
+### File yang diubah (lokal, 187/187 tes lulus, menunggu perintah deploy)
+- `game/uno.js`: `canPlayCheckSpecials()` baru; `canPlay()` + `playCard()`
+  membuka jalur terakhir (cek jatah, wajib warna, efek disabled, warna
+  pilihan menjadi currentColor, jatah bertambah); `toClient.playable`
+  otomatis benar.
+- `game/bot.js`: `takeTurn()` — kartu terakhir spesial dimainkan dengan
+  warna acak (Sensei).
+- `public/app.js`: `UNO_LABEL.reset` ⏻ → ↻; tombol jendela '↻ Pakai
+  Reset!'; klik kartu spesial di luar jendela → `showSpecialInfo()` (popup
+  efek + cara pakai; tombol [Pakai kartu] hanya muncul bila playable, lalu
+  color picker); flash '↻/≠ keluar sebagai kartu terakhir' di
+  `handleUnoEvents`.
+- `public/style.css`: `.uno-arena` putih + garis batas (ganti panel felt
+  ungu); modernisasi tombol (gradien, shadow, pill, hover), `#chat-box-uno`
+  gaya bubble, toast kaca gelap, status pill gradien, placeholder input,
+  hover color picker, modal lebih lembut, kartu playable terangkat saat
+  hover, `.special-info`/`.special-glyph`, kartu Reset putih bersih + oval
+  lavender + glyph ↻ tebal.
+- `test/uno_lastcard.test.js` (7 tes, baru, terdaftar di package.json test
+  script); pesan error lama di `test/uno_misi10.test.js` disesuaikan
+  ('...atau sebagai kartu terakhirmu').
+
 ## UNO: Waktu Bermain + Tanda Turn (Sensei, 27 Okt 2026 — DEPLOYED Fly v10)
 
 Perintah Sensei: (1) waktu bermain dari game start sampai akhir game;

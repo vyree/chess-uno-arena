@@ -514,16 +514,17 @@ select {
 .switch input:checked + .track { background: var(--color-primary); }
 .switch input:checked + .track::after { transform: translateX(22px); }
 
-/* UNO table becomes a deep-plum panel so the arena matches the theme */
+/* UNO table: clean white by default with edge border lines (2026-10-30,
+   Sensei — the table design will be revisited later). */
 .uno-arena {
-  background: radial-gradient(120% 90% at 50% 38%, var(--color-felt), var(--color-felt-edge));
+  background: #ffffff;
+  border: 2px solid var(--color-lav-2);
   border-radius: 26px;
-  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, .14),
-    inset 0 -18px 34px rgba(20, 10, 50, .35), 0 14px 30px rgba(56, 40, 110, .30);
+  box-shadow: inset 0 0 0 1px #ffffff, 0 12px 26px rgba(56, 40, 110, .12);
 }
 .uno-card.deck { background: #2e2050; }
 .dir-badge { background: #2e2050; }
-.seat-chip { background: #fff; }
+.seat-chip { background: #fff; border-color: var(--color-lav-2); }
 .uno-hand { scrollbar-color: var(--color-lav-2) transparent; }
 
 /* ================= MABAR.io shell (2026-10-22) ================= */
@@ -859,3 +860,81 @@ body.low-gfx * {
 .ludo-announce.fx-bom { animation: ludo-shake .5s; background: #fef2f2; }
 .ludo-announce.fx-beku { background: #eff6ff; }
 @keyframes ludo-shake { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+
+/* ================= UNO modern UI (2026-10-30, Sensei) ================= */
+/* Lightweight: CSS only, no new assets. Buttons, chat message box, toast,
+   status pill, inputs/placeholders, color picker, modal, playable-card
+   hover, and the special-card info popup + refined Reset card. */
+
+/* Buttons: gradient, soft shadow, pill radius, tactile press */
+.btn {
+  border: none; border-radius: var(--radius-full); padding: 12px 20px;
+  font-size: 15px; font-weight: 700; cursor: pointer; color: #fff;
+  background: var(--color-text-muted);
+  box-shadow: 0 4px 12px rgba(60, 45, 120, .18);
+  transition: transform .08s, box-shadow .15s, filter .15s;
+}
+.btn:hover { filter: brightness(1.07); box-shadow: 0 6px 16px rgba(60, 45, 120, .24); }
+.btn:active { transform: scale(.96); }
+.btn:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+.btn.primary { background: linear-gradient(135deg, var(--color-primary-deep), var(--color-primary)); box-shadow: 0 4px 14px rgba(122, 104, 214, .4); }
+.btn.secondary { background: linear-gradient(135deg, #8b7bd8, var(--color-secondary)); }
+.btn.danger { background: linear-gradient(135deg, #cf4f4f, var(--color-danger)); }
+.btn.warning { background: linear-gradient(135deg, #d18f2e, var(--color-warning)); color: #fff; }
+.btn.ghost { background: rgba(255, 255, 255, .75); color: var(--color-primary-deep); border: 1.5px solid var(--color-lav-2); box-shadow: none; }
+.btn.big { width: 100%; font-size: 17px; margin-top: 8px; }
+.btn.small { padding: 8px 14px; font-size: 13px; }
+
+/* UNO message box: bubble-style messages on a clean card */
+#chat-box-uno {
+  background: #fff; border: 1.5px solid var(--color-lav-2);
+  border-radius: var(--radius-lg); padding: 10px 12px; height: 110px;
+}
+#chat-box-uno div {
+  background: var(--color-bg); border-radius: 12px; padding: 6px 10px;
+  margin-bottom: 6px; font-size: 13.5px; line-height: 1.35;
+}
+#chat-box-uno .sys { background: transparent; color: var(--color-text-muted); font-style: italic; text-align: center; padding: 2px 6px; }
+
+/* Inputs + placeholders */
+input::placeholder { color: #a79dc9; font-size: 14px; }
+.chat-row input { border-radius: var(--radius-full); padding: 10px 16px; border: 1.5px solid var(--color-lav-2); }
+.chat-row input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(122, 104, 214, .15); }
+
+/* Toast: dark glass pill */
+.toast {
+  background: rgba(43, 58, 74, .93); backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, .16); font-weight: 600;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .32);
+}
+
+/* Status pill: subtle gradient */
+.status-line { background: linear-gradient(135deg, #35945c, var(--color-success)); box-shadow: 0 4px 12px rgba(0, 0, 0, .16); letter-spacing: .02em; }
+.status-line.penalty { background: linear-gradient(135deg, #c93a3a, #e03131); }
+
+/* Color picker: tactile dots */
+.color-pick button { transition: transform .12s; }
+.color-pick button:hover { transform: scale(1.14); }
+
+/* Modal: softer, deeper */
+.modal-box { border-radius: 24px; box-shadow: 0 20px 60px rgba(30, 20, 70, .35); border: 1px solid rgba(255, 255, 255, .6); }
+
+/* Playable cards lift on hover (desktop) */
+.uno-hand .uno-card.playable { cursor: pointer; transition: transform .12s; }
+.uno-hand .uno-card.playable:hover { transform: translateY(-6px); }
+
+/* Special-card info popup (Negate!/Reset!) */
+.special-info { text-align: left; }
+.special-info p { margin: 8px 0; font-size: 14px; line-height: 1.45; }
+.special-glyph {
+  width: 64px; height: 64px; border-radius: 50%; margin: 0 auto 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 34px; font-weight: 900;
+}
+.special-glyph.negate { background: #17171c; color: #fff; box-shadow: 0 4px 12px rgba(0, 0, 0, .35); }
+.special-glyph.reset { background: #fff; color: #1a1a2e; border: 2px solid #cfcfda; box-shadow: 0 4px 12px rgba(60, 45, 120, .15); }
+
+/* Reset card: pure-white card with the reset-arrow logo (2026-10-30) */
+.uno-card.reset { background: #ffffff; border-color: #d5d5e6; box-shadow: 0 2px 8px rgba(60, 45, 120, .12); }
+.uno-card.reset .oval { background: #f4f1fd; }
+.uno-card.reset .val { color: #1a1a2e; font-weight: 900; }

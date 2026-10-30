@@ -39,19 +39,19 @@ test('deck hell = 159: reset x2, negate x2, mode lain 133 tanpa keduanya', () =>
 
 // ---------- Reset (revised 2026-10-26: UNO! window card, NOT a pile answer) ----------
 
-test('reset: mati di giliran biasa DAN melawan tumpukan; hanya hidup di jendela Uno!', () => {
+test('reset: mati di giliran biasa (tangan >1) DAN melawan tumpukan; hanya hidup di jendela Uno! atau sebagai kartu terakhir', () => {
   const st = U.newGame(4, { rand: rng(3), mode: 'hell' });
   st.discard = [num('t', 'red', 5)];
   st.currentColor = 'red';
   st.turn = 0;
   st.hands[0] = [reset('r1'), num('a', 'red', 1)];
   assert.equal(U.canPlay(st, 0, st.hands[0][0]), false);
-  assert.equal(U.playCard(st, 0, 'r1', {}).error, 'reset hanya bisa dipakai saat ada yang teriak Uno!');
+  assert.equal(U.playCard(st, 0, 'r1', {}).error, 'reset hanya bisa dipakai saat ada yang teriak Uno! atau sebagai kartu terakhirmu');
   st.pendingDraw = 4;
   st.pendingKind = 'wild4';
   assert.equal(U.canPlay(st, 0, st.hands[0][0]), false);
   assert.equal(U.isStackCard(st, st.hands[0][0]), false);
-  assert.equal(U.playCard(st, 0, 'r1', {}).error, 'reset hanya bisa dipakai saat ada yang teriak Uno!');
+  assert.equal(U.playCard(st, 0, 'r1', {}).error, 'reset hanya bisa dipakai saat ada yang teriak Uno! atau sebagai kartu terakhirmu');
   assert.equal(U.playReset(st, 0, 'r1').error, 'tidak ada jendela Uno!');
 });
 

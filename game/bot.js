@@ -74,9 +74,16 @@ function takeTurn(st, idx) {
   if (playable.length) {
     const card = chooseCard(st, idx, playable);
     if (card) {
+      // 2026-10-30 (Sensei): a last-card Negate!/Reset! takes a RANDOM
+      // color — the bot has no hand left to derive a preference from.
+      // (canPlay only admits these kinds at exactly 1 card, so the kind
+      // check below always means the last-card path.)
+      const isLastSpecial = card.kind === 'negate' || card.kind === 'reset';
       const r = uno.playCard(st, idx, card.id, {
         saidUno: hand.length === 2,
-        wildColor: chooseWildColor(st, idx),
+        wildColor: isLastSpecial
+          ? uno.COLORS[Math.floor(Math.random() * uno.COLORS.length)]
+          : chooseWildColor(st, idx),
       });
       log.push({ action: 'play', r });
       return log;
