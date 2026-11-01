@@ -376,6 +376,12 @@ input:focus { outline: none; border-color: var(--color-primary); }
 .chat-card { margin-top: 12px; }
 
 /* Misi 9: decision panel & spectate badge */
+/* Decision panel scroll (2026-11-01): hasil + roster bisa panjang
+   (8 pemain) — area tengah scroll, tombol aksi nempel di bawah. */
+.modal-box.decision { max-height: 88vh; display: flex; flex-direction: column; }
+.modal-box.decision > h2 { flex-shrink: 0; }
+#decision-scroll { overflow-y: auto; min-height: 0; }
+.modal-box.decision #decision-actions { flex-shrink: 0; padding-top: 12px; }
 .decision-list { margin: 10px 0; text-align: left; }
 .decision-row {
   display: flex; justify-content: space-between; align-items: center;

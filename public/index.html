@@ -392,13 +392,15 @@
 
 <!-- ============ DECISION PANEL (Misi 9) ============ -->
 <div id="decision-panel" class="modal hidden">
-  <div class="modal-box">
+  <div class="modal-box decision">
     <h2>🏁 Game Selesai!</h2>
-    <div id="decision-result"></div>
-    <p class="muted">Game berikutnya mulai setelah <strong>semua pemain sesi ini</strong> memutuskan.<br>
-    Sisa waktu: <strong id="decision-countdown">60</strong> detik</p>
-    <div id="decision-roster" class="decision-list"></div>
-    <div id="decision-spectators" class="decision-list"></div>
+    <div id="decision-scroll">
+      <div id="decision-result"></div>
+      <p class="muted">Game berikutnya mulai setelah <strong>semua pemain sesi ini</strong> memutuskan.<br>
+      Sisa waktu: <strong id="decision-countdown">60</strong> detik</p>
+      <div id="decision-roster" class="decision-list"></div>
+      <div id="decision-spectators" class="decision-list"></div>
+    </div>
     <div id="decision-actions" class="row modal-row"></div>
   </div>
 </div>
