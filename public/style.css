@@ -354,20 +354,22 @@ input:focus { outline: none; border-color: var(--color-primary); }
 .color-pick button { width: 56px; height: 56px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.3); cursor: pointer; }
 .score-table { margin: 10px auto; border-collapse: collapse; }
 .score-table td { padding: 4px 14px; border-bottom: 1px solid #eef; }
-/* UNO results popup (2026-11-01): scrollable rank list so the action
-   buttons below stay reachable even with 8 players. */
+/* UNO results popup (2026-11-01, Sensei): compact layout — static time
+   line on top, scrollable rank list, sticky action buttons. */
 .modal-box.results { max-height: 88vh; display: flex; flex-direction: column; }
-.modal-box.results #modal-body { overflow-y: auto; min-height: 0; }
-.modal-box.results #modal-actions { flex-shrink: 0; padding-top: 12px; }
-.results-list { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; text-align: left; }
+.modal-box.results #modal-body { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.modal-box.results #modal-actions { flex-shrink: 0; padding-top: 12px; border-top: 1px solid #eef; margin-top: 10px; }
+.results-meta { flex-shrink: 0; text-align: center; font-size: 13px; font-weight: 600; color: #8a7bb8; padding-bottom: 10px; border-bottom: 1px solid #eef; margin-bottom: 10px; }
+.results-list { overflow-y: auto; min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 6px; text-align: left; }
 .rank-row { display: flex; align-items: center; gap: 10px; background: var(--color-bg); border-radius: var(--radius-md); padding: 8px 12px; }
 .rank-row.first { background: linear-gradient(135deg, #fff7e0, #ffe9a8); border: 1px solid #f5c542; }
-.rank-medal { font-size: 20px; min-width: 36px; text-align: center; font-weight: 800; color: #8a7bb8; }
+.rank-badge { width: 30px; height: 30px; border-radius: 50%; color: #fff; font-weight: 800; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.rank-badge.r1 { background: #f5c542; }
+.rank-badge.r2 { background: #c0c6d4; }
+.rank-badge.r3 { background: #d29a6b; }
+.rank-num { min-width: 30px; text-align: center; font-weight: 800; color: #8a7bb8; flex-shrink: 0; }
 .rank-name { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rank-pts { font-weight: 800; font-size: 18px; color: #5b4b9e; }
-.rank-tag { font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: var(--radius-full); margin-left: 6px; vertical-align: middle; }
-.rank-tag.win { background: #f5c542; color: #6b4e00; }
-.rank-tag.fin { background: #d9f2e3; color: #1e7a46; }
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
   background: #2b3a4a; color: #fff; padding: 12px 20px; border-radius: var(--radius-full);

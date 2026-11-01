@@ -1093,38 +1093,39 @@ function onGameOver(m) {
   if (m.game === 'uno') { handleUnoEvents(m.events); sfx('win'); }
   const reason = REASONS_ID[m.result.reason] || m.reasonText || m.result.reason;
   let body = `<p style="font-size:18px">${reason}</p>`;
-  if (m.winnerNickname) body += `<p>🏆 Pemenang: <strong>${m.winnerNickname}</strong></p>`;
-  // UNO playing time + turn total (2026-10-27): server-frozen values
-  // from the game_over payload, falling back to the last game_state.
-  if (m.game === 'uno') {
+  if (m.game === 'uno' && m.ranking && m.ranking.length) {
+    // Compact results (2026-11-01, Sensei): static time line on top,
+    // scrollable rank list, sticky action buttons. No duplicate winner
+    // lines, no totals table.
     const durMs = m.playDurationMs != null ? m.playDurationMs
       : (S.unoMeta ? S.unoMeta.playDurationMs : null);
     const totalTurns = m.turnCount != null ? m.turnCount
       : (S.uno ? (S.uno.turnCount || 0) : null);
-    if (durMs != null) body += `<p>🕐 Waktu bermain: <strong>${fmtPlayTime(durMs)}</strong></p>`;
-    if (totalTurns != null) body += `<p>🔄 Total turn: <strong>${totalTurns}</strong></p>`;
-  }
-  else if (m.game !== 'ludo') body += '<p>🤝 Seri!</p>';
-  if (m.game === 'uno' && m.ranking && m.ranking.length) {
-    // Scrollable aesthetic results (2026-11-01, Sensei): every player
-    // ranked, earliest finisher on top.
+    const meta = [durMs != null ? fmtPlayTime(durMs) : null,
+      totalTurns != null ? `${totalTurns} turn` : null].filter(Boolean).join(' · ');
+    if (meta) body += `<div class="results-meta">${meta}</div>`;
     body += '<div class="results-list">'
       + m.ranking.map((r) => {
-        const medal = r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : r.rank === 3 ? '🥉' : `#${r.rank}`;
-        const tag = r.rank === 1 ? '<span class="rank-tag win">PEMENANG</span>'
-          : r.finished ? '<span class="rank-tag fin">FINIS</span>' : '';
-        return `<div class="rank-row${r.rank === 1 ? ' first' : ''}">`
-          + `<span class="rank-medal">${medal}</span>`
-          + `<span class="rank-name">${escapeHtml(r.nickname)}${tag}</span>`
+        const badge = r.rank <= 3
+          ? `<span class="rank-badge r${r.rank}">${r.rank}</span>`
+          : `<span class="rank-num">${r.rank}.</span>`;
+        return `<div class="rank-row${r.rank === 1 ? ' first' : ''}">` + badge
+          + `<span class="rank-name">${escapeHtml(r.nickname)}</span>`
           + `<span class="rank-pts">${r.points}</span></div>`;
       }).join('') + '</div>';
-    if (m.scores && m.scores.length) {
-      body += '<p class="muted" style="margin:10px 0 4px">Total semua ronde</p><table class="score-table">'
-        + [...m.scores].sort((a, b) => b.points - a.points)
-          .map((s) => `<tr><td>${escapeHtml(s.nickname)}</td><td><strong>${s.points}</strong></td></tr>`).join('')
-        + '</table>';
-    }
   } else {
+    if (m.winnerNickname) body += `<p>🏆 Pemenang: <strong>${escapeHtml(m.winnerNickname)}</strong></p>`;
+    // UNO playing time + turn total (2026-10-27): server-frozen values
+    // from the game_over payload, falling back to the last game_state.
+    if (m.game === 'uno') {
+      const durMs = m.playDurationMs != null ? m.playDurationMs
+        : (S.unoMeta ? S.unoMeta.playDurationMs : null);
+      const totalTurns = m.turnCount != null ? m.turnCount
+        : (S.uno ? (S.uno.turnCount || 0) : null);
+      if (durMs != null) body += `<p>🕐 Waktu bermain: <strong>${fmtPlayTime(durMs)}</strong></p>`;
+      if (totalTurns != null) body += `<p>🔄 Total turn: <strong>${totalTurns}</strong></p>`;
+    }
+    else if (m.game !== 'ludo') body += '<p>🤝 Seri!</p>';
     if (m.finished && m.finished.length) {
       body += '<p><strong>🏁 Peringkat finis:</strong></p><table class="score-table">'
         + m.finished.map((f) => `<tr><td>#${f.rank} ${escapeHtml(f.nickname)}</td><td><strong>${f.points}</strong></td></tr>`).join('')
@@ -1135,8 +1136,8 @@ function onGameOver(m) {
       body += '<table class="score-table">' + m.scores
         .map((s) => `<tr><td>${escapeHtml(s.nickname)}</td><td><strong>${s.points}</strong></td></tr>`).join('') + '</table>';
     }
+    if (m.points) body += `<p>+${m.points} poin!</p>`;
   }
-  if (m.points) body += `<p>+${m.points} poin!</p>`;
   if (m.note) body += `<p class="muted">${m.note}</p>`;
   // Misi 9: multiplayer rooms continue into the decision phase — the
   // decision_update that follows opens the panel with this summary.
