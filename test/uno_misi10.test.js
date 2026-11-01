@@ -210,7 +210,7 @@ test('closeNegateWindow: tanpa negate, game lanjut', () => {
 
 // ---------- Unlimited ----------
 
-test('unlimited: finis bukan menang — skor = sisa lawan + bonus peringkat', () => {
+test('unlimited: semua dapat nilai, finis paling awal terbesar', () => {
   const st = U.newGame(4, { rand: rng(11), mode: 'normal', unlimited: true });
   st.discard = [num('t', 'red', 5)];
   st.currentColor = 'red';
@@ -222,21 +222,26 @@ test('unlimited: finis bukan menang — skor = sisa lawan + bonus peringkat', ()
   const r1 = U.playCard(st, 0, 'a', { saidUno: true });
   assert.equal(r1.ok, true);
   assert.equal(st.over, null);
-  assert.deepEqual(r1.finished, { player: 0, rank: 1, score: 3 + 5 + 8 + 350 });
+  // Skor dihitung sekali saat game berakhir (scoreRound), bukan saat finis.
+  assert.deepEqual(r1.finished, { player: 0, rank: 1, score: 0 });
   assert.equal(st.turn, 1);
   const r2 = U.playCard(st, 1, 'b', { saidUno: true });
-  assert.deepEqual(r2.finished, { player: 1, rank: 2, score: 5 + 8 + 300 });
+  assert.deepEqual(r2.finished, { player: 1, rank: 2, score: 0 });
   assert.equal(st.turn, 2);
   const r3 = U.playCard(st, 2, 'c', { saidUno: true });
   assert.equal(r3.gameOver, true);
-  assert.deepEqual(r3.finished, { player: 2, rank: 3, score: 8 + 250 });
+  assert.deepEqual(r3.finished, { player: 2, rank: 3, score: 0 });
   assert.equal(st.over.reason, 'unlimited');
   assert.equal(st.over.winner, 0);
   assert.equal(st.over.loser, 3);
-  assert.equal(st.scores[3], 0);
-  const scores = [0, 0, 0, 0];
-  assert.equal(U.scoreRound(st, scores), 366);
-  assert.deepEqual(scores, [366, 313, 258, 0]);
+  // seat3 tersisa [7, 1] = 8 -> vmax 8. Finis: 8+150, 8+100, 8+75;
+  // terakhir: (8-8)+50 = 50 (nilai kecil, bukan 0).
+  const { scores, ranking } = U.scoreRound(st);
+  assert.deepEqual(scores, [158, 108, 83, 50]);
+  assert.deepEqual(ranking.map((r) => [r.player, r.rank, r.score]),
+    [[0, 1, 158], [1, 2, 108], [2, 3, 83], [3, 4, 50]]);
+  assert.equal(st.finished[0].score, 158);
+  assert.equal(st.scores[3], 50);
 });
 
 test('unlimited: kartu skip sebagai finis tetap melewati 1 pemain aktif', () => {

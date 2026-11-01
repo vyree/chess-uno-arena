@@ -185,10 +185,16 @@ test('bilang UNO tepat waktu = tanpa penalti; menang saat kartu habis', () => {
   assert.equal(r.ok, true);
   assert.equal(r.won, true);
   assert.equal(st.over.winner, 0);
-  const scores = [0, 0];
-  const pts = U.scoreRound(st, scores);
-  assert.equal(pts, 3 + 50);
-  assert.equal(scores[0], 53);
+  // Skor baru (2026-11-01, Sensei): semua pemain dapat nilai.
+  // seat1 pegang [angka 3, wild] = 3 + 40 = 43 -> vmax 43.
+  // Pemenang: 43 + bonus rank1 (150) = 193; seat1: 43 - 43 = 0.
+  const { scores, ranking } = U.scoreRound(st);
+  assert.deepEqual(scores, [193, 0]);
+  assert.equal(ranking.length, 2);
+  assert.deepEqual(
+    ranking.map((r) => [r.player, r.rank, r.score, r.finished]),
+    [[0, 1, 193, true], [1, 2, 0, false]],
+  );
 });
 
 test('draw lalu pass; draw lalu mainkan kartu yang diambil', () => {

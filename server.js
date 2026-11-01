@@ -215,8 +215,19 @@ function gameOverPayload(room, result) {
     payload.scores = room.players
       .filter((p) => p.active !== false)
       .map((p) => ({ nickname: dispName(p), points: room.scoreBoard[p.id] || 0 }));
+    // Full round ranking (2026-11-01, Sensei): every player, earliest
+    // finisher on top — drives the scrollable results popup.
+    const scoring = result.scoring
+      || (room.uno && (result.reason === 'habis' || result.reason === 'unlimited')
+        ? uno.scoreRound(room.uno.st) : null);
+    if (scoring) {
+      payload.ranking = scoring.ranking.map((e) => {
+        const p = room.players[e.player];
+        return { nickname: p ? dispName(p) : '?', rank: e.rank, points: e.score, finished: e.finished };
+      });
+    }
     // Misi 10 unlimited: the ranking is the story — first finisher is
-    // the winner, the last player left is the loser (0 points).
+    // the winner, the last player left is the final finisher.
     if (result.reason === 'unlimited' && room.uno) {
       payload.loserSeat = result.loser;
       const l = room.players[result.loser];
@@ -578,20 +589,9 @@ function backToLobby(room) {
 // Start a session with exactly the current room.players as the roster.
 function startSession(room) {
   if (room.game === 'uno') {
-    rooms.shuffleSeats(room);
-    const prevRound = room.uno ? room.uno.round : 0;
-    const n = room.players.length;
-    room.uno = { st: uno.newGame(n, { mode: room.unoMode || 'normal', unlimited: !!room.unoUnlimited }), active: new Array(n).fill(true), round: prevRound + 1, startedAt: Date.now() };
-    if (!room.scoreBoard) room.scoreBoard = {};
-    for (const p of room.players) {
-      if (room.scoreBoard[p.id] === undefined) room.scoreBoard[p.id] = 0;
-      p.inSession = true;
-      armTakeover(room, p);
-    }
-    room.status = 'playing';
-    startTurnTimer(room);
-    sendGameState(room);
-    scheduleBotIfNeeded(room);
+    // Destroy the old session outright, rebuild a new one on the same
+    // room (room ID kept) — the unified starter (2026-11-01, Sensei).
+    startUnoSession(room, { prevRound: room.uno ? room.uno.round : 0 });
   } else if (room.game === 'chess') {
     while (room.players.length > 2) moveToSpectators(room, room.players[room.players.length - 1]);
     room.chess = chess.newGame();
@@ -637,9 +637,53 @@ function mustBePlaying(player) {
 }
 
 // ---------------- game actions ----------------
+// Unified UNO session start (2026-11-01, Sensei): the old session is
+// DESTROYED outright — turn/bot/negate timers cleared, engine state
+// nulled — then a brand-new session is built on the SAME room object
+// (room ID / code kept). Every start path (lobby start, bot-room rematch,
+// decision-phase next session) routes through here, so a restart can
+// never inherit stale timers, an armed bot timeout, takeover flags, or
+// half-reset state — the old "sering stuck saat mulai lagi" source.
+// opts: { resetScores } — true only for a fresh lobby start;
+//       { prevRound } — round counter carried across sessions.
+function startUnoSession(room, opts) {
+  opts = opts || {};
+  // --- teardown: destroy the session, keep the room ---
+  clearTurnTimer(room);
+  clearNegateTimer(room);
+  if (room.botTimer) { clearTimeout(room.botTimer); room.botTimer = null; }
+  room.uno = null;
+  // --- rebuild: a brand-new session on the same room ---
+  rooms.shuffleSeats(room); // UNO: seat order reshuffled every session (Misi 2)
+  const n = room.players.length;
+  room.uno = {
+    st: uno.newGame(n, { mode: room.unoMode || 'normal', unlimited: !!room.unoUnlimited }),
+    active: new Array(n).fill(true),
+    round: (opts.prevRound || 0) + 1,
+    startedAt: Date.now(),
+  };
+  if (opts.resetScores || !room.scoreBoard) room.scoreBoard = {};
+  for (const p of room.players) {
+    if (room.scoreBoard[p.id] === undefined) room.scoreBoard[p.id] = 0;
+    p.inSession = true;
+    armTakeover(room, p); // Misi 4C
+  }
+  room.status = 'playing';
+  startTurnTimer(room);
+  sendGameState(room);
+  scheduleBotIfNeeded(room);
+}
+
 function handleStartGame(player, room, data) {
   if (room.hostId !== player.id) { sendError(player.socket, 'Hanya pembuat room yang bisa mulai'); return; }
   if (room.status !== 'lobby') { sendError(player.socket, 'Game sudah berjalan'); return; }
+  if (room.game === 'uno') {
+    if (room.players.length < 2) { sendError(player.socket, 'UNO butuh minimal 2 pemain'); return; }
+    room.unoMode = (data && data.mode) || 'normal';
+    room.unoUnlimited = !!(data && data.unlimited);
+    startUnoSession(room, { resetScores: true });
+    return;
+  }
   if (room.game === 'chess') {
     if (room.players.length < 2) { sendError(player.socket, 'Tunggu lawan masuk dulu'); return; }
     // Misi 9: a chess session is always exactly 2 — extra room members
@@ -652,17 +696,6 @@ function handleStartGame(player, room, data) {
     const started = startTruthGame(room);
     if (!started.ok) sendError(player.socket, started.error);
     return;
-  } else {
-    if (room.players.length < 2) { sendError(player.socket, 'UNO butuh minimal 2 pemain'); return; }
-    // UNO: seat order is shuffled at every game start (Sensei, Misi 2)
-    rooms.shuffleSeats(room);
-    room.unoMode = (data && data.mode) || 'normal';
-    room.unoUnlimited = !!(data && data.unlimited);
-    const n = room.players.length;
-    room.uno = { st: uno.newGame(n, { mode: room.unoMode, unlimited: room.unoUnlimited }), active: new Array(n).fill(true), round: 1, startedAt: Date.now() };
-    room.scoreBoard = {};
-    for (const p of room.players) room.scoreBoard[p.id] = 0;
-    room.status = 'playing';
   }
   for (const p of room.players) armTakeover(room, p); // Misi 4C
   startTurnTimer(room);
@@ -932,17 +965,19 @@ function afterUnoPlay(room, player, r) {
   let note = null;
   if (r.penalty) note = `${dispName(player)} lupa bilang UNO! Penalti +${r.penalty}`;
   if (r.won) {
-    // hitung poin: jumlah kartu tangan pemain lain
-    let gained = 0;
-    u.st.hands.forEach((hand, i) => {
-      if (i !== u.st.over.winner) for (const c of hand) gained += uno.cardPoints(c);
+    // Unified scoring (2026-11-01, Sensei): every player scores, the
+    // earliest finisher biggest. Computed once here, stashed on st.over
+    // for the game-over payload.
+    const scoring = uno.scoreRound(u.st);
+    u.st.over.scoring = scoring;
+    scoring.scores.forEach((s, i) => {
+      const p = room.players[i];
+      if (p) room.scoreBoard[p.id] = (room.scoreBoard[p.id] || 0) + s;
     });
-    const winner = room.players[u.st.over.winner];
-    room.scoreBoard[winner.id] = (room.scoreBoard[winner.id] || 0) + gained;
     room.status = 'over';
     clearTurnTimer(room);
     const payload = gameOverPayload(room, u.st.over);
-    payload.points = gained;
+    payload.points = scoring.scores[u.st.over.winner];
     if (note) payload.note = note;
     if (r.events && r.events.length) payload.events = r.events;
     broadcast(room, payload);
@@ -950,28 +985,28 @@ function afterUnoPlay(room, player, r) {
     return;
   }
   if (r.gameOver) {
-    // Misi 10 unlimited: one player left (the loser, 0 points); every
-    // finisher already banked their score at finish time.
+    // Misi 10 unlimited: one player left (the final finisher — small
+    // score, never 0). Scores computed once at game end.
     clearNegateTimer(room);
-    u.st.scores.forEach((s, i) => {
+    const scoring = uno.scoreRound(u.st);
+    u.st.over.scoring = scoring;
+    scoring.scores.forEach((s, i) => {
       const p = room.players[i];
-      if (p) room.scoreBoard[p.id] = s;
+      if (p) room.scoreBoard[p.id] = (room.scoreBoard[p.id] || 0) + s;
     });
     room.status = 'over';
     clearTurnTimer(room);
     const payload = gameOverPayload(room, u.st.over);
-    payload.points = u.st.finished.length ? u.st.finished[0].score : 0;
+    payload.points = scoring.scores[u.st.over.winner];
     if (r.events && r.events.length) payload.events = r.events;
     broadcast(room, payload);
     enterDecision(room);
     return;
   }
   if (r.finished) {
-    // Misi 10 unlimited: a finisher banks their score live; the game
-    // continues for everyone else.
-    const fp = room.players[r.finished.player];
-    if (fp) room.scoreBoard[fp.id] = r.finished.score;
-    note = `${dispName(player)} FINIS peringkat ${r.finished.rank} (+${r.finished.score} poin)!`;
+    // Misi 10 unlimited: a finisher banks a rank and the game continues
+    // for everyone else; their score is computed at game end.
+    note = `${dispName(player)} FINIS peringkat ${r.finished.rank}!`;
   }
   if (u.st.negateWindow) {
     // Misi 10: a UNO! shout pauses the game — no turn timer, no bot
@@ -1214,14 +1249,9 @@ function handleUnoNewRound(player, room) {
     }
   }
   if (room.players.length < 2) { sendError(player.socket, 'Butuh minimal 2 pemain'); return; }
-  // UNO: seats are re-shuffled every new round (Sensei, Misi 2)
-  rooms.shuffleSeats(room);
-  const n = room.players.length;
-  room.uno = { st: uno.newGame(n, { mode: room.unoMode || 'normal', unlimited: !!room.unoUnlimited }), active: new Array(n).fill(true), round: room.uno.round + 1, startedAt: Date.now() };
-  room.status = 'playing';
-  startTurnTimer(room);
-  sendGameState(room);
-  scheduleBotIfNeeded(room);
+  // Destroy the old session outright, rebuild a new one on the same
+  // room (room ID kept) — the unified starter (2026-11-01, Sensei).
+  startUnoSession(room, { prevRound: room.uno ? room.uno.round : 0 });
 }
 
 // ---------------- Truth or Truth (Misi 3 Fase 2) ----------------

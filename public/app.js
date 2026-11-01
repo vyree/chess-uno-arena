@@ -49,9 +49,15 @@ function showScreen(id) {
     if (id === 'screen-settings') syncSettings();
   }
 }
-function showModal(title, bodyHTML, actions) {
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+function showModal(title, bodyHTML, actions, cls) {
   $('modal-title').textContent = title;
   $('modal-body').innerHTML = bodyHTML;
+  $('modal').querySelector('.modal-box').className = 'modal-box' + (cls ? ' ' + cls : '');
   const box = $('modal-actions');
   box.innerHTML = '';
   for (const a of actions) {
@@ -978,7 +984,7 @@ function handleUnoEvents(events) {
       sfx('uno');
     } else if (ev.type === 'finish') {
       sfx('win');
-      unoFlash(`🏁 FINIS #${ev.rank}! +${ev.score}`);
+      unoFlash(`🏁 FINIS #${ev.rank}!`);
     } else if (ev.type === 'reset') {
       sfx('penalty');
       unoFlash('↻ RESET! Semua kartu dikocok ulang');
@@ -1099,18 +1105,39 @@ function onGameOver(m) {
     if (totalTurns != null) body += `<p>🔄 Total turn: <strong>${totalTurns}</strong></p>`;
   }
   else if (m.game !== 'ludo') body += '<p>🤝 Seri!</p>';
-  if (m.finished && m.finished.length) {
-    body += '<p><strong>🏁 Peringkat finis:</strong></p><table class="score-table">'
-      + m.finished.map((f) => `<tr><td>#${f.rank} ${f.nickname}</td><td><strong>${f.points}</strong></td></tr>`).join('')
-      + '</table>';
+  if (m.game === 'uno' && m.ranking && m.ranking.length) {
+    // Scrollable aesthetic results (2026-11-01, Sensei): every player
+    // ranked, earliest finisher on top.
+    body += '<div class="results-list">'
+      + m.ranking.map((r) => {
+        const medal = r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : r.rank === 3 ? '🥉' : `#${r.rank}`;
+        const tag = r.rank === 1 ? '<span class="rank-tag win">PEMENANG</span>'
+          : r.finished ? '<span class="rank-tag fin">FINIS</span>' : '';
+        return `<div class="rank-row${r.rank === 1 ? ' first' : ''}">`
+          + `<span class="rank-medal">${medal}</span>`
+          + `<span class="rank-name">${escapeHtml(r.nickname)}${tag}</span>`
+          + `<span class="rank-pts">${r.points}</span></div>`;
+      }).join('') + '</div>';
+    if (m.scores && m.scores.length) {
+      body += '<p class="muted" style="margin:10px 0 4px">Total semua ronde</p><table class="score-table">'
+        + [...m.scores].sort((a, b) => b.points - a.points)
+          .map((s) => `<tr><td>${escapeHtml(s.nickname)}</td><td><strong>${s.points}</strong></td></tr>`).join('')
+        + '</table>';
+    }
+  } else {
+    if (m.finished && m.finished.length) {
+      body += '<p><strong>🏁 Peringkat finis:</strong></p><table class="score-table">'
+        + m.finished.map((f) => `<tr><td>#${f.rank} ${escapeHtml(f.nickname)}</td><td><strong>${f.points}</strong></td></tr>`).join('')
+        + '</table>';
+    }
+    if (m.loserNickname) body += `<p>😢 Terakhir: <strong>${escapeHtml(m.loserNickname)}</strong></p>`;
+    if (m.scores && m.scores.length) {
+      body += '<table class="score-table">' + m.scores
+        .map((s) => `<tr><td>${escapeHtml(s.nickname)}</td><td><strong>${s.points}</strong></td></tr>`).join('') + '</table>';
+    }
   }
-  if (m.loserNickname) body += `<p>😢 Terakhir (kalah, 0 poin): <strong>${m.loserNickname}</strong></p>`;
   if (m.points) body += `<p>+${m.points} poin!</p>`;
   if (m.note) body += `<p class="muted">${m.note}</p>`;
-  if (m.scores && m.scores.length) {
-    body += '<table class="score-table">' + m.scores
-      .map((s) => `<tr><td>${s.nickname}</td><td><strong>${s.points}</strong></td></tr>`).join('') + '</table>';
-  }
   // Misi 9: multiplayer rooms continue into the decision phase — the
   // decision_update that follows opens the panel with this summary.
   if (m.decision) {
@@ -1127,7 +1154,7 @@ function onGameOver(m) {
     actions.push({ label: '🔄 Main Lagi', cls: 'primary', onClick: () => send('chess_new_round') });
   }
   actions.push({ label: '🚪 Keluar Room', cls: 'ghost', onClick: () => send('leave_room') });
-  showModal('Permainan Selesai', body, actions);
+  showModal('Permainan Selesai', body, actions, m.game === 'uno' ? 'results' : null);
 }
 
 // ---------- chat ----------

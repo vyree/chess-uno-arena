@@ -15,8 +15,9 @@
  *   dead cards outside a pending pile.
  * Misi 10 (Sensei 2026-10-23, built 2026-10-26):
  * - unlimited toggle (all modes): emptying your hand FINISHES you
- *   (rank + score) instead of ending the game; the last player left
- *   is the loser (0). Finish score = opponents' remaining cards +
+ *   (rank) instead of ending the game; the last player left is the
+ *   final finisher (small score, never 0). Round scores are computed
+ *   once at game end by scoreRound: every player scores, earliest
  *   rank bonus (1st +350, 2nd +300, -50 per rank).
  * - Reset (hell x2, max 2 uses/game; REVISED 2026-10-26 late night,
  *   Sensei: trigger moved from pile-answer to UNO! window): played
@@ -256,8 +257,12 @@ function advanceTurn(st, skip) {
 
 function cardPoints(c) {
   if (c.kind === 'number') return c.value;
-  if (c.kind === 'wild' || c.kind === 'wild4' || c.kind === 'reverseBlack' || c.kind === 'nullWhite'
-    || c.kind === 'reset' || c.kind === 'negate') return 50;
+  if (c.kind === 'skip' || c.kind === 'reverse') return 20;
+  if (c.kind === 'draw2') return 30;
+  if (c.kind === 'wild') return 40;
+  if (c.kind === 'wild4') return 50;
+  if (c.kind === 'reverseBlack' || c.kind === 'nullWhite') return 60;
+  if (c.kind === 'reset' || c.kind === 'negate') return 70;
   return 20;
 }
 
@@ -358,19 +363,14 @@ function playCard(st, playerIdx, cardId, opts) {
   let finishedInfo = null;
   if (hand.length === 0) {
     if (st.unlimited) {
-      // Misi 10: finishing does NOT end the game — the finisher banks
-      // opponents' remaining cards + a rank bonus, then leaves the
-      // rotation. The last player left is the loser (score 0).
+      // Misi 10: finishing does NOT end the game — the finisher banks a
+      // rank and leaves the rotation. Scores are computed ONCE at game
+      // end by scoreRound (2026-11-01, Sensei): every player scores,
+      // earliest finisher biggest.
       const rank = st.finished.length + 1;
-      let pts = 0;
-      st.hands.forEach((h, i) => {
-        if (i !== playerIdx && !isFinished(st, i)) for (const c of h) pts += cardPoints(c);
-      });
-      pts += Math.max(0, 350 - (rank - 1) * 50);
-      st.scores[playerIdx] = pts;
-      st.finished.push({ player: playerIdx, rank, score: pts });
-      finishedInfo = { player: playerIdx, rank, score: pts };
-      events.push({ type: 'finish', player: playerIdx, rank, score: pts });
+      st.finished.push({ player: playerIdx, rank, score: 0 });
+      finishedInfo = { player: playerIdx, rank, score: 0 };
+      events.push({ type: 'finish', player: playerIdx, rank });
       const left = activeSeats(st);
       if (left.length <= 1) {
         st.over = { winner: st.finished[0].player, loser: left[0] ?? -1, reason: 'unlimited' };
@@ -619,21 +619,58 @@ function cancelGiftPhase(st) {
   st.giftPhase = null;
 }
 
-// Score a finished round into the scores array. Returns points gained by winner.
-// Unlimited games already banked their scores at finish time (st.scores),
-// so this just distributes those instead of winner-takes-all.
-function scoreRound(st, scores) {
-  if (!st.over) return 0;
+// Finish bonus by rank (2026-11-01, Sensei): earliest finisher biggest.
+function rankBonus(rank) {
+  if (rank === 1) return 150;
+  if (rank === 2) return 100;
+  if (rank === 3) return 75;
+  if (rank === 4) return 50;
+  return 25;
+}
+
+// Unified round scoring (2026-11-01, Sensei): EVERY player scores.
+// Ranking: finishers by finish order first, then non-finishers by
+// fewest remaining card points (each card has its own point value via
+// cardPoints). score = (vmax - handValue) + finish bonus; non-finishers
+// get no bonus so they always rank below finishers. Unlimited: the last
+// player left counts as the final finisher — a small score, never 0.
+// Fills st.scores / st.finished scores and returns { scores, ranking },
+// where ranking = [{ player, rank, score, finished }] sorted by rank.
+function scoreRound(st) {
+  const n = st.hands.length;
+  const handValue = st.hands.map((h) => h.reduce((s, c) => s + cardPoints(c), 0));
+  const vmax = Math.max(0, ...handValue);
+  const scores = new Array(n).fill(0);
+  const ranking = [];
   if (st.unlimited) {
-    st.scores.forEach((s, i) => { scores[i] += s; });
-    return st.finished.length ? st.scores[st.finished[0].player] : 0;
+    for (const f of st.finished) {
+      f.score = vmax + rankBonus(f.rank);
+      scores[f.player] = f.score;
+      ranking.push({ player: f.player, rank: f.rank, score: f.score, finished: true });
+    }
+    const loser = st.over ? st.over.loser : -1;
+    if (loser != null && loser >= 0 && !isFinished(st, loser)) {
+      const rank = st.finished.length + 1;
+      const s = (vmax - handValue[loser]) + rankBonus(rank);
+      scores[loser] = s;
+      ranking.push({ player: loser, rank, score: s, finished: false });
+    }
+  } else {
+    const winner = st.over.winner;
+    scores[winner] = vmax + rankBonus(1);
+    ranking.push({ player: winner, rank: 1, score: scores[winner], finished: true });
+    const rest = [];
+    for (let i = 0; i < n; i++) if (i !== winner) rest.push(i);
+    rest.sort((a, b) => handValue[a] - handValue[b]);
+    rest.forEach((seat, idx) => {
+      const s = vmax - handValue[seat];
+      scores[seat] = s;
+      ranking.push({ player: seat, rank: idx + 2, score: s, finished: false });
+    });
   }
-  let pts = 0;
-  st.hands.forEach((hand, i) => {
-    if (i !== st.over.winner) for (const c of hand) pts += cardPoints(c);
-  });
-  scores[st.over.winner] += pts;
-  return pts;
+  ranking.sort((a, b) => a.rank - b.rank);
+  st.scores = scores;
+  return { scores, ranking };
 }
 
 function toClient(st, playerIdx) {
@@ -687,7 +724,7 @@ function toClient(st, playerIdx) {
 
 module.exports = {
   COLORS, MODES, modeColors, buildDeck, shuffle, newGame, canPlay, isStackCard, playCard, drawCard,
-  passTurn, playDrawnCard, scoreRound, cardPoints, toClient, topCard,
+  passTurn, playDrawnCard, scoreRound, rankBonus, cardPoints, toClient, topCard,
   playNegate, playReset, giveCard, resolveGiftTimeout, closeNegateWindow, cancelGiftPhase,
   isFinished, activeSeats,
 };

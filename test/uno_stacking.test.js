@@ -257,9 +257,9 @@ test('null white sebagai kartu terakhir TIDAK memenangkan ronde (pajak +2 mengis
   assert.equal(st.hands[1].length, 2);
 });
 
-test('kartu spesial bernilai 50 poin bila tersisa di tangan', () => {
-  assert.equal(U.cardPoints(rb('x')), 50);
-  assert.equal(U.cardPoints(nw('y')), 50);
+test('kartu spesial punya nilai sendiri bila tersisa di tangan', () => {
+  assert.equal(U.cardPoints(rb('x')), 60);
+  assert.equal(U.cardPoints(nw('y')), 60);
 });
 
 test('simulasi hell 6 pemain: game selesai, invariant pending terjaga', () => {
