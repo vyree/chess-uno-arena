@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Preview Desain Kartu UNO — Gaya Figma Community</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #1e1e24; color: #eee; font-family: Arial, Helvetica, sans-serif; padding: 36px; }
+  h1 { font-size: 26px; margin-bottom: 6px; }
+  .sub { color: #aaa; font-size: 14px; margin-bottom: 28px; }
+  h2 { font-size: 18px; margin: 30px 0 14px; color: #ffd9f2; }
+  .row { display: flex; align-items: center; gap: 18px; margin-bottom: 22px; flex-wrap: wrap; }
+  .rowlabel { width: 130px; font-size: 15px; font-weight: 700; color: #ccc; }
+
+  /* ---------- kartu ala Figma ---------- */
+  .card {
+    width: 104px; height: 172px; border-radius: 11px;
+    border: 3px solid #fff;
+    position: relative; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 3px 10px rgba(0,0,0,.45);
+    font-weight: 800; user-select: none; flex: none;
+  }
+  .card .oval {
+    width: 65%; height: 55%; background: #fff; border-radius: 50%;
+    transform: rotate(-14deg);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card .oval .glyph { transform: rotate(14deg); line-height: 1; }
+  .card .pip {
+    position: absolute; font-style: normal; font-weight: 800;
+    font-size: 14px; line-height: 1; color: #fff; z-index: 2;
+  }
+  .card .pip.tl { top: 6px; left: 8px; }
+  .card .pip.br { bottom: 6px; right: 8px; transform: rotate(180deg); }
+
+  .card.purple { background: #cb30e0; } .card.purple .glyph { color: #cb30e0; font-size: 46px; }
+  .card.green  { background: #73aa2c; } .card.green  .glyph { color: #73aa2c; font-size: 46px; }
+  .card.red    { background: #b01e35; } .card.red    .glyph { color: #b01e35; font-size: 46px; }
+  .card.blue   { background: #075ca9; } .card.blue   .glyph { color: #075ca9; font-size: 46px; }
+  .card.yellow { background: #ead426; } .card.yellow .glyph { color: #ead426; font-size: 46px; }
+
+  .card .glyph.sym { font-size: 40px; }
+  .card .glyph.txt { font-size: 34px; }
+  .card .pip.sym { font-size: 13px; }
+
+  /* kartu hitam: wild / +4 / reverseBlack / negate / back */
+  .card.black { background: #1b1b22; }
+  .card.black .glyph { color: #1b1b22; }
+  .wheel {
+    width: 52px; height: 52px; border-radius: 50%; transform: rotate(14deg);
+    background: conic-gradient(from -45deg, #b01e35 0 25%, #ead426 0 50%, #73aa2c 0 75%, #075ca9 0);
+  }
+  .miniwheel {
+    display: inline-block; width: 13px; height: 13px; border-radius: 50%; vertical-align: -2px;
+    background: conic-gradient(from -45deg, #b01e35 0 25%, #ead426 0 50%, #73aa2c 0 75%, #075ca9 0);
+  }
+  .chips { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; transform: rotate(14deg); }
+  .chips .chip { width: 20px; height: 30px; border-radius: 5px; }
+
+  /* kartu abu: nullWhite / reset */
+  .card.gray { background: #e9e9ee; }
+  .card.gray .glyph { color: #5a5a66; font-size: 21px; font-weight: 700; }
+  .card.gray .pip { color: #5a5a66; }
+
+  .note { margin-top: 26px; padding: 16px 18px; background: #2a2a33; border-radius: 10px; font-size: 14px; line-height: 1.7; max-width: 900px; }
+  .note b { color: #ffd9f2; }
+  .cap { font-size: 12px; color: #999; margin-top: 6px; text-align: center; }
+  .cell { display: flex; flex-direction: column; align-items: center; }
+</style>
+</head>
+<body>
+<h1>🃏 Preview Desain Kartu UNO — gaya Figma Community</h1>
+<div class="sub">Border putih · oval putih miring · indeks pojok · warna persis sampling dari file Figma Sensei</div>
+
+<h2>5 warna (angka · skip · +2 · reverse)</h2>
+
+<div class="row"><div class="rowlabel" style="color:#e08ae8">Ungu</div>
+  <div class="cell"><div class="card purple"><i class="pip tl">7</i><div class="oval"><span class="glyph">7</span></div><i class="pip br">7</i></div></div>
+  <div class="cell"><div class="card purple"><i class="pip tl sym">⊘</i><div class="oval"><span class="glyph sym">⊘</span></div><i class="pip br sym">⊘</i></div></div>
+  <div class="cell"><div class="card purple"><i class="pip tl">+2</i><div class="oval"><span class="glyph txt">+2</span></div><i class="pip br">+2</i></div></div>
+  <div class="cell"><div class="card purple"><i class="pip tl sym">⇄</i><div class="oval"><span class="glyph sym">⇄</span></div><i class="pip br sym">⇄</i></div></div>
+</div>
+<div class="row"><div class="rowlabel" style="color:#9ed36a">Hijau</div>
+  <div class="cell"><div class="card green"><i class="pip tl">7</i><div class="oval"><span class="glyph">7</span></div><i class="pip br">7</i></div></div>
+  <div class="cell"><div class="card green"><i class="pip tl sym">⊘</i><div class="oval"><span class="glyph sym">⊘</span></div><i class="pip br sym">⊘</i></div></div>
+  <div class="cell"><div class="card green"><i class="pip tl">+2</i><div class="oval"><span class="glyph txt">+2</span></div><i class="pip br">+2</i></div></div>
+  <div class="cell"><div class="card green"><i class="pip tl sym">⇄</i><div class="oval"><span class="glyph sym">⇄</span></div><i class="pip br sym">⇄</i></div></div>
+</div>
+<div class="row"><div class="rowlabel" style="color:#e06070">Merah</div>
+  <div class="cell"><div class="card red"><i class="pip tl">7</i><div class="oval"><span class="glyph">7</span></div><i class="pip br">7</i></div></div>
+  <div class="cell"><div class="card red"><i class="pip tl sym">⊘</i><div class="oval"><span class="glyph sym">⊘</span></div><i class="pip br sym">⊘</i></div></div>
+  <div class="cell"><div class="card red"><i class="pip tl">+2</i><div class="oval"><span class="glyph txt">+2</span></div><i class="pip br">+2</i></div></div>
+  <div class="cell"><div class="card red"><i class="pip tl sym">⇄</i><div class="oval"><span class="glyph sym">⇄</span></div><i class="pip br sym">⇄</i></div></div>
+</div>
+<div class="row"><div class="rowlabel" style="color:#5a9ae0">Biru</div>
+  <div class="cell"><div class="card blue"><i class="pip tl">7</i><div class="oval"><span class="glyph">7</span></div><i class="pip br">7</i></div></div>
+  <div class="cell"><div class="card blue"><i class="pip tl sym">⊘</i><div class="oval"><span class="glyph sym">⊘</span></div><i class="pip br sym">⊘</i></div></div>
+  <div class="cell"><div class="card blue"><i class="pip tl">+2</i><div class="oval"><span class="glyph txt">+2</span></div><i class="pip br">+2</i></div></div>
+  <div class="cell"><div class="card blue"><i class="pip tl sym">⇄</i><div class="oval"><span class="glyph sym">⇄</span></div><i class="pip br sym">⇄</i></div></div>
+</div>
+<div class="row"><div class="rowlabel" style="color:#f2e08a">Kuning</div>
+  <div class="cell"><div class="card yellow"><i class="pip tl">7</i><div class="oval"><span class="glyph">7</span></div><i class="pip br">7</i></div></div>
+  <div class="cell"><div class="card yellow"><i class="pip tl sym">⊘</i><div class="oval"><span class="glyph sym">⊘</span></div><i class="pip br sym">⊘</i></div></div>
+  <div class="cell"><div class="card yellow"><i class="pip tl">+2</i><div class="oval"><span class="glyph txt">+2</span></div><i class="pip br">+2</i></div></div>
+  <div class="cell"><div class="card yellow"><i class="pip tl sym">⇄</i><div class="oval"><span class="glyph sym">⇄</span></div><i class="pip br sym">⇄</i></div></div>
+</div>
+
+<h2>Kartu spesial + punggung kartu</h2>
+<div class="row">
+  <div class="cell"><div class="card black"><i class="pip tl"><span class="miniwheel"></span></i><div class="oval"><span class="wheel"></span></div><i class="pip br"><span class="miniwheel"></span></i></div><div class="cap">Wild</div></div>
+  <div class="cell"><div class="card black"><i class="pip tl">+4</i><div class="oval"><span class="chips"><span class="chip" style="background:#075ca9"></span><span class="chip" style="background:#b01e35"></span><span class="chip" style="background:#ead426"></span><span class="chip" style="background:#73aa2c"></span></span></div><i class="pip br">+4</i></div><div class="cap">Wild +4</div></div>
+  <div class="cell"><div class="card black"><i class="pip tl sym">⇄</i><div class="oval"><span class="glyph sym">⇄</span></div><i class="pip br sym">⇄</i></div><div class="cap">Reverse Hitam</div></div>
+  <div class="cell"><div class="card gray"><i class="pip tl" style="font-size:10px">null</i><div class="oval"><span class="glyph">null</span></div><i class="pip br" style="font-size:10px">null</i></div><div class="cap">Null Putih</div></div>
+  <div class="cell"><div class="card gray"><i class="pip tl" style="font-size:10px">Re:</i><div class="oval"><span class="glyph">Re:</span></div><i class="pip br" style="font-size:10px">Re:</i></div><div class="cap">Reset = "Re:" ?</div></div>
+  <div class="cell"><div class="card black"><i class="pip tl sym">≠</i><div class="oval"><span class="glyph sym">≠</span></div><i class="pip br sym">≠</i></div><div class="cap">Negate! (usulan)</div></div>
+  <div class="cell"><div class="card black"><div class="oval"><span class="glyph" style="font-size:22px;font-style:italic">UNO</span></div></div><div class="cap">Punggung kartu (usulan)</div></div>
+</div>
+
+<div class="note">
+<b>Catatan Arona — perlu koreksi Sensei:</b><br>
+1. <b>Reset</b> Arona pasangkan ke kartu abu-abu <b>"Re:"</b> (jumlahnya pas ×2, kayak tebakan Arona kemarin). Betul?<br>
+2. <b>Negate!</b> tidak ada di file Figma — Arona bikinkan <b>kartu hitam "≠"</b> seirama. Oke atau mau desain lain?<br>
+3. <b>Punggung kartu</b> tidak ada di Figma — Arona usulkan <b>hitam + oval "UNO"</b> seirama. Oke atau Sensei sediakan sendiri?<br>
+4. Warna diambil persis dari file Figma (ungu #cb30e0, hijau #73aa2c, merah #b01e35, biru #075ca9, kuning #ead426) — sedikit beda dari warna game sekarang, nanti ikut diganti biar seragam.
+</div>
+</body>
+</html>

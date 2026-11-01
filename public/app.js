@@ -70,6 +70,14 @@ function showModal(title, bodyHTML, actions, cls) {
   $('modal').classList.remove('hidden');
 }
 function hideModal() { $('modal').classList.add('hidden'); }
+// Themed exit confirmation (2026-11-01, Sensei): same look as the
+// game-over box instead of the native browser confirm().
+function confirmExit(message, onYes) {
+  showModal('Keluar?', `<p class="muted">${message}</p>`, [
+    { label: 'Ya, keluar', cls: 'danger', onClick: onYes },
+    { label: 'Batal', cls: 'secondary', onClick: null },
+  ], 'confirm');
+}
 
 // ---------- websocket ----------
 // Server switch: Fly.io is the PRIMARY server since 2026-10-22 (Sensei's
@@ -637,6 +645,7 @@ function renderUno(m) {
   disc.className = 'uno-card ' + cardClass(st.top);
   disc.innerHTML = cardHTML(st.top);
   $('deck-count').textContent = st.deckCount + ' kartu';
+  $('deck-hint').classList.toggle('hidden', !isMyTurn);
   $('uno-color-badge').style.background = colorHex(st.currentColor);
   const dirEl = $('uno-dir');
   dirEl.classList.toggle('ccw', st.dir === -1);
@@ -1953,7 +1962,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!ensureHello()) return;
     send('create_ludo_bot_room', {});
   };
-  $('btn-leave-ludo').onclick = () => { if (confirm('Keluar dari room?')) send('leave_room'); };
+  $('btn-leave-ludo').onclick = () => confirmExit('Keluar dari room?', () => send('leave_room'));
   document.querySelectorAll('.ai-btn').forEach((b) => {
     b.onclick = () => send('create_chess_ai_room', { persona: b.dataset.persona });
   });
@@ -1974,7 +1983,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('bio-actions').classList.add('hidden');
     toast('Bio tersimpan ✓');
   };
-  $('btn-leave-truth').onclick = () => { if (confirm('Keluar dari room?')) send('leave_room'); };
+  $('btn-leave-truth').onclick = () => confirmExit('Keluar dari room?', () => send('leave_room'));
   $('btn-create').onclick = () => {
     if (!ensureHello()) return;
     send('create_room', { game: S.game });
@@ -2010,13 +2019,13 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   // browsers unlock audio only after a user gesture; warm the context up early
   document.addEventListener('pointerdown', () => { if (soundOn) ac(); });
-  $('btn-leave-lobby').onclick = () => { if (confirm('Keluar dari room?')) send('leave_room'); };
-  $('btn-leave-chess').onclick = () => { if (confirm('Keluar? Kamu dianggap menyerah.')) send('leave_room'); };
-  $('btn-leave-uno').onclick = () => { if (confirm('Keluar dari room?')) send('leave_room'); };
+  $('btn-leave-lobby').onclick = () => confirmExit('Keluar dari room?', () => send('leave_room'));
+  $('btn-leave-chess').onclick = () => confirmExit('Keluar? Kamu dianggap menyerah.', () => send('leave_room'));
+  $('btn-leave-uno').onclick = () => confirmExit('Keluar dari room?', () => send('leave_room'));
   // Misi 9: keluar GAME (ke lobby room) is a different act from keluar ROOM
   for (const id of ['btn-leavegame-chess', 'btn-leavegame-uno', 'btn-leavegame-truth']) {
     const b = $(id);
-    if (b) b.onclick = () => { if (confirm('Keluar dari game ini? Kamu tetap di room sebagai penonton.')) send('leave_game'); };
+    if (b) b.onclick = () => confirmExit('Keluar dari game ini? Kamu tetap di room sebagai penonton.', () => send('leave_game'));
   }
   $('btn-resign').onclick = () => { if (confirm('Menyerah?')) send('chess_resign'); };
   $('uno-deck').onclick = () => send('uno_draw');

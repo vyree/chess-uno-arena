@@ -296,6 +296,82 @@ function unoFixTurn(room) {
 }
 
 // ---------------- forfeit / disconnect ----------------
+// UNO mid-game room departure (2026-11-01, Sensei): the leaver's seat is
+// taken over by a bot IN PLACE while at least one organic (human) player
+// remains in the game — same seat, same hand, the game continues
+// uninterrupted. Host ownership passes to a random remaining organic.
+// With no organics left, the game ends with no winner and the session is
+// destroyed outright. Every path leaves the timers, turn order, and the
+// leaver's client in a clean state — no stuck player, room, or session.
+function unoPlayerLeavesRoom(room, player) {
+  const u = room.uno;
+  // Cancel any active window/gift phase first (same as forfeit).
+  if (u.st.negateWindow) uno.closeNegateWindow(u.st);
+  if (u.st.giftPhase) uno.cancelGiftPhase(u.st);
+  clearNegateTimer(room);
+
+  const liveSeat = u.active[player.seat] && !player.takenOver;
+  const wasHost = room.hostId === player.id;
+  const leaverName = dispName(player);
+  // Organics: humans still holding a live seat, excluding the leaver.
+  const organics = room.players.filter((p) =>
+    p.id !== player.id && !p.isBot && p.connected && u.active[p.seat]);
+  const passHost = () => {
+    if (wasHost && organics.length) {
+      room.hostId = organics[Math.floor(Math.random() * organics.length)].id;
+    }
+  };
+
+  if (!liveSeat) {
+    // Leaver holds no live seat (already finished / taken over): the seat
+    // must stay in the roster until the session ends (engine indexes are
+    // seat-based), so just clear a dangling takeover clock, pass the host,
+    // and refresh the table.
+    const tt = room.takeoverTimers.get(player.id);
+    if (tt) { clearTimeout(tt); room.takeoverTimers.delete(player.id); }
+    passHost();
+    if (rooms.get(room.code)) sendGameState(room);
+    return;
+  }
+
+  if (organics.length === 0) {
+    // No humans left: game ends with no winner, session destroyed.
+    // Everyone still around is kicked cleanly so no client watches a
+    // dead room.
+    if (room.botTimer) { clearTimeout(room.botTimer); room.botTimer = null; }
+    u.st.over = { winner: -1, reason: 'semua_keluar' };
+    room.status = 'over';
+    clearTurnTimer(room);
+    broadcast(room, gameOverPayload(room, u.st.over));
+    for (const p of [...room.players, ...room.spectators]) {
+      if (p.id === player.id) continue; // released by leave_room below
+      if (p.isBot) { players.delete(p.id); continue; }
+      p.roomCode = null;
+      if (p.socket) send(p.socket, { type: 'left_room' });
+    }
+    rooms.destroy(room.code);
+    return;
+  }
+
+  // A bot takes the seat: mutate in place so seat indexes, hands, and the
+  // scoreboard stay aligned; the bot brain drives it from here on.
+  const usedNames = new Set(room.players.map((p) => p.nickname));
+  const botName = bot.BOT_NAMES.find((n) => !usedNames.has(n)) || 'Bot Cadangan';
+  player.isBot = true;
+  player.socket = null;
+  player.connected = true;
+  player.takenOver = false;
+  player.nickname = botName;
+  passHost();
+  unoFixTurn(room);
+  sendGameState(room);
+  scheduleBotIfNeeded(room);
+  broadcast(room, {
+    type: 'chat', from: 'Sistem',
+    text: `${leaverName} keluar — digantikan ${botName}!`,
+  });
+}
+
 function forfeitPlayer(room, playerId, keepIdentity = false) {
   const player = room.players.find((p) => p.id === playerId);
   room.forfeitTimers.delete(playerId);
@@ -2145,7 +2221,10 @@ async function route(ws, type, data) {
         // anggap forfeit langsung
         const t = room.forfeitTimers.get(player.id);
         if (t) { clearTimeout(t); room.forfeitTimers.delete(player.id); }
-        forfeitPlayer(room, player.id, true);
+        // UNO: a mid-game leaver's seat is taken by a bot while humans
+        // remain (2026-11-01, Sensei); other games keep forfeit rules.
+        if (room.game === 'uno') unoPlayerLeavesRoom(room, player);
+        else forfeitPlayer(room, player.id, true);
       } else {
         rooms.removePlayer(room, player.id);
         if (rooms.get(room.code)) {
