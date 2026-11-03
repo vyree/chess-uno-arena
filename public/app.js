@@ -1723,6 +1723,8 @@ function showLudoBubble(card, state) {
   const isMyTurn = state.turn === mySeat;
   if (card.group === 'neutral' && state.phase === 'move' && isMyTurn && !state.neutralUsed) {
     actions = `<button class="btn primary small" id="ludo-bubble-use">▶️ Pakai kartu ini</button>`;
+  } else if (card.group === 'defense' && state.phase === 'defense' && state.pendingDefense && state.pendingDefense.defender === mySeat) {
+    actions = `<button class="btn primary small" id="ludo-bubble-use">🛡️ Pakai defense ini</button>`;
   }
   box.innerHTML = `<div class="ludo-card card-${card.group} mini" aria-hidden="true">${ludoCardFace(card, info)}</div><strong>${info.name}</strong> <span class="muted">${groupLabel}</span><p>${info.desc}</p>${actions}<button class="btn ghost small" id="ludo-bubble-close">Tutup</button>`;
   box.classList.remove('hidden');
@@ -1730,6 +1732,10 @@ function showLudoBubble(card, state) {
   const useBtn = $('ludo-bubble-use');
   if (useBtn) useBtn.onclick = () => {
     box.classList.add('hidden');
+    if (card.group === 'defense') {
+      send('ludo_defense', { cardId: card.id });
+      return;
+    }
     let choice;
     if (card.kind === 'bebas') {
       const v = prompt('Pilih jumlah langkah (1-6):', '6');
@@ -1760,8 +1766,8 @@ function showLudoAnnounce(m) {
 // against the previous one and enqueues animation jobs (dice, moves,
 // captures) executed strictly in order. No new WS messages, no
 // protocol change. Pacing defaults: dice 550ms, step 120ms (tunable).
-const LUDO_STEP_MS = 120;
-const LUDO_DICE_ANIM_MS = 1000;
+const LUDO_STEP_MS = 280;
+const LUDO_DICE_ANIM_MS = 3500;
 const LUDO_FRESH_THRESHOLD = 10;
 const LUDO_REDUCED_MOTION = typeof matchMedia === 'function'
   && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1849,7 +1855,7 @@ async function ludoAnimDice(face) {
     // Foony-style: rapid in-place vibration while faces flicker,
     // then settle on the final face.
     if (btn) btn.classList.add('shaking');
-    const frames = 8;
+    const frames = Math.max(8, Math.round(LUDO_DICE_ANIM_MS / 150));
     for (let i = 0; i < frames; i++) {
       img.src = `/assets/ludo-clean/dice-${1 + Math.floor(Math.random() * 6)}.svg`;
       await ludoWait(LUDO_DICE_ANIM_MS / frames);
@@ -2006,7 +2012,13 @@ function renderLudo(m) {
     }
     if (diceBtn) diceBtn.classList.toggle('six', snap.dice === 6);
   } else {
-    if (prev.phase === 'roll' && snap.phase !== 'roll' && snap.dice) {
+    // A roll resolves either into an action phase (roll -> move/...),
+    // or straight into the next turn when there was no legal move
+    // (roll -> roll with a new turn holder, e.g. all pawns in base).
+    // Both must play the dice animation, otherwise the number just pops.
+    const rollResolved = snap.dice && prev.phase === 'roll'
+      && (snap.phase !== 'roll' || snap.turn !== prev.turn);
+    if (rollResolved) {
       if (diceBtn) diceBtn.classList.remove('six');
       ludoEnqueue(() => ludoAnimDice(snap.dice));
     }
@@ -2066,12 +2078,15 @@ function renderLudo(m) {
   if (!st.over) {
     if (isMyTurn && st.phase === 'roll') promptText = 'LEMPAR DADUNYA! 🎲';
     else if (isMyTurn && st.phase === 'move') promptText = 'KETUK SEBUAH PION. 👆';
+    else if (st.phase === 'defense' && st.pendingDefense && st.pendingDefense.defender === mySeat) promptText = '🛡️ BIDAKMU DISERANG!';
   }
   if (prompt) {
     if (prompt.textContent !== promptText) prompt.textContent = promptText;
     prompt.classList.toggle('hidden', !promptText);
   }
-  diceBtn.disabled = !(isMyTurn && st.phase === 'roll');
+  const canRoll = isMyTurn && st.phase === 'roll';
+  diceBtn.disabled = !canRoll;
+  diceBtn.classList.toggle('rolling', canRoll);
   diceBtn.onclick = () => send('ludo_roll');
   let status = '';
   if (st.over) status = st.winner !== null ? `🏆 Pemenang: ${m.players[st.winner].nickname}` : 'Game selesai.';
@@ -2083,12 +2098,8 @@ function renderLudo(m) {
   $('ludo-status').textContent = status;
   const actions = $('ludo-actions');
   actions.innerHTML = '';
-  if (isMyTurn && st.phase === 'roll') {
-    const b = document.createElement('button');
-    b.className = 'btn primary'; b.textContent = '🎲 Kocok Dadu';
-    b.onclick = () => send('ludo_roll');
-    actions.appendChild(b);
-  }
+  // Rolling is done by tapping the dice itself (see diceBtn below);
+  // no separate roll button, so it can never be tapped by mistake.
   if (isMyTurn && st.phase === 'attack') {
     const b = document.createElement('button');
     b.className = 'btn ghost'; b.textContent = '⏭️ Lewati (kartu hangus, balik ke deck)';

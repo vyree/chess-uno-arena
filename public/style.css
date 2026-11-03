@@ -867,7 +867,11 @@ body.low-gfx * {
 @keyframes ludo-prompt-bob { 50% { transform: translateX(-50%) translateY(-4px); } }
 .ludo-dice { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 11%; aspect-ratio: 1; padding: 0; border: none; background: transparent; cursor: pointer; z-index: 2; }
 .ludo-dice img { width: 100%; height: 100%; display: block; border-radius: 12px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.5)); }
-.ludo-dice:disabled { opacity: .6; cursor: default; }
+.ludo-dice:disabled { opacity: .35; filter: grayscale(.8); cursor: default; }
+@keyframes ludo-dice-invite {
+  50% { filter: drop-shadow(0 0 16px #ffd54a); }
+}
+.ludo-dice.rolling { animation: ludo-dice-invite 1.2s ease-in-out infinite; cursor: pointer; }
 .ludo-dice-idle { opacity: .85; }
 /* Ludo Tahap inti animations (dadu + jalan + makan), 2026-11-03.
    Tokens glide via left/top transition; hops, captures and dice
