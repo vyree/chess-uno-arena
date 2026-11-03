@@ -2247,6 +2247,8 @@ function renderLudo(m) {
   }
   let status = '';
   if (st.over) status = st.winner !== null ? `🏆 Pemenang: ${m.players[st.winner].nickname}` : 'Game selesai.';
+  else if (st.phase === 'end') status = `Giliran ${turnPlayer.nickname} selesai.`;
+  else if (st.phase === 'standby') status = isMyTurn ? 'Bersiap — giliranmu dimulai…' : `Bersiap — giliran ${turnPlayer.nickname} dimulai…`;
   else if (st.phase === 'roll') status = isMyTurn ? 'Giliranmu — kocok dadu di tengah papan.' : `Menunggu ${turnPlayer.nickname} mengocok dadu…`;
   else if (st.phase === 'move') status = isMyTurn ? `Dadu: ${st.dice} → langkah: ${st.steps}. Klik tokenmu yang menyala, atau pakai 1 kartu netral dulu.` : `Menunggu ${turnPlayer.nickname} jalan ${st.steps} langkah…`;
   else if (st.phase === 'attack') status = isMyTurn ? 'Kartu attack: tentukan Pakai/Buang di popup, lalu klik bidak target.' : `${turnPlayer.nickname} sedang memakai kartu attack…`;

@@ -1673,14 +1673,56 @@ function ludoAnnounce(room, text, cardKind) {
 }
 function ludoSync(room) {
   if (!room.ludo || room.ludo.st.over) return;
+  const st = room.ludo.st;
+  // Ceremony phases ('end'/'standby') are broadcast-only; the phase
+  // timer drives the next beat. No turn timer, no bot during them.
+  if (st.phase === 'end' || st.phase === 'standby') {
+    sendGameState(room);
+    return;
+  }
   startTurnTimer(room);
   sendGameState(room);
   scheduleLudoBot(room);
+}
+function clearLudoPhaseTimer(room) {
+  if (room.ludoPhaseTimer) { clearTimeout(room.ludoPhaseTimer); room.ludoPhaseTimer = null; }
+}
+// TURN phase machine driver (Sensei 2026-11-03). A finished turn gets
+// visible beats: 'end' (finisher's turn closes) -> 'standby' (next
+// player's turn opens) -> 'roll' (action begins). Each beat is
+// broadcast so phase transitions are clear and never overlap logic.
+function ludoTurnTransition(room) {
+  const st = room.ludo && room.ludo.st;
+  if (!st || st.over) return;
+  clearLudoPhaseTimer(room);
+  clearTurnTimer(room); // previous player's 60s countdown stops here
+  st.phase = 'end';
+  ludoSync(room); // 'end' beat
+  room.ludoPhaseTimer = setTimeout(() => {
+    room.ludoPhaseTimer = null;
+    if (rooms.get(room.code) !== room) return; // room destroyed meanwhile
+    const s2 = room.ludo && room.ludo.st;
+    if (!s2 || s2.over || s2.phase !== 'end') return;
+    const before = s2.turn;
+    ludo.endTurn(s2); // turn=next, phase='roll' (engine primitive)
+    if (s2.turn !== before) ludo.tickBlockCooldown(s2);
+    s2.phase = 'standby'; // override: 'standby' beat before action
+    ludoSync(room);
+    room.ludoPhaseTimer = setTimeout(() => {
+      room.ludoPhaseTimer = null;
+      if (rooms.get(room.code) !== room) return;
+      const s3 = room.ludo && room.ludo.st;
+      if (!s3 || s3.over || s3.phase !== 'standby') return;
+      s3.phase = 'roll';
+      ludoSync(room); // starts turn timer, schedules bot
+    }, 800);
+  }, 800);
 }
 function ludoFinish(room) {
   const st = room.ludo.st;
   room.status = 'over';
   clearTurnTimer(room);
+  clearLudoPhaseTimer(room);
   broadcast(room, gameOverPayload(room, { winner: st.winner, reason: 'ludo' }));
 }
 function scheduleLudoBot(room) {
@@ -1730,10 +1772,9 @@ function ludoAfterMove(room, moveResult) {
       }
     }
   }
-  const before = st.turn;
   const flow = ludo.afterMoveFlow(st, moveResult);
   if (flow.over) { ludoFinish(room); return; }
-  if (st.turn !== before) ludo.tickBlockCooldown(st);
+  if (flow.endTurn) { ludoTurnTransition(room); return; }
   ludoSync(room);
 }
 function ludoContinueAfterAttack(room) {
@@ -1742,10 +1783,9 @@ function ludoContinueAfterAttack(room) {
   room.ludo.lastMove = null;
   st.pendingAttack = null;
   st.pendingDefense = null;
-  const before = st.turn;
   const flow = ludo.afterMoveFlow(st, moveResult);
   if (flow.over) { ludoFinish(room); return; }
-  if (st.turn !== before) ludo.tickBlockCooldown(st);
+  if (flow.endTurn) { ludoTurnTransition(room); return; }
   ludoSync(room);
 }
 function doLudoRoll(room) {
@@ -1760,10 +1800,9 @@ function doLudoRoll(room) {
   const moves = ludo.legalMoves(st, st.turn, st.steps, st.dice);
   if (!moves.length) {
     // Preserve the roll so the client can animate it: endTurn wipes st.dice.
+    // The caller drives the end-of-turn ceremony via ludoTurnTransition.
     st.lastRoll = st.dice;
-    ludo.endTurn(st);
-    ludo.tickBlockCooldown(st);
-    return { ok: true, noMove: true };
+    return { ok: true, noMove: true, endTurn: true };
   }
   return { ok: true };
 }
@@ -1849,10 +1888,9 @@ function doLudoSwap(room, oldCardId) {
   st.pendingDraw = null;
   const moveResult = room.ludo.lastMove || { captured: [], enteredHome: false };
   room.ludo.lastMove = null;
-  const before = st.turn;
   const flow = ludo.afterMoveFlow(st, moveResult);
   if (flow.over) { ludoFinish(room); return { ok: true }; }
-  if (st.turn !== before) ludo.tickBlockCooldown(st);
+  if (flow.endTurn) { ludoTurnTransition(room); return { ok: true }; }
   ludoSync(room);
   return { ok: true };
 }
@@ -1867,8 +1905,9 @@ function ludoBotStep(room) {
   if (!seatDriven(p)) return;
   if (st.phase === 'roll') {
     const r = doLudoRoll(room);
-    if (r.ok && !r.noMove) ludoSync(room);
-    else if (r.ok) ludoSync(room);
+    if (!r.ok) return;
+    if (r.endTurn) ludoTurnTransition(room);
+    else ludoSync(room);
     return;
   }
   if (st.phase === 'move') {
@@ -1880,7 +1919,7 @@ function ludoBotStep(room) {
     const moves = ludo.legalMoves(st, seat, st.steps, st.dice);
     const mv = ludo.botChooseMove(st, seat, moves);
     if (mv) doLudoMove(room, mv.token);
-    else { ludo.endTurn(st); ludoSync(room); }
+    else ludoTurnTransition(room);
     return;
   }
   if (st.phase === 'attack') {
@@ -1930,13 +1969,19 @@ function ludoBotStepContinue(room) {
 }
 function ludoAutoStep(room) {
   // Timeout: take the first legal, safe action repeatedly (max 10).
+  // Ceremony phases ('end'/'standby') are never auto-stepped.
+  let transitioned = false;
   for (let i = 0; i < 10; i++) {
     const st = room.ludo.st;
     if (room.status !== 'playing' || st.over) break;
-    if (st.phase === 'roll') { doLudoRoll(room); continue; }
+    if (st.phase === 'roll') {
+      const r = doLudoRoll(room);
+      if (r.ok && r.endTurn) { ludoTurnTransition(room); transitioned = true; break; }
+      continue;
+    }
     if (st.phase === 'move') {
       const moves = ludo.legalMoves(st, st.turn, st.steps, st.dice);
-      if (!moves.length) { ludo.endTurn(st); break; }
+      if (!moves.length) { ludoTurnTransition(room); transitioned = true; break; }
       doLudoMove(room, moves[0].token);
       continue;
     }
@@ -1945,7 +1990,7 @@ function ludoAutoStep(room) {
     if (st.phase === 'swap') { doLudoSwap(room, null); continue; }
     break;
   }
-  ludoSync(room);
+  if (!transitioned) ludoSync(room);
 }
 
 // ---------------- message router ----------------
@@ -2106,7 +2151,8 @@ async function route(ws, type, data) {
       if (player.seat !== room.ludo.st.turn) { sendError(ws, 'Bukan giliranmu'); return; }
       const r = doLudoRoll(room);
       if (!r.ok) { sendError(ws, r.error); return; }
-      ludoSync(room);
+      if (r.endTurn) ludoTurnTransition(room);
+      else ludoSync(room);
       return;
     }
     case 'ludo_move': {

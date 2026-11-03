@@ -23,6 +23,21 @@ test('dadu 6: jalan dulu, lalu giliran yang sama kocok lagi', () => {
   assert.equal(st.phase, 'roll');
 });
 
+test('afterMoveFlow tanpa extra: kembalikan endTurn:true, engine tidak oper giliran sendiri', () => {
+  const st = fresh();
+  st.phase = 'move'; st.dice = 3; st.sixCount = 0;
+  setTrack(st, 0, 0, 10);
+  const r = ludo.applyMove(st, 0, 0, 3, 3);
+  assert.equal(r.ok, true);
+  const f = ludo.afterMoveFlow(st, r);
+  assert.equal(f.endTurn, true);
+  assert.equal(f.extra, false);
+  // Engine tidak lagi memajukan giliran sendiri; server yang
+  // menjalankan ceremony 'end' -> 'standby' -> 'roll'.
+  assert.equal(st.turn, 0);
+  assert.equal(st.phase, 'move');
+});
+
 test('cap 6 tersembunyi: kocokan ke-4 setelah 3x enam bukan 6', () => {
   const st = fresh();
   st.sixCount = 3;

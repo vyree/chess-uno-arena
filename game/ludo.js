@@ -189,7 +189,9 @@ function endTurn(st) {
   st.pendingDraw = null;
 }
 // Advance after a completed move: extra roll on 6/capture/home,
-// otherwise pass the turn. Caller handles skill draw first.
+// otherwise the turn should end. The CALLER drives the end-of-turn
+// ceremony (ludoTurnTransition); the engine no longer ends the turn
+// itself, so the 'end' -> 'standby' -> 'roll' beats stay visible.
 function afterMoveFlow(st, moveResult) {
   if (checkWinner(st) !== null) return { extra: false, over: true };
   const extra = st.dice === 6 || moveResult.captured.length > 0 || moveResult.enteredHome;
@@ -203,8 +205,7 @@ function afterMoveFlow(st, moveResult) {
     st.pendingDraw = null;
     return { extra: true, over: false };
   }
-  endTurn(st);
-  return { extra: false, over: false };
+  return { endTurn: true, extra: false, over: false };
 }
 function startBlockCooldown(st, abs) {
   st.blockCooldown[abs] = 4; // sleeps while all 4 seats take a turn
