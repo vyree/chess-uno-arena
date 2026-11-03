@@ -1683,6 +1683,34 @@ function ludoSync(room) {
   startTurnTimer(room);
   sendGameState(room);
   scheduleLudoBot(room);
+  ludoArmIdleTakeover(room);
+}
+// Idle takeover (Sensei 2026-11-03): if the current human actor sends
+// no game action for 30s, a bot takes over their seat so the game
+// keeps running. The 60s turn timer stays as a safety net. Takeover
+// is permanent for the game (the human can keep watching).
+const LUDO_IDLE_TAKEOVER_MS = 30 * 1000;
+function ludoArmIdleTakeover(room) {
+  if (room.ludo.idleTimer) { clearTimeout(room.ludo.idleTimer); room.ludo.idleTimer = null; }
+  const st = room.ludo && room.ludo.st;
+  if (room.game !== 'ludo' || room.status !== 'playing' || !st || st.over) return;
+  if (!['roll', 'move', 'attack', 'defense', 'swap'].includes(st.phase)) return;
+  const actor = (st.phase === 'defense' && st.pendingDefense) ? st.pendingDefense.defender : st.turn;
+  const p = room.players[actor];
+  if (!p || p.isBot || p.takenOver || !p.connected) return;
+  room.ludo.idleTimer = setTimeout(() => {
+    room.ludo.idleTimer = null;
+    if (rooms.get(room.code) !== room || room.status !== 'playing') return;
+    const s2 = room.ludo && room.ludo.st;
+    if (!s2 || s2.over) return;
+    const a2 = (s2.phase === 'defense' && s2.pendingDefense) ? s2.pendingDefense.defender : s2.turn;
+    if (a2 !== actor) return; // turn moved on; the fresh sync re-armed
+    const p2 = room.players[a2];
+    if (!p2 || p2.isBot || p2.takenOver || !p2.connected) return;
+    p2.takenOver = true;
+    ludoAnnounce(room, `${p2.nickname} tidak aktif selama 30 detik — diambil alih bot! 🤖`);
+    ludoSync(room); // actor is now a bot: disarms idle, schedules bot play
+  }, LUDO_IDLE_TAKEOVER_MS);
 }
 function clearLudoPhaseTimer(room) {
   if (room.ludoPhaseTimer) { clearTimeout(room.ludoPhaseTimer); room.ludoPhaseTimer = null; }
@@ -1723,6 +1751,7 @@ function ludoFinish(room) {
   room.status = 'over';
   clearTurnTimer(room);
   clearLudoPhaseTimer(room);
+  if (room.ludo.idleTimer) { clearTimeout(room.ludo.idleTimer); room.ludo.idleTimer = null; }
   broadcast(room, gameOverPayload(room, { winner: st.winner, reason: 'ludo' }));
 }
 function scheduleLudoBot(room) {

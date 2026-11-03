@@ -2037,6 +2037,10 @@ function renderLudo(m) {
       name.style.textAlign = pos.align;
       board.appendChild(name);
     });
+    const ring = document.createElement('div');
+    ring.id = 'ludo-turn-ring';
+    ring.className = 'ludo-turn-ring';
+    board.appendChild(ring);
     board.dataset.built = '1';
   }
   // Skill targets are transient; token nodes persist across renders so
@@ -2198,6 +2202,17 @@ function renderLudo(m) {
     el.textContent = m.players[pi] ? m.players[pi].nickname : '';
     el.classList.toggle('turn', pi === st.turn);
   });
+  // Turn ring: purple-white striped circle rotating around the turn
+  // player's yard (Sensei 2026-11-03). Hidden when the game is over.
+  const ring = $('ludo-turn-ring');
+  if (ring) {
+    if (st.over) {
+      ring.style.display = 'none';
+    } else {
+      ring.style.display = '';
+      ring.className = `ludo-turn-ring ring-${LUDO_COLORS[st.turn]}`;
+    }
+  }
   const turnPlayer = m.players[st.turn];
   const turnBadge = $('ludo-turn-badge');
   const badgeText = turnPlayer ? `Giliran: ${turnPlayer.nickname}` : '';
