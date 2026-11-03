@@ -58,14 +58,34 @@ test('keluar base hanya dadu asli 6', () => {
   assert.equal(moves[0].kind, 'exit');
 });
 
-test('makan: mendarat tepat di token lawan non-aman memulangkannya', () => {
+test('makan: mendarat tepat di token lawan non-aman memicu stomp defense (Sensei 2026-11-03)', () => {
   const st = fresh();
   setTrack(st, 0, 0, 9); // abs 9, +1 -> abs 10
   setTrack(st, 1, 0, 49); // green offset 13 + 49 = 62 % 52 = 10
   const r = ludo.applyMove(st, 0, 0, 1, 1);
   assert.equal(r.ok, true);
-  assert.equal(r.captured.length, 1);
+  assert.equal(r.needsStompDefense, true);
+  assert.equal(r.victims.length, 1);
+  // Victim accepts (no defense card): goes home.
+  const r2 = ludo.resolveDefenseStep(st, { attack: { kind: 'stomp', attacker: 0, targetPlayer: 1, targetToken: 0 }, defender: 1, victim: { player: 1, token: 0 } }, null);
+  assert.equal(r2.done, true);
+  assert.equal(r2.killed.length, 1);
   assert.equal(st.players[1].tokens[0].progress, -1);
+});
+
+test('stomp defense: AntiStep membatalkan injakan, kedua bidak menumpuk', () => {
+  const st = fresh();
+  setTrack(st, 0, 0, 9);
+  setTrack(st, 1, 0, 49);
+  handOf(st, 1, ['antistep']);
+  const r = ludo.applyMove(st, 0, 0, 1, 1);
+  assert.equal(r.needsStompDefense, true);
+  const r2 = ludo.resolveDefenseStep(st, { attack: { kind: 'stomp', attacker: 0, targetPlayer: 1, targetToken: 0 }, defender: 1, victim: { player: 1, token: 0 } }, 'h1-0');
+  assert.equal(r2.done, true);
+  assert.equal(r2.defended, true);
+  // Both pawns stay on the square.
+  assert.equal(st.players[0].tokens[0].progress, 10);
+  assert.equal(st.players[1].tokens[0].progress, 49);
 });
 
 test('petak aman: token di petak aman tidak bisa dimakan', () => {
@@ -98,18 +118,33 @@ test('block skill: hanya mendarat tepat, bukan lewat, dan bukan aman', () => {
   assert.equal(r.landedSkill, false);
   assert.equal(ludo.SAFE_SQUARES.includes(5), false);
   // token di block bisa dimakan: lawan mendarat di abs 5
+  // (Sensei 2026-11-03: stomp now requires defense, not auto-capture).
   setTrack(st, 1, 0, 43); // green 13+43=56%52=4, +1 -> abs 5
   const r2 = ludo.applyMove(st, 1, 0, 1, 1);
-  assert.equal(r2.captured.length, 1);
+  assert.equal(r2.needsStompDefense, true);
+  assert.equal(r2.victims.length, 1);
+  assert.equal(r2.victims[0].player, 0);
 });
 
-test('deck 64 kartu, tiap jenis tepat 4 copy', () => {
+test('deck 64 kartu: attack/defense 4 copy, netral bervariasi (Sensei 2026-11-03)', () => {
   const st = fresh();
   assert.equal(st.deck.length, 64);
   const counts = {};
   for (const c of st.deck) counts[c.kind] = (counts[c.kind] || 0) + 1;
-  assert.equal(Object.keys(counts).length, 16);
-  for (const k of Object.keys(counts)) assert.equal(counts[k], 4, k);
+  assert.equal(Object.keys(counts).length, 13); // 4 attack + 4 defense + 5 netral
+  // Attack & defense: 4 copy each.
+  for (const k of ['sniper', 'ranjau', 'seret', 'beku', 'perisai', 'antistep', 'teleport', 'escape']) {
+    assert.equal(counts[k], 4, k);
+  }
+  // Neutral: x2/+1/+2/+3 @6, bebas @8.
+  assert.equal(counts['x2'], 6);
+  assert.equal(counts['plus1'], 6);
+  assert.equal(counts['plus2'], 6);
+  assert.equal(counts['plus3'], 6);
+  assert.equal(counts['bebas'], 8);
+  // minus1/2/3 and cermin are gone.
+  assert.equal(counts['minus1'], undefined);
+  assert.equal(counts['cermin'], undefined);
 });
 
 test('attack instan: tidak bisa disimpan, dipakai langsung atau hangus', () => {
@@ -133,9 +168,9 @@ test('simpanan gabungan maks 3 + tukar', () => {
   const old = st.players[0].hand.find((c) => c.kind === 'plus1');
   st.players[0].hand = st.players[0].hand.filter((c) => c.id !== old.id);
   ludo.returnHangus(st, old);
-  st.players[0].hand.push({ id: 'new1', kind: 'cermin', group: 'defense' });
+  st.players[0].hand.push({ id: 'new1', kind: 'antistep', group: 'defense' });
   assert.equal(st.players[0].hand.length, 3);
-  assert.ok(st.players[0].hand.some((c) => c.kind === 'cermin'));
+  assert.ok(st.players[0].hand.some((c) => c.kind === 'antistep'));
   assert.ok(st.deck.some((c) => c.id === old.id));
 });
 
@@ -173,30 +208,39 @@ test('defense trigger: Perisai membatalkan Sniper, kartu habis', () => {
   assert.equal(st.players[1].hand.length, 0);
 });
 
-test('Cermin tidak berlaku untuk Bom Petak', () => {
+test('AntiStep tidak berlaku untuk Ranjau (hanya untuk injak)', () => {
   const st = fresh();
   setTrack(st, 1, 0, 10);
-  handOf(st, 1, ['cermin']);
-  const r = ludo.resolveDefense(st, { attack: { kind: 'bom', attacker: 0, targetAbs: 10 }, defender: 1 }, 'h1-0');
+  handOf(st, 1, ['antistep']);
+  const r = ludo.resolveDefense(st, { attack: { kind: 'ranjau', attacker: 0, targetPlayer: 1, targetToken: 0 }, defender: 1 }, 'h1-0');
   assert.equal(r.ok, false);
 });
 
-test('Bom Petak friendly fire: kena bidak sendiri juga', () => {
+test('Ranjau: tanam di petak valid, meledak saat diinjak', () => {
   const st = fresh();
-  setTrack(st, 0, 0, 10);
-  setTrack(st, 1, 0, 49); // abs 10 juga
-  const victims = ludo.bombTargets(st, 10);
-  assert.equal(victims.length, 2);
-  const b = ludo.beginAttack(st, 0, { id: 'a2', kind: 'bom', group: 'attack' }, { abs: 10 });
-  // Sensei 2026-11-03: every victim is asked in turn, even with no
-  // defense cards (disabled Bertahan), instead of dying silently.
-  assert.equal(b.needsDefense, true);
-  let r = ludo.resolveDefenseStep(st, { attack: b.attack, defender: b.defender }, null);
-  assert.equal(r.done, false); // korban kedua masih antre
-  r = ludo.resolveDefenseStep(st, { attack: b.attack, defender: r.defender }, null);
-  assert.equal(r.done, true);
-  assert.equal(st.players[0].tokens[0].progress, -1);
-  assert.equal(st.players[1].tokens[0].progress, -1);
+  // Plant ranjau at abs 10.
+  st.phase = 'attack';
+  st.pendingAttack = { kind: 'ranjau', attacker: 0, card: { id: 'a2', kind: 'ranjau', group: 'attack' } };
+  st.players[0].hand.push({ id: 'a2', kind: 'ranjau', group: 'attack' });
+  const b = ludo.beginAttack(st, 0, { id: 'a2', kind: 'ranjau', group: 'attack' }, {});
+  assert.equal(b.needsPlant, true);
+  assert.equal(st.phase, 'plantRanjau');
+  const pr = ludo.plantRanjau(st, 0, 'a2', 10);
+  assert.equal(pr.ok, true);
+  assert.equal(st.mines.length, 1);
+  assert.equal(st.mines[0].abs, 10);
+  // Mine icon removed after explosion (Sensei 2026-11-03).
+  ludo.consumeMine(st, st.mines[0].id);
+  assert.equal(st.mines.length, 0);
+});
+
+test('Ranjau: tidak bisa tanam di petak aman', () => {
+  const st = fresh();
+  st.phase = 'plantRanjau';
+  st.pendingPlant = { player: 0, cardId: 'a2' };
+  st.players[0].hand.push({ id: 'a2', kind: 'ranjau', group: 'attack' });
+  const r = ludo.plantRanjau(st, 0, 'a2', 0); // abs 0 is safe
+  assert.equal(r.ok, false);
 });
 
 test('always-defense: target tanpa kartu defense tetap ditanya (Sensei 2026-11-03)', () => {
@@ -254,7 +298,7 @@ test('netral hanya langkah: +3 dari 3 tidak menciptakan keluar base/kocok lagi',
 test('netral: kartu - tidak boleh membuat langkah < 1; maks 1 per kocokan', () => {
   const st = fresh();
   st.phase = 'move'; st.turn = 0; st.dice = 1; st.steps = 1;
-  handOf(st, 0, ['minus2', 'plus1']);
+  handOf(st, 0, ['bebas', 'plus1']);
   assert.equal(ludo.useNeutral(st, 0, 'h0-0').ok, false);
   st.dice = 5; st.steps = 5;
   assert.equal(ludo.useNeutral(st, 0, 'h0-1').ok, true);
@@ -282,7 +326,7 @@ test('Beku: token beku tidak bisa digerakkan selama 2 giliran (Sensei 2026-11-03
 test('toClient tidak membocorkan tangan lawan atau urutan deck', () => {
   const st = fresh();
   handOf(st, 0, ['perisai']);
-  handOf(st, 1, ['cermin']);
+  handOf(st, 1, ['antistep']);
   const snap = ludo.toClient(st, 0);
   assert.deepEqual(snap.players[0].hand.map((c) => c.kind), ['perisai']);
   assert.equal(snap.players[1].hand, undefined);
@@ -322,64 +366,62 @@ test('bot attack: format mentah bot gagal, format terjemahan server berhasil (Sn
   assert.equal(st.players[1].hand.length, 0);
 });
 
-test('bot attack Bom: botChooseAttack menemukan petak, semua korban kena (friendly fire)', () => {
+test('bot attack Ranjau: botChooseAttack menemukan petak strategis', () => {
   const st = fresh();
   setTrack(st, 0, 0, 10);
-  setTrack(st, 1, 0, 49); // abs 10 juga
-  const rawBot = ludo.botChooseAttack(st, 0, { id: 'a2', kind: 'bom', group: 'attack' });
-  assert.deepEqual(rawBot, { abs: 10 });
-  // Old server path would read rawBot.targetAbs = undefined and
-  // bombTargets would return no victims; the translated path works.
-  const b2 = ludo.beginAttack(st, 0, { id: 'a2', kind: 'bom', group: 'attack' }, { abs: rawBot.abs });
-  assert.equal(b2.needsDefense, true); // Sensei 2026-11-03: always ask
-  let r2 = ludo.resolveDefenseStep(st, { attack: b2.attack, defender: b2.defender }, null);
-  r2 = ludo.resolveDefenseStep(st, { attack: b2.attack, defender: r2.defender }, null);
-  assert.equal(r2.done, true);
-  assert.equal(st.players[0].tokens[0].progress, -1);
-  assert.equal(st.players[1].tokens[0].progress, -1);
+  setTrack(st, 1, 0, 15); // enemy at abs 15
+  const rawBot = ludo.botChooseAttack(st, 0, { id: 'a2', kind: 'ranjau', group: 'attack' });
+  assert.ok(rawBot && Number.isInteger(rawBot.abs));
+  // Bot prefers blocks near enemies.
+  assert.ok(rawBot.abs >= 0 && rawBot.abs < 52);
 });
 
-test('bot attack Seret + Cermin memantulkan ke penyerang', () => {
+test('AntiStep tidak berlaku untuk Seret (hanya untuk injak)', () => {
   const st = fresh();
   setTrack(st, 0, 0, 20);
   setTrack(st, 1, 0, 10);
-  handOf(st, 1, ['cermin']);
-  const card = { id: 'a3', kind: 'seret', group: 'attack' };
-  const rawBot = ludo.botChooseAttack(st, 0, card);
-  assert.equal(rawBot.player, 1);
-  const b = ludo.beginAttack(st, 0, card, { player: rawBot.player, token: rawBot.token });
-  assert.equal(b.needsDefense, true);
-  const r = ludo.resolveDefenseStep(st, { attack: b.attack, defender: 1 }, 'h1-0');
-  assert.equal(r.reflected, true);
-  assert.equal(st.players[0].tokens[0].progress, 10); // 20 - 10, terpantul
-  assert.equal(st.players[1].tokens[0].progress, 10); // korban tidak bergerak
+  handOf(st, 1, ['antistep']);
+  const r = ludo.resolveDefense(st, { attack: { kind: 'seret', attacker: 0, targetPlayer: 1, targetToken: 0 }, defender: 1 }, 'h1-0');
+  assert.equal(r.ok, false);
 });
 
-test('bot attack Beku + Teleport memindah ke petak bintang terdekat di BELAKANG', () => {
+test('Teleport: butuh pilih destinasi (maks 3 maju/mundur)', () => {
   const st = fresh();
-  setTrack(st, 0, 0, 20);
-  setTrack(st, 1, 0, 10); // abs 23, petak bintang terdekat di belakang = 21
+  setTrack(st, 1, 0, 10);
   handOf(st, 1, ['teleport']);
-  const card = { id: 'a4', kind: 'beku', group: 'attack' };
-  const b = ludo.beginAttack(st, 0, card, { player: 1, token: 0 });
-  assert.equal(b.needsDefense, true);
-  const r = ludo.resolveDefenseStep(st, { attack: b.attack, defender: 1 }, 'h1-0');
-  assert.equal(r.done, true);
-  assert.equal(st.players[1].tokens[0].progress, 8); // abs 21 - offset hijau 13
-  assert.equal(ludo.isFrozen(st, 1, 0), false);
+  const r = ludo.resolveDefense(st, { attack: { kind: 'beku', attacker: 0, targetPlayer: 1, targetToken: 0 }, defender: 1 }, 'h1-0');
+  assert.equal(r.ok, true);
+  assert.equal(r.needsDest, 'teleport');
+  const dests = ludo.validTeleportDests(st, 1, 0);
+  assert.ok(dests.length > 0);
+  assert.ok(dests.every((d) => Math.abs(d.progress - 10) <= 3 && Math.abs(d.progress - 10) >= 1));
+});
+
+test('Escape: mundur maks 3 petak', () => {
+  const st = fresh();
+  setTrack(st, 1, 0, 10);
+  handOf(st, 1, ['escape']);
+  const r = ludo.resolveDefense(st, { attack: { kind: 'sniper', attacker: 0, targetPlayer: 1, targetToken: 0 }, defender: 1 }, 'h1-0');
+  assert.equal(r.ok, true);
+  assert.equal(r.needsDest, 'escape');
+  const dests = ludo.validEscapeDests(st, 1, 0);
+  assert.deepEqual(dests.map((d) => d.progress), [9, 8, 7]);
 });
 
 test('bot defense: bot defender memilih kartu defense sesuai jenis serangan', () => {
   const st = fresh();
-  handOf(st, 1, ['perisai', 'cermin', 'teleport']);
-  // Sniper: perisai diprioritaskan atas cermin/teleport.
+  handOf(st, 1, ['perisai', 'antistep', 'teleport']);
+  // Sniper: perisai diprioritaskan.
   assert.equal(ludo.botChooseDefense(st, 1, { attack: { kind: 'sniper' } }), 'h1-0');
-  // Seret tanpa perisai: cermin diprioritaskan.
-  handOf(st, 1, ['cermin', 'teleport']);
-  assert.equal(ludo.botChooseDefense(st, 1, { attack: { kind: 'seret' } }), 'h1-0');
-  // Bom: cermin TIDAK berlaku, jadi teleport yang dipilih.
-  handOf(st, 1, ['cermin', 'teleport']);
-  assert.equal(ludo.botChooseDefense(st, 1, { attack: { kind: 'bom' } }), 'h1-1');
+  // Seret tanpa perisai: teleport diprioritaskan (antistep tidak berlaku).
+  handOf(st, 1, ['antistep', 'teleport']);
+  assert.equal(ludo.botChooseDefense(st, 1, { attack: { kind: 'seret' } }), 'h1-1');
+  // Ranjau: antistep TIDAK berlaku, jadi teleport yang dipilih.
+  handOf(st, 1, ['antistep', 'teleport']);
+  assert.equal(ludo.botChooseDefense(st, 1, { attack: { kind: 'ranjau' } }), 'h1-1');
+  // Stomp: perisai > antistep > teleport.
+  handOf(st, 1, ['antistep', 'teleport']);
+  assert.equal(ludo.botChooseDefense(st, 1, { attack: { kind: 'stomp' } }), 'h1-0');
   // Tanpa kartu defense: null (terima serangan).
   handOf(st, 1, ['plus1']);
   assert.equal(ludo.botChooseDefense(st, 1, { attack: { kind: 'sniper' } }), null);

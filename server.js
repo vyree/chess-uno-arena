@@ -1968,6 +1968,44 @@ function doLudoMove(room, tokenIdx) {
   if (st.boosterDecisionPending) return { ok: false, error: 'jawab dulu: mau pakai booster tidak?' };
   const r = ludo.applyMove(st, st.turn, tokenIdx, st.steps, st.dice);
   if (!r.ok) return r;
+  // Ranjau blast: mine explodes, victim gets defense (Sensei 2026-11-03).
+  if (r.mineBlast) {
+    const mb = r.mineBlast;
+    st.pendingMineBlast = { ...mb, moveResult: r };
+    st.phase = 'mineDefense';
+    st.pendingDefense = {
+      attack: { kind: 'ranjau', attacker: mb.mineOwner, mineId: mb.mineId, targetPlayer: mb.victim.player, targetToken: mb.victim.token },
+      defender: mb.victim.player,
+      victim: mb.victim,
+    };
+    // Explosion animation event.
+    ludo.pushAnimEvent(st, 'mineBlast', { abs: mb.abs, player: mb.victim.player, token: mb.victim.token });
+    ludoAnnounce(room, `💥 RANJAU MELEDAK! Bidak ${dispName(room.players[mb.victim.player])} menginjak ranjau!`, 'ranjau');
+    ludoSync(room);
+    ludoBotAct(room);
+    return { ok: true };
+  }
+  // Stomp defense: victims get a chance to defend (Sensei 2026-11-03).
+  if (r.needsStompDefense) {
+    st.pendingStomp = { attacker: st.turn, moverToken: tokenIdx, victims: r.victims, abs: r.stompAbs, moveResult: r };
+    if (r.victims.length > 1) {
+      // Attacker chooses ONE victim first (existing UI).
+      st.phase = 'stompChoose';
+      st.pendingCaptureChoice = { victims: r.victims, moveResult: r, forStomp: true };
+    } else {
+      const v = r.victims[0];
+      st.phase = 'defense';
+      st.pendingDefense = {
+        attack: { kind: 'stomp', attacker: st.turn, targetPlayer: v.player, targetToken: v.token },
+        defender: v.player,
+        victim: v,
+      };
+      ludoAnnounce(room, `${dispName(room.players[st.turn])} menginjak bidak ${dispName(room.players[v.player])}!`);
+    }
+    ludoSync(room);
+    ludoBotAct(room);
+    return { ok: true };
+  }
   if (r.needsCaptureChoice) {
     // Sensei 2026-11-03: 2+ victims — player must choose ONE via popup.
     st.phase = 'chooseCapture';
@@ -1984,12 +2022,28 @@ function doLudoMove(room, tokenIdx) {
 }
 function doLudoChooseCapture(room, targetPlayer, targetToken) {
   const st = room.ludo.st;
-  if (st.phase !== 'chooseCapture' || !st.pendingCaptureChoice || st.over) {
+  if ((st.phase !== 'chooseCapture' && st.phase !== 'stompChoose') || !st.pendingCaptureChoice || st.over) {
     return { ok: false, error: 'tidak ada pilihan makan yang menunggu' };
   }
+  const isStomp = st.phase === 'stompChoose';
   const r = ludo.resolveCaptureChoice(st, st.turn, targetPlayer, targetToken);
   if (!r.ok) return r;
   const v = r.moveResult.captured[0];
+  if (isStomp) {
+    // Stomp: chosen victim gets defense (Sensei 2026-11-03).
+    st.pendingCaptureChoice = null;
+    st.pendingStomp = { attacker: st.turn, moverToken: st.pendingStomp.moverToken, victims: [v], abs: st.pendingStomp.abs, moveResult: r.moveResult };
+    st.phase = 'defense';
+    st.pendingDefense = {
+      attack: { kind: 'stomp', attacker: st.turn, targetPlayer: v.player, targetToken: v.token },
+      defender: v.player,
+      victim: v,
+    };
+    ludoAnnounce(room, `${dispName(room.players[st.turn])} menginjak bidak ${dispName(room.players[v.player])}!`);
+    ludoSync(room);
+    ludoBotAct(room);
+    return { ok: true };
+  }
   ludoAnnounce(room, `${dispName(room.players[st.turn])} memakan bidak ${dispName(room.players[v.player])}!`);
   ludoAfterMove(room, r.moveResult);
   return { ok: true };
@@ -2008,7 +2062,17 @@ function doLudoAttack(room, data) {
   if (st.phase !== 'attack' || !st.pendingAttack || st.over) return { ok: false, error: 'tidak ada kartu attack yang menunggu' };
   const card = st.pendingAttack.card;
   const seat = st.turn;
-  const target = card.kind === 'bom' ? { abs: data.targetAbs } : { player: data.targetPlayer, token: data.targetToken };
+  // Ranjau: confirm intent, then enter planting phase (Sensei 2026-11-03).
+  if (card.kind === 'ranjau') {
+    const b = ludo.beginAttack(st, seat, card, {});
+    if (!b.ok) return b;
+    // beginAttack sets phase='plantRanjau' and pendingPlant.
+    ludoAnnounce(room, `${dispName(room.players[seat])} akan menanam ${ludo.CARD_DEFS[card.kind].name}! Pilih petak yang ditandai.`, card.kind);
+    ludoSync(room);
+    ludoBotAct(room);
+    return { ok: true };
+  }
+  const target = { player: data.targetPlayer, token: data.targetToken };
   const b = ludo.beginAttack(st, seat, card, target);
   if (!b.ok) return b;
   if (b.needsDefense) {
@@ -2016,10 +2080,98 @@ function doLudoAttack(room, data) {
     st.pendingDefense = { attack: b.attack, defender: b.defender, victim: b.victim };
     ludoAnnounce(room, `${dispName(room.players[seat])} memakai ${ludo.CARD_DEFS[card.kind].name}!`, card.kind);
     ludoSync(room);
+    ludoBotAct(room);
     return { ok: true };
   }
   ludoAnnounce(room, `${dispName(room.players[seat])} memakai ${ludo.CARD_DEFS[card.kind].name}!`, card.kind);
   ludoContinueAfterAttack(room);
+  return { ok: true };
+}
+// Plant a Ranjau (Sensei 2026-11-03).
+function doLudoRanjauPlant(room, abs) {
+  const st = room.ludo.st;
+  if (st.phase !== 'plantRanjau' || !st.pendingPlant || st.over) return { ok: false, error: 'tidak ada ranjau yang menunggu ditanam' };
+  const seat = st.pendingPlant.player;
+  const r = ludo.plantRanjau(st, seat, st.pendingPlant.cardId, abs);
+  if (!r.ok) return r;
+  ludoAnnounce(room, `${dispName(room.players[seat])} menanam 💣 Ranjau di petak ${abs}!`, 'ranjau');
+  // Planting consumes the attack; continue after attack.
+  st.pendingAttack = null;
+  ludoContinueAfterAttack(room);
+  return { ok: true };
+}
+// Confirm teleport destination (Sensei 2026-11-03).
+function doLudoTeleportDest(room, abs, cardId) {
+  const st = room.ludo.st;
+  if (st.phase !== 'teleportDest' || !st.pendingTeleport || st.over) return { ok: false, error: 'tidak ada teleport yang menunggu' };
+  const pt = st.pendingTeleport;
+  const r = ludo.doTeleportDest(st, pt.defender, pt.token, cardId || pt.cardId, abs);
+  if (!r.ok) return r;
+  // Teleport animation event (Sensei 2026-11-03).
+  ludo.pushAnimEvent(st, 'teleport', { player: pt.defender, token: pt.token, fromAbs: r.fromAbs, toAbs: r.toAbs });
+  ludoAnnounce(room, `${dispName(room.players[pt.defender])} TELEPORT! 🌀`, 'teleport');
+  st.pendingTeleport = null;
+  // After teleport, resolve the original attack.
+  if (pt.isMine) {
+    // Mine blast: teleport escapes, mine consumed.
+    ludo.consumeMine(st, pt.attack.mineId);
+    ludoAfterMineBlast(room, { card: r.card });
+  } else if (pt.attack.kind === 'stomp') {
+    ludoAfterStomp(room, { card: r.card });
+  } else {
+    ludoContinueAfterAttack(room);
+  }
+  return { ok: true, fromAbs: r.fromAbs, toAbs: r.toAbs };
+}
+// Confirm escape destination (Sensei 2026-11-03).
+function doLudoEscapeDest(room, abs, cardId) {
+  const st = room.ludo.st;
+  if (st.phase !== 'escapeDest' || !st.pendingEscape || st.over) return { ok: false, error: 'tidak ada escape yang menunggu' };
+  const pe = st.pendingEscape;
+  const r = ludo.doEscapeDest(st, pe.defender, pe.token, cardId || pe.cardId, abs);
+  if (!r.ok) return r;
+  ludoAnnounce(room, `${dispName(room.players[pe.defender])} ESCAPE! 💨 Mundur ke petak ${abs}.`, 'escape');
+  st.pendingEscape = null;
+  // Escape landing can stomp (Sensei 2026-11-03).
+  if (r.victims && r.victims.length) {
+    const victims = r.victims;
+    st.pendingStomp = { attacker: pe.defender, moverToken: pe.token, victims, abs };
+    if (victims.length > 1) {
+      st.phase = 'stompChoose';
+      st.pendingCaptureChoice = { victims, moveResult: null, forStomp: true, escapeAttacker: pe.defender };
+    } else {
+      const v = victims[0];
+      st.phase = 'defense';
+      st.pendingDefense = {
+        attack: { kind: 'stomp', attacker: pe.defender, targetPlayer: v.player, targetToken: v.token },
+        defender: v.player,
+        victim: v,
+      };
+      ludoAnnounce(room, `${dispName(room.players[pe.defender])} menginjak bidak ${dispName(room.players[v.player])}!`);
+    }
+    ludoSync(room);
+    ludoBotAct(room);
+    return { ok: true, fromAbs: r.fromAbs, toAbs: r.toAbs };
+  }
+  // No stomp: resolve original attack.
+  if (pe.isMine) {
+    ludo.consumeMine(st, pe.attack.mineId);
+    ludoAfterMineBlast(room, { card: r.card });
+  } else if (pe.attack.kind === 'stomp') {
+    ludoAfterStomp(room, { card: r.card });
+  } else {
+    ludoContinueAfterAttack(room);
+  }
+  return { ok: true, fromAbs: r.fromAbs, toAbs: r.toAbs };
+}
+// Reclaim a taken-over seat from the bot (Sensei 2026-11-03).
+function doLudoReclaim(room, player) {
+  const st = room.ludo.st;
+  if (!player.takenOver) return { ok: false, error: 'tidak sedang diambil alih bot' };
+  player.takenOver = false;
+  ludoAnnounce(room, `${dispName(player)} mengambil alih permainan kembali!`);
+  ludoSync(room);
+  ludoBotAct(room);
   return { ok: true };
 }
 function doLudoPassAttack(room) {
@@ -2031,22 +2183,116 @@ function doLudoPassAttack(room) {
 }
 function doLudoDefense(room, cardId) {
   const st = room.ludo.st;
-  if (st.phase !== 'defense' || !st.pendingDefense) return { ok: false, error: 'tidak ada serangan yang menunggu defense' };
+  if ((st.phase !== 'defense' && st.phase !== 'mineDefense') || !st.pendingDefense) return { ok: false, error: 'tidak ada serangan yang menunggu defense' };
   const defender = st.pendingDefense.defender;
-  if (st.turn !== defender && room.ludo.st.turn !== defender) {
-    // Defense is the defender's choice, not the attacker's turn.
-    // The engine turn stays with the attacker; validate by defender seat.
-  }
+  const isMine = st.phase === 'mineDefense';
   const r = ludo.resolveDefenseStep(st, st.pendingDefense, cardId);
   if (!r.ok) return r;
   if (r.card) ludoAnnounce(room, `${dispName(room.players[defender])} memakai ${ludo.CARD_DEFS[r.card.kind].name}!`, r.card.kind);
+  // Teleport/Escape: need destination choice (Sensei 2026-11-03).
+  if (r.needsDest === 'teleport') {
+    const victim = st.pendingDefense.victim || { player: defender, token: st.pendingDefense.attack.targetToken };
+    st.pendingTeleport = { defender, token: victim.token, cardId: r.cardId, attack: st.pendingDefense.attack, isMine };
+    st.phase = 'teleportDest';
+    st.pendingDefense = null;
+    ludoSync(room);
+    ludoBotAct(room);
+    return { ok: true };
+  }
+  if (r.needsDest === 'escape') {
+    const victim = st.pendingDefense.victim || { player: defender, token: st.pendingDefense.attack.targetToken };
+    st.pendingEscape = { defender, token: victim.token, cardId: r.cardId, attack: st.pendingDefense.attack, isMine };
+    st.phase = 'escapeDest';
+    st.pendingDefense = null;
+    ludoSync(room);
+    ludoBotAct(room);
+    return { ok: true };
+  }
   if (r.done) {
-    ludoContinueAfterAttack(room);
+    if (isMine) {
+      ludoAfterMineBlast(room, r);
+    } else if (st.pendingDefense && st.pendingDefense.attack.kind === 'stomp') {
+      ludoAfterStomp(room, r);
+    } else {
+      ludoContinueAfterAttack(room);
+    }
   } else {
     st.pendingDefense = { attack: st.pendingDefense.attack, defender: r.defender, victim: r.victim };
     ludoSync(room);
   }
+  ludoBotAct(room);
   return { ok: true };
+}
+// After a mine blast resolves (Sensei 2026-11-03).
+function ludoAfterMineBlast(room, r) {
+  const st = room.ludo.st;
+  const mb = st.pendingMineBlast;
+  st.pendingMineBlast = null;
+  st.pendingDefense = null;
+  if (r.killed && r.killed.length) {
+    const v = r.killed[0];
+    // Shatter animation event (Sensei 2026-11-03).
+    ludo.pushAnimEvent(st, 'shatter', { player: v.player, token: v.token });
+    ludoAnnounce(room, `💥 Bidak ${dispName(room.players[v.player])} hancur berkeping! Kembali ke base.`, 'ranjau');
+  }
+  ludoSync(room);
+  // Continue the move flow.
+  if (mb && mb.moveResult) {
+    // If victim survived via Perisai and is still on the square,
+    // check for stomp against enemies there.
+    if ((!r.killed || !r.killed.length) && r.card && r.card.kind === 'perisai') {
+      const victim = mb.victim;
+      const tok = st.players[victim.player].tokens[victim.token];
+      if (tok.progress >= 0 && tok.progress <= 50) {
+        const abs = ludo.absOf(victim.player, tok.progress);
+        if (abs === mb.abs && !ludo.isSafeAbs(abs)) {
+          const enemies = ludo.tokensAtAbs(st, abs).filter((v) => v.player !== victim.player);
+          if (enemies.length) {
+            // Stomp! Victim (as mover) stomps enemies.
+            st.pendingStomp = { attacker: victim.player, moverToken: victim.token, victims: enemies, abs, moveResult: mb.moveResult };
+            if (enemies.length > 1) {
+              st.phase = 'stompChoose';
+              st.pendingCaptureChoice = { victims: enemies, moveResult: mb.moveResult, forStomp: true };
+            } else {
+              const v = enemies[0];
+              st.phase = 'defense';
+              st.pendingDefense = {
+                attack: { kind: 'stomp', attacker: victim.player, targetPlayer: v.player, targetToken: v.token },
+                defender: v.player,
+                victim: v,
+              };
+              ludoAnnounce(room, `${dispName(room.players[victim.player])} menginjak bidak ${dispName(room.players[v.player])}!`);
+            }
+            ludoSync(room);
+            ludoBotAct(room);
+            return;
+          }
+        }
+      }
+    }
+    ludoAfterMove(room, mb.moveResult);
+  } else {
+    ludoBotAct(room);
+  }
+}
+// After a stomp defense resolves (Sensei 2026-11-03).
+function ludoAfterStomp(room, r) {
+  const st = room.ludo.st;
+  const ps = st.pendingStomp;
+  st.pendingStomp = null;
+  st.pendingDefense = null;
+  if (r.killed && r.killed.length) {
+    const v = r.killed[0];
+    ludoAnnounce(room, `${dispName(room.players[st.turn])} memakan bidak ${dispName(room.players[v.player])}!`);
+  } else {
+    ludoAnnounce(room, `Bidak ${dispName(room.players[r.card ? st.turn : 0])} bertahan!`);
+  }
+  ludoSync(room);
+  if (ps && ps.moveResult) {
+    ludoAfterMove(room, ps.moveResult);
+  } else {
+    ludoBotAct(room);
+  }
 }
 function doLudoSwap(room, oldCardId) {
   const st = room.ludo.st;
@@ -2075,9 +2321,18 @@ function ludoBotStep(room) {
   const st = room.ludo.st;
   if (room.status !== 'playing' || st.over) return;
   const seat = st.turn;
-  // Same defense-actor rule as scheduleLudoBot: during a defense
-  // the acting seat is the defender, not the turn holder.
-  const actor = (st.phase === 'defense' && st.pendingDefense) ? st.pendingDefense.defender : seat;
+  // Defense-actor rule: during defense/mineDefense/teleportDest/escapeDest/
+  // plantRanjau/stompChoose, the acting seat may differ from the turn holder.
+  let actor = seat;
+  if ((st.phase === 'defense' || st.phase === 'mineDefense') && st.pendingDefense) {
+    actor = st.pendingDefense.defender;
+  } else if (st.phase === 'teleportDest' && st.pendingTeleport) {
+    actor = st.pendingTeleport.defender;
+  } else if (st.phase === 'escapeDest' && st.pendingEscape) {
+    actor = st.pendingEscape.defender;
+  } else if (st.phase === 'plantRanjau' && st.pendingPlant) {
+    actor = st.pendingPlant.player;
+  }
   const p = room.players[actor];
   if (!seatDriven(p)) return;
   if (st.phase === 'roll') {
@@ -2130,33 +2385,26 @@ function ludoBotStep(room) {
   }
   if (st.phase === 'attack') {
     const card = st.pendingAttack.card;
+    // Ranjau: bot confirms intent, then plants in plantRanjau phase.
+    if (card.kind === 'ranjau') {
+      const r = doLudoAttack(room, {});
+      if (!r.ok) doLudoPassAttack(room);
+      return;
+    }
     // Sensei 2026-11-03: usable attack MUST be used. botChooseAttack may
     // return null (heuristic pass); fall back to the first valid target.
     let target = ludo.botChooseAttack(st, seat, card);
     if (!target) {
-      if (card.kind === 'bom') {
-        const abs = ludo.SKILL_BLOCKS.find((a) => ludo.bombTargets(st, a).length > 0);
-        if (abs !== undefined) target = { abs };
-      } else {
-        const ts = ludo.attackTargets(st, seat, card.kind);
-        if (ts.length) target = { player: ts[0].player, token: ts[0].token };
-      }
+      const ts = ludo.attackTargets(st, seat, card.kind);
+      if (ts.length) target = { player: ts[0].player, token: ts[0].token };
     }
     if (!target) doLudoPassAttack(room);
     else {
-      // botChooseAttack returns the engine shape {player, token} /
-      // {abs}, but doLudoAttack expects the human-client shape
-      // {targetPlayer, targetToken} / {targetAbs} (it translates
-      // that shape into the engine shape for beginAttack). Passing
-      // the bot shape through raw made beginAttack fail with
-      // "target serangan tidak valid" / "tidak ada bidak di petak
-      // itu", and the failure was ignored without a sync or a new
-      // timer — so the game hung in phase 'attack' until the 60s
-      // turn timer passed the card. Translate here, at the single
-      // bot call site, so the human path is untouched.
-      const data = card.kind === 'bom'
-        ? { targetAbs: target.abs }
-        : { targetPlayer: target.player, targetToken: target.token };
+      // botChooseAttack returns the engine shape {player, token},
+      // but doLudoAttack expects the human-client shape
+      // {targetPlayer, targetToken} (it translates
+      // that shape into the engine shape for beginAttack).
+      const data = { targetPlayer: target.player, targetToken: target.token };
       const r = doLudoAttack(room, data);
       // A stale target must never hang the game: fall back to a
       // legal pass (card returns to the deck, as a pass does).
@@ -2164,10 +2412,57 @@ function ludoBotStep(room) {
     }
     return;
   }
-  if (st.phase === 'defense') {
+  if (st.phase === 'plantRanjau') {
+    const planter = st.pendingPlant.player;
+    const p = room.players[planter];
+    if (!seatDriven(p)) return;
+    const card = st.players[planter].hand.find((c) => c.id === st.pendingPlant.cardId);
+    if (!card) { ludoSync(room); return; }
+    const target = ludo.botChooseAttack(st, planter, card);
+    if (target && target.abs !== undefined) {
+      doLudoRanjauPlant(room, target.abs);
+    } else {
+      // Fallback: first valid block.
+      const blocks = ludo.validRanjauBlocks(st);
+      if (blocks.length) doLudoRanjauPlant(room, blocks[0]);
+      else ludoSync(room);
+    }
+    return;
+  }
+  if (st.phase === 'defense' || st.phase === 'mineDefense') {
     const defender = st.pendingDefense.defender;
+    const p = room.players[defender];
+    if (!seatDriven(p)) return;
     const cardId = ludo.botChooseDefense(st, defender, st.pendingDefense);
     doLudoDefense(room, cardId);
+    return;
+  }
+  if (st.phase === 'teleportDest') {
+    const pt = st.pendingTeleport;
+    const p = room.players[pt.defender];
+    if (!seatDriven(p)) return;
+    const dests = ludo.validTeleportDests(st, pt.defender, pt.token);
+    const dest = ludo.botChooseDest(st, pt.defender, pt.token, dests, 'teleport');
+    if (dest) doLudoTeleportDest(room, dest.abs, pt.cardId);
+    else ludoSync(room);
+    return;
+  }
+  if (st.phase === 'escapeDest') {
+    const pe = st.pendingEscape;
+    const p = room.players[pe.defender];
+    if (!seatDriven(p)) return;
+    const dests = ludo.validEscapeDests(st, pe.defender, pe.token);
+    const dest = ludo.botChooseDest(st, pe.defender, pe.token, dests, 'escape');
+    if (dest) doLudoEscapeDest(room, dest.abs, pe.cardId);
+    else ludoSync(room);
+    return;
+  }
+  if (st.phase === 'stompChoose') {
+    const pending = st.pendingCaptureChoice;
+    if (pending && pending.victims.length) {
+      const v = pending.victims[0];
+      doLudoChooseCapture(room, v.player, v.token);
+    }
     return;
   }
   if (st.phase === 'swap') {
@@ -2458,6 +2753,40 @@ async function route(ws, type, data) {
       if (room.game !== 'ludo' || room.status !== 'playing' || !room.ludo) { sendError(ws, 'Game Ludo belum berjalan'); return; }
       if (player.seat !== room.ludo.st.turn) { sendError(ws, 'Bukan giliranmu'); return; }
       const r = doLudoSwap(room, data.oldCardId);
+      if (!r.ok) { sendError(ws, r.error); return; }
+      return;
+    }
+    case 'ludo_ranjau_plant': {
+      const room = needRoom(); if (!room) return;
+      if (room.game !== 'ludo' || room.status !== 'playing' || !room.ludo) { sendError(ws, 'Game Ludo belum berjalan'); return; }
+      const v = validate.ludo_ranjau_plant(data);
+      if (!v.ok) { sendError(ws, v.error); return; }
+      const r = doLudoRanjauPlant(room, v.data.abs);
+      if (!r.ok) { sendError(ws, r.error); return; }
+      return;
+    }
+    case 'ludo_teleport_dest': {
+      const room = needRoom(); if (!room) return;
+      if (room.game !== 'ludo' || room.status !== 'playing' || !room.ludo) { sendError(ws, 'Game Ludo belum berjalan'); return; }
+      const v = validate.ludo_teleport_dest(data);
+      if (!v.ok) { sendError(ws, v.error); return; }
+      const r = doLudoTeleportDest(room, v.data.abs, v.data.cardId);
+      if (!r.ok) { sendError(ws, r.error); return; }
+      return;
+    }
+    case 'ludo_escape_dest': {
+      const room = needRoom(); if (!room) return;
+      if (room.game !== 'ludo' || room.status !== 'playing' || !room.ludo) { sendError(ws, 'Game Ludo belum berjalan'); return; }
+      const v = validate.ludo_escape_dest(data);
+      if (!v.ok) { sendError(ws, v.error); return; }
+      const r = doLudoEscapeDest(room, v.data.abs, v.data.cardId);
+      if (!r.ok) { sendError(ws, r.error); return; }
+      return;
+    }
+    case 'ludo_reclaim': {
+      const room = needRoom(); if (!room) return;
+      if (room.game !== 'ludo' || room.status !== 'playing' || !room.ludo) { sendError(ws, 'Game Ludo belum berjalan'); return; }
+      const r = doLudoReclaim(room, player);
       if (!r.ok) { sendError(ws, r.error); return; }
       return;
     }

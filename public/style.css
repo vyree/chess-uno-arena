@@ -1054,6 +1054,9 @@ body.low-gfx * {
   box-shadow: inset 0 0 0 2px rgba(0,0,0,.05);
 }
 .ludo-card .oval .val { transform: rotate(22deg); font-size: 26px; }
+.ludo-card .oval .val svg { width: 34px; height: 34px; display: block; }
+.ludo-card .oval .val .ludo-card-txt { font-size: 24px; font-weight: 800; }
+.ludo-card .cnr svg { width: 16px; height: 16px; display: block; }
 .ludo-card-name {
   font-size: 10px; font-weight: 700; line-height: 1.2; text-align: center;
   padding: 0 4px; margin-top: 6px; max-height: 24px; overflow: hidden;
@@ -1067,6 +1070,148 @@ body.low-gfx * {
 .ludo-card.card-neutral .oval .val { color: #7b2fbe; }
 .ludo-card.mini { width: 60px; height: 86px; margin: 0 auto 8px; cursor: default; }
 .ludo-card.mini .oval .val { font-size: 20px; }
+/* Block marking: yellow blinking outline for selectable blocks (Sensei 2026-11-03).
+   Used for Ranjau planting, Teleport/Escape destinations. */
+.ludo-block-mark {
+  position: absolute; width: 6.66%; height: 6.66%;
+  transform: translate(-50%, -50%);
+  border: 3px solid #ffe600; border-radius: 8px;
+  background: rgba(255, 230, 0, 0.15);
+  cursor: pointer; z-index: 5;
+  animation: ludo-block-blink 0.8s ease-in-out infinite;
+  pointer-events: auto;
+}
+@keyframes ludo-block-blink {
+  0%, 100% { opacity: 1; box-shadow: 0 0 12px #ffe600, inset 0 0 8px rgba(255,230,0,0.4); }
+  50% { opacity: 0.4; box-shadow: 0 0 4px #ffe600, inset 0 0 2px rgba(255,230,0,0.2); }
+}
+.ludo-block-mark:hover { background: rgba(255, 230, 0, 0.35); }
+/* Mine icon on planted Ranjau blocks (Sensei 2026-11-03). */
+.ludo-mine-icon {
+  position: absolute; width: 6.66%; height: 6.66%;
+  transform: translate(-50%, -50%);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; z-index: 4; pointer-events: none;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+  animation: ludo-mine-pulse 2s ease-in-out infinite;
+}
+@keyframes ludo-mine-pulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(-50%, -50%) scale(1.15); }
+}
+/* Target marking: valid attack targets glow (Sensei 2026-11-03). */
+.ludo-token-wrap.valid-target {
+  animation: ludo-target-glow 0.8s ease-in-out infinite;
+}
+@keyframes ludo-target-glow {
+  0%, 100% { filter: drop-shadow(0 0 6px #ff2e93); }
+  50% { filter: drop-shadow(0 0 14px #ff2e93); }
+}
+/* Mine blast: explosion at block (Sensei 2026-11-03). */
+.ludo-explosion {
+  position: absolute; width: 12%; height: 12%;
+  transform: translate(-50%, -50%);
+  z-index: 20; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+}
+.ludo-explosion .blast {
+  width: 100%; height: 100%; border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, #ffd600 25%, #ff6a00 55%, rgba(255,46,147,0) 75%);
+  animation: ludo-blast 0.7s ease-out forwards;
+}
+.ludo-explosion .ring {
+  position: absolute; width: 100%; height: 100%; border-radius: 50%;
+  border: 4px solid #ffd600;
+  animation: ludo-blast-ring 0.7s ease-out forwards;
+}
+@keyframes ludo-blast {
+  0% { transform: scale(0.2); opacity: 1; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+@keyframes ludo-blast-ring {
+  0% { transform: scale(0.3); opacity: 1; }
+  100% { transform: scale(3); opacity: 0; }
+}
+/* Shatter: pawn breaks into pieces (Sensei 2026-11-03). */
+.ludo-token-wrap.shattered {
+  animation: ludo-shatter 0.6s ease-in forwards;
+}
+@keyframes ludo-shatter {
+  0% { transform: scale(1) rotate(0deg); opacity: 1; filter: none; }
+  30% { transform: scale(1.3) rotate(8deg); opacity: 1; filter: brightness(2); }
+  60% { transform: scale(0.7) rotate(-12deg); opacity: 0.7; filter: brightness(3) saturate(0); }
+  100% { transform: scale(0.1) rotate(30deg); opacity: 0; filter: brightness(4) saturate(0); }
+}
+/* Chain: SVG chain from destination to pawn (Sensei 2026-11-03). */
+.ludo-chain-svg {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  z-index: 15; pointer-events: none; overflow: visible;
+}
+.ludo-chain-svg path {
+  fill: none; stroke: #8a8a8a; stroke-width: 4;
+  stroke-dasharray: 8 6; stroke-linecap: round;
+  animation: ludo-chain-draw 0.5s ease-out;
+}
+.ludo-chain-svg .chain-link {
+  fill: #c0c0c0; stroke: #666; stroke-width: 2;
+}
+@keyframes ludo-chain-draw {
+  from { stroke-dashoffset: 60; opacity: 0; }
+  to { stroke-dashoffset: 0; opacity: 1; }
+}
+/* Teleport: dissolve at origin, appear at destination (Sensei 2026-11-03). */
+.ludo-teleport-out {
+  position: absolute; width: 6.66%; height: 6.66%;
+  transform: translate(-50%, -50%);
+  z-index: 18; pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(123,47,190,0.9) 0%, rgba(255,46,147,0.6) 50%, transparent 75%);
+  animation: ludo-tp-out 0.5s ease-in forwards;
+}
+.ludo-teleport-in {
+  position: absolute; width: 6.66%; height: 6.66%;
+  transform: translate(-50%, -50%);
+  z-index: 18; pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(123,47,190,0.7) 50%, transparent 75%);
+  animation: ludo-tp-in 0.5s ease-out forwards;
+}
+@keyframes ludo-tp-out {
+  0% { transform: translate(-50%,-50%) scale(0.5); opacity: 0; }
+  50% { transform: translate(-50%,-50%) scale(1.5); opacity: 1; }
+  100% { transform: translate(-50%,-50%) scale(0.1); opacity: 0; }
+}
+@keyframes ludo-tp-in {
+  0% { transform: translate(-50%,-50%) scale(0.1); opacity: 0; }
+  50% { transform: translate(-50%,-50%) scale(1.8); opacity: 1; }
+  100% { transform: translate(-50%,-50%) scale(1); opacity: 0; }
+}
+.ludo-token-wrap.teleporting {
+  animation: ludo-tp-pawn 0.6s ease-in-out;
+}
+@keyframes ludo-tp-pawn {
+  0%, 100% { opacity: 1; filter: none; }
+  50% { opacity: 0.2; filter: hue-rotate(180deg) brightness(1.5); }
+}
+/* Bot takeover: dark overlay + reclaim button (Sensei 2026-11-03). */
+.ludo-takeover-overlay {
+  position: absolute; inset: 0; z-index: 30;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; border-radius: 12px;
+  animation: ludo-overlay-in 0.4s ease-out;
+}
+@keyframes ludo-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.ludo-takeover-overlay p {
+  color: #fff; font-size: 15px; font-weight: 600; text-align: center;
+  margin: 0; padding: 0 20px;
+}
+.ludo-takeover-overlay .btn {
+  font-size: 15px; padding: 10px 24px;
+}
 .ludo-card.mini .ludo-card-name { font-size: 9px; }
 .ludo-card.mini .cnr { font-size: 11px; }
 .ludo-card-wrap { display: flex; flex-direction: column; gap: 4px; align-items: center; }

@@ -20,21 +20,18 @@ const MAX_SIXES_PER_TURN = 3;
 
 const CARD_DEFS = {
   sniper: { group: 'attack', name: 'Sniper', desc: 'Tembak 1 bidak musuh di jalur utama sampai pulang ke base. Dipakai langsung saat didapat; tidak bisa menyerang bidak di petak aman, base, jalur home, atau rumah.' },
-  bom: { group: 'attack', name: 'Bom Petak', desc: 'Pilih 1 petak jalur utama: semua bidak di petak itu pulang ke base, termasuk bidak sendiri (kecuali petak aman). Sekali pakai, instan, bukan ranjau.' },
+  ranjau: { group: 'attack', name: 'Ranjau', desc: 'Tanam ranjau di 1 petak jalur utama (kecuali petak aman). Meledak saat diinjak bidak siapapun, termasuk bidakmu sendiri — bidak yang menginjak hancur dan pulang ke base. Ranjau hangus setelah 1 ledakan.' },
   seret: { group: 'attack', name: 'Rantai Seret', desc: 'Tarik 1 bidak musuh mundur 10 petak di jalur utama. Dipakai langsung saat didapat.' },
-  beku: { group: 'attack', name: 'Es Beku', desc: 'Bekukan 1 bidak musuh: bidak itu tidak bisa digerakkan di giliran pemiliknya berikutnya. Dipakai langsung saat didapat.' },
+  beku: { group: 'attack', name: 'Es Beku', desc: 'Bekukan 1 bidak musuh selama 2 giliran: bidak itu tidak bisa digerakkan. Dipakai langsung saat didapat.' },
   perisai: { group: 'defense', name: 'Perisai Baja', desc: 'Batalkan 1 serangan terhadap 1 bidakmu. Dipakai hanya saat bidakmu diserang; habis sekali pakai.' },
-  cermin: { group: 'defense', name: 'Cermin Pantul', desc: 'Pantulkan serangan target-tunggal (Sniper, Rantai Seret, Es Beku) ke 1 bidak penyerang. Tidak berlaku untuk Bom Petak.' },
-  teleport: { group: 'defense', name: 'Teleport Darurat', desc: 'Saat diserang, bidakmu pindah ke petak bintang terdekat di belakang; kalau tidak ada, ke petak start warnanya.' },
-  kulit: { group: 'defense', name: 'Kulit Batu', desc: 'Serangan yang seharusnya membunuh diubah jadi mundur 6 petak saja, bukan pulang ke base.' },
+  antistep: { group: 'defense', name: 'Anti-Step', desc: 'Cegah 1x injakan: bidakmu tidak pulang ke base saat diinjak bidak lain. Kedua bidak menumpuk di petak itu. Habis sekali pakai.' },
+  teleport: { group: 'defense', name: 'Teleport', desc: 'Saat diserang (semua jenis serangan termasuk injak), teleport bidakmu maks 3 petak ke depan atau ke belakang. Pendaratan teleport tidak menginjak bidak lain.' },
+  escape: { group: 'defense', name: 'Escape', desc: 'Saat diserang, mundurkan bidakmu maks 3 petak (kamu pilih). Jika mendarat di bidak musuh, injak tetap berlaku.' },
   x2: { group: 'neutral', name: 'Langkah x2', desc: 'Langkah = 2 x dadu. Hanya mengubah langkah; tidak bisa dipakai untuk keluar base atau kocok lagi. Dipakai setelah kocok, sebelum jalan, maks 1 per kocokan.' },
   plus1: { group: 'neutral', name: '+1 Langkah', desc: 'Tambah 1 langkah. Hanya menambah langkah; tidak bisa dipakai untuk keluar base atau kocok lagi.' },
   plus2: { group: 'neutral', name: '+2 Langkah', desc: 'Tambah 2 langkah. Hanya menambah langkah; tidak bisa dipakai untuk keluar base atau kocok lagi.' },
   plus3: { group: 'neutral', name: '+3 Langkah', desc: 'Tambah 3 langkah. Hanya menambah langkah; tidak bisa dipakai untuk keluar base atau kocok lagi.' },
-  minus1: { group: 'neutral', name: '-1 Langkah', desc: 'Kurangi 1 langkah sendiri (alat presisi, misal pas masuk home). Hanya untuk diri sendiri; langkah akhir tidak boleh di bawah 1.' },
-  minus2: { group: 'neutral', name: '-2 Langkah', desc: 'Kurangi 2 langkah sendiri (alat presisi). Hanya untuk diri sendiri; langkah akhir tidak boleh di bawah 1.' },
-  minus3: { group: 'neutral', name: '-3 Langkah', desc: 'Kurangi 3 langkah sendiri (alat presisi). Hanya untuk diri sendiri; langkah akhir tidak boleh di bawah 1.' },
-  bebas: { group: 'neutral', name: 'Bebas Pilih Langkah', desc: 'Pilih jumlah langkah 1-6. Ini langkah, bukan angka dadu: pilih 6 langkah pun tidak keluar base dan tidak kocok lagi. Hanya untuk diri sendiri.' },
+  bebas: { group: 'neutral', name: 'Bebas Pilih Langkah', desc: 'Pilih jumlah langkah 1-6. Ini langkah, bukan angka dadu: pilih 6 langkah pun tidak keluar base dan tidak kocok lagi. Injak tetap bisa terpicu. Hanya untuk diri sendiri.' },
 };
 const CARD_KINDS = Object.keys(CARD_DEFS);
 
@@ -50,8 +47,12 @@ function shuffle(arr, rand) {
 function buildDeck(rand) {
   const deck = [];
   let n = 0;
+  // Deck composition (Sensei 2026-11-03): attack 4x4=16, defense 4x4=16,
+  // neutral 32 (x2/+1/+2/+3 @6 each, bebas @8). Total 64.
+  const NEUTRAL_COUNTS = { x2: 6, plus1: 6, plus2: 6, plus3: 6, bebas: 8 };
   for (const kind of CARD_KINDS) {
-    for (let c = 0; c < 4; c++) deck.push({ id: `c${n++}`, kind, group: CARD_DEFS[kind].group });
+    const count = CARD_DEFS[kind].group === 'neutral' ? (NEUTRAL_COUNTS[kind] || 4) : 4;
+    for (let c = 0; c < count; c++) deck.push({ id: `c${n++}`, kind, group: CARD_DEFS[kind].group });
   }
   return shuffle(deck, rand);
 }
@@ -79,6 +80,13 @@ function newGame(rand) {
     pendingAttack: null,
     pendingDefense: null,
     pendingDraw: null,
+    pendingPlant: null, // {player} while choosing a block for Ranjau (Sensei 2026-11-03)
+    pendingTeleport: null, // {defender, token} while choosing teleport destination (Sensei 2026-11-03)
+    pendingEscape: null, // {defender, token} while choosing escape destination (Sensei 2026-11-03)
+    pendingStomp: null, // {attacker, victims:[{player,token}]} for stomp defense (Sensei 2026-11-03)
+    pendingMineBlast: null, // {mineId, victim:{player,token}} when a mine explodes (Sensei 2026-11-03)
+    mines: [], // planted Ranjau: [{id, abs, owner}] (Sensei 2026-11-03)
+    animEvents: [], // one-shot client animation events: [{id, type, ...}] (Sensei 2026-11-03)
     blockCooldown: {},
     frozen: [],
     winner: null,
@@ -153,19 +161,23 @@ function applyMove(st, player, tokenIdx, steps, originalDice) {
   const result = { ok: true, move: mv, captured: [], landedSkill: false, enteredHome: mv.kind === 'home' };
   if (mv.kind === 'move' && mv.to <= 50) {
     const abs = absOf(player, mv.to);
+    // Ranjau check FIRST: mine explodes when stepped on (Sensei 2026-11-03).
+    // Stomp is deferred until the blast resolves.
+    const mine = mineAt(st, abs);
+    if (mine) {
+      result.mineBlast = { mineId: mine.id, mineOwner: mine.owner, victim: { player, token: tokenIdx }, abs };
+      return result;
+    }
     if (!isSafeAbs(abs)) {
       const victims = tokensAtAbs(st, abs).filter((v) => v.player !== player);
-      if (victims.length > 1) {
-        // Sensei 2026-11-03: player chooses ONE victim via popup.
-        // Capture is deferred; the mover's token is already placed.
-        result.needsCaptureChoice = true;
+      if (victims.length > 0) {
+        // Stomp now requires defense (Sensei 2026-11-03): victims get
+        // a chance to use Perisai / Teleport / Escape / Anti-Step.
+        // The mover is placed; victims stay until defense resolves.
+        result.needsStompDefense = true;
         result.victims = victims;
-      } else {
-        for (const v of victims) {
-          st.players[v.player].tokens[v.token].progress = -1;
-          clearFrozenToken(st, v.player, v.token);
-          result.captured.push(v);
-        }
+        result.stompAbs = abs;
+        return result;
       }
     }
     if (SKILL_BLOCKS.includes(abs)) result.landedSkill = true;
@@ -177,8 +189,8 @@ function applyMove(st, player, tokenIdx, steps, originalDice) {
 // Check if an attack card has any valid target right now (Sensei 2026-11-03).
 // Used by the draw ceremony to decide use-vs-burn.
 function isAttackUsable(st, attacker, card) {
-  if (card.kind === 'bom') {
-    return SKILL_BLOCKS.some((abs) => bombTargets(st, abs).length > 0);
+  if (card.kind === 'ranjau') {
+    return validRanjauBlocks(st).length > 0;
   }
   if (card.kind === 'sniper') {
     const onTrack = st.players[attacker].tokens.some((x) => x.progress >= 0 && x.progress <= 50);
@@ -271,11 +283,6 @@ function neutralSteps(kind, dice, choice) {
   if (kind === 'plus1') return { steps: dice + 1 };
   if (kind === 'plus2') return { steps: dice + 2 };
   if (kind === 'plus3') return { steps: dice + 3 };
-  if (kind === 'minus1' || kind === 'minus2' || kind === 'minus3') {
-    const n = Number(kind.slice(5));
-    if (dice - n < 1) return { error: 'langkah akhir tidak boleh di bawah 1' };
-    return { steps: dice - n };
-  }
   if (kind === 'bebas') {
     if (!Number.isInteger(choice) || choice < 1 || choice > 6) {
       return { error: 'bebas pilih harus 1-6' };
@@ -314,9 +321,18 @@ function attackTargets(st, attacker, kind) {
   }));
   return targets;
 }
-function bombTargets(st, abs) {
-  if (abs === null || abs < 0 || abs > 51 || isSafeAbs(abs)) return [];
-  return tokensAtAbs(st, abs);
+function mineAt(st, abs) {
+  return st.mines.find((m) => m.abs === abs) || null;
+}
+// Valid blocks for planting Ranjau: main track, non-safe, no existing mine (Sensei 2026-11-03).
+function validRanjauBlocks(st) {
+  const blocks = [];
+  for (let abs = 0; abs < 52; abs++) {
+    if (isSafeAbs(abs)) continue;
+    if (st.mines.some((m) => m.abs === abs)) continue;
+    blocks.push(abs);
+  }
+  return blocks;
 }
 function applyAttackEffect(st, attack) {
   const { kind, attacker, targetPlayer, targetToken, targetAbs } = attack;
@@ -325,17 +341,18 @@ function applyAttackEffect(st, attack) {
     clearFrozenToken(st, targetPlayer, targetToken);
     return { killed: [{ player: targetPlayer, token: targetToken }] };
   }
-  if (kind === 'bom') {
-    const victims = bombTargets(st, targetAbs);
-    for (const v of victims) {
-      st.players[v.player].tokens[v.token].progress = -1;
-      clearFrozenToken(st, v.player, v.token);
-    }
-    return { killed: victims };
-  }
+  // 'ranjau' is planted, not instant — no applyAttackEffect branch.
+  // Mine blast is resolved via pendingMineBlast + defense.
   if (kind === 'seret') {
     const tok = st.players[targetPlayer].tokens[targetToken];
+    const fromProgress = tok.progress;
+    const fromAbs = absOf(targetPlayer, fromProgress);
     tok.progress = Math.max(0, tok.progress - 10);
+    const toAbs = absOf(targetPlayer, tok.progress);
+    // Chain animation: from destination back to origin, then pull (Sensei 2026-11-03).
+    if (fromAbs !== null && toAbs !== null) {
+      pushAnimEvent(st, 'chain', { player: targetPlayer, token: targetToken, fromAbs, toAbs });
+    }
     return { moved: [{ player: targetPlayer, token: targetToken, progress: tok.progress }] };
   }
   if (kind === 'beku') {
@@ -346,9 +363,16 @@ function applyAttackEffect(st, attack) {
   }
   return {};
 }
-// Defense resolution. Returns {defended, reflected, ...}. The attack
-// card itself is always consumed (terpakai) once resolved, even if
-// the defense cancels it — the defender's card is also consumed.
+// Defense resolution (Sensei 2026-11-03). Returns {defended, ...}.
+// The attack card itself is always consumed (terpakai) once resolved,
+// even if the defense cancels it — the defender's card is also consumed.
+// Teleport/Escape need a destination choice: they return
+// {needsDest: 'teleport'|'escape'} and the card is consumed when the
+// destination is confirmed (doTeleportDest / doEscapeDest).
+// Validity matrix:
+//   perisai: all attacks. teleport: all attacks incl. stomp & ranjau.
+//   escape: killing attacks only (sniper, ranjau, stomp).
+//   antistep: stomp only.
 function resolveDefense(st, pending, defenseCardId) {
   const { attack, defender } = pending;
   const hand = st.players[defender].hand;
@@ -356,75 +380,125 @@ function resolveDefense(st, pending, defenseCardId) {
   if (defenseCardId && idx < 0) return { ok: false, error: 'kartu defense tidak ada di tangan' };
   const card = idx >= 0 ? hand[idx] : null;
   if (card && card.group !== 'defense') return { ok: false, error: 'hanya kartu defense yang bisa dipakai saat diserang' };
-  if (card && card.kind === 'cermin' && attack.kind === 'bom') {
-    return { ok: false, error: 'Cermin Pantul tidak berlaku untuk Bom Petak' };
+  if (card && card.kind === 'antistep' && attack.kind !== 'stomp') {
+    return { ok: false, error: 'Anti-Step hanya berlaku untuk injakan' };
   }
-  if (idx >= 0) hand.splice(idx, 1);
+  if (card && card.kind === 'escape' && (attack.kind === 'seret' || attack.kind === 'beku')) {
+    return { ok: false, error: 'Escape hanya untuk serangan yang membunuh' };
+  }
+  // No card: accept the attack.
   if (!card) return { ok: true, defended: false, effect: applyAttackEffect(st, attack) };
-  if (card.kind === 'perisai') return { ok: true, defended: true, card };
-  if (card.kind === 'cermin') {
-    const attackers = attackTargets(st, defender, attack.kind)
-      .filter((t) => t.player === attack.attacker);
-    if (!attackers.length) return { ok: true, defended: true, card };
-    const back = attackers[0];
-    const reflected = { ...attack, targetPlayer: back.player, targetToken: back.token };
-    return { ok: true, defended: true, reflected: true, card, effect: applyAttackEffect(st, reflected) };
+  if (card.kind === 'perisai') {
+    hand.splice(idx, 1);
+    return { ok: true, defended: true, card };
+  }
+  if (card.kind === 'antistep') {
+    // Stomp negated: both pawns stack on the square (Sensei 2026-11-03).
+    hand.splice(idx, 1);
+    return { ok: true, defended: true, card, antistep: true };
   }
   if (card.kind === 'teleport') {
-    const tok = st.players[defender].tokens[attack.targetToken];
-    const cur = tok.progress;
-    let dest = null;
-    if (cur >= 0 && cur <= 50) {
-      const curAbs = absOf(defender, cur);
-      // Nearest star (safe) square BEHIND the pawn (Sensei 2026-11-03):
-      // teleporting forward to the start square wasted all progress.
-      const behind = SAFE_SQUARES.filter((s) => {
-        const dist = (curAbs - s + 52) % 52;
-        return dist > 0;
-      }).sort((a, b) => ((curAbs - a + 52) % 52) - ((curAbs - b + 52) % 52));
-      if (behind.length) {
-        const abs = behind[0];
-        dest = (abs - START_OFFSETS[defender] + 52) % 52;
-      }
-    }
-    if (dest === null) dest = 0;
-    tok.progress = dest;
-    return { ok: true, defended: true, card, teleported: dest };
+    return { ok: true, needsDest: 'teleport', cardId: card.id, card };
   }
-  if (card.kind === 'kulit') {
-    if (attack.kind === 'sniper' || attack.kind === 'bom') {
-      const tok = st.players[attack.targetPlayer].tokens[attack.targetToken];
-      if (attack.kind === 'bom') {
-        // Kulit Batu saves only its own token from a bomb: that token
-        // steps back 6 instead of dying; other tokens on the square
-        // are still handled by the caller through bombRemaining.
-        tok.progress = Math.max(0, tok.progress - 6);
-        return { ok: true, defended: true, card, partial: true };
-      }
-      tok.progress = Math.max(0, tok.progress - 6);
-      return { ok: true, defended: true, card };
-    }
-    return { ok: true, defended: true, card, effect: applyAttackEffect(st, attack) };
+  if (card.kind === 'escape') {
+    return { ok: true, needsDest: 'escape', cardId: card.id, card };
   }
   return { ok: true, defended: false };
+}
+// Valid teleport destinations: up to 3 forward or backward on the main
+// track (Sensei 2026-11-03). Returns [{progress, abs}].
+function validTeleportDests(st, player, token) {
+  const cur = st.players[player].tokens[token].progress;
+  if (cur < 0 || cur > 50) return [];
+  const dests = [];
+  for (let d = -3; d <= 3; d++) {
+    if (d === 0) continue;
+    const dest = cur + d;
+    if (dest < 0 || dest > 50) continue;
+    dests.push({ progress: dest, abs: absOf(player, dest) });
+  }
+  return dests;
+}
+// Valid escape destinations: 1-3 backward on the main track (Sensei 2026-11-03).
+function validEscapeDests(st, player, token) {
+  const cur = st.players[player].tokens[token].progress;
+  if (cur < 0 || cur > 50) return [];
+  const dests = [];
+  for (let d = 1; d <= 3; d++) {
+    const dest = cur - d;
+    if (dest < 0) break;
+    dests.push({ progress: dest, abs: absOf(player, dest) });
+  }
+  return dests;
+}
+// Confirm a teleport destination. Consumes the teleport card.
+function doTeleportDest(st, player, token, cardId, abs) {
+  if (st.phase !== 'teleportDest' || !st.pendingTeleport) return { ok: false, error: 'bukan waktunya teleport' };
+  const pt = st.pendingTeleport;
+  if (pt.defender !== player || pt.token !== token) return { ok: false, error: 'bukan bidakmu yang teleport' };
+  const valid = validTeleportDests(st, player, token);
+  if (!valid.some((d) => d.abs === abs)) return { ok: false, error: 'tujuan teleport tidak valid' };
+  const hand = st.players[player].hand;
+  const idx = hand.findIndex((c) => c.id === cardId);
+  if (idx < 0 || hand[idx].kind !== 'teleport') return { ok: false, error: 'kartu teleport tidak ada' };
+  const [card] = hand.splice(idx, 1);
+  const dest = valid.find((d) => d.abs === abs);
+  const fromAbs = absOf(player, st.players[player].tokens[token].progress);
+  st.players[player].tokens[token].progress = dest.progress;
+  clearFrozenToken(st, player, token);
+  st.pendingTeleport = null;
+  // Teleport landing never stomps (Sensei 2026-11-03).
+  return { ok: true, card, fromAbs, toAbs: abs, progress: dest.progress };
+}
+// Confirm an escape destination. Consumes the escape card.
+// If the pawn lands on enemies (non-safe), stomp applies (Sensei 2026-11-03).
+function doEscapeDest(st, player, token, cardId, abs) {
+  if (st.phase !== 'escapeDest' || !st.pendingEscape) return { ok: false, error: 'bukan waktunya escape' };
+  const pe = st.pendingEscape;
+  if (pe.defender !== player || pe.token !== token) return { ok: false, error: 'bukan bidakmu yang escape' };
+  const valid = validEscapeDests(st, player, token);
+  if (!valid.some((d) => d.abs === abs)) return { ok: false, error: 'tujuan escape tidak valid' };
+  const hand = st.players[player].hand;
+  const idx = hand.findIndex((c) => c.id === cardId);
+  if (idx < 0 || hand[idx].kind !== 'escape') return { ok: false, error: 'kartu escape tidak ada' };
+  const [card] = hand.splice(idx, 1);
+  const dest = valid.find((d) => d.abs === abs);
+  const fromAbs = absOf(player, st.players[player].tokens[token].progress);
+  st.players[player].tokens[token].progress = dest.progress;
+  clearFrozenToken(st, player, token);
+  st.pendingEscape = null;
+  // Escape landing CAN stomp (Sensei 2026-11-03).
+  const victims = !isSafeAbs(abs) ? tokensAtAbs(st, abs).filter((v) => v.player !== player) : [];
+  return { ok: true, card, fromAbs, toAbs: abs, progress: dest.progress, victims };
+}
+// Plant a Ranjau on a block. Consumes the ranjau card (Sensei 2026-11-03).
+function plantRanjau(st, player, cardId, abs) {
+  if (st.phase !== 'plantRanjau' || !st.pendingPlant || st.pendingPlant.player !== player) {
+    return { ok: false, error: 'bukan waktunya menanam ranjau' };
+  }
+  if (!validRanjauBlocks(st).includes(abs)) return { ok: false, error: 'petak tidak valid untuk ranjau' };
+  const hand = st.players[player].hand;
+  const idx = hand.findIndex((c) => c.id === (cardId || st.pendingPlant.cardId));
+  if (idx < 0 || hand[idx].kind !== 'ranjau') return { ok: false, error: 'kartu ranjau tidak ada' };
+  const [card] = hand.splice(idx, 1);
+  const mine = { id: `m${st.mines.length + 1}`, abs, owner: player };
+  st.mines.push(mine);
+  st.pendingPlant = null;
+  return { ok: true, card, mine };
 }
 
 // ---- attack / defense flow (server drives these steps) ----
 // Begin an attack card. Returns {ok, needsDefense, attack, defender}
-// when a defender must choose, otherwise applies immediately.
+// when a defender must choose, {ok, needsPlant} for Ranjau (planting
+// is a separate phase), otherwise applies immediately.
 function beginAttack(st, attacker, card, target) {
   const kind = card.kind;
-  if (kind === 'bom') {
-    const victims = bombTargets(st, target.abs);
-    if (!victims.length) return { ok: false, error: 'tidak ada bidak di petak itu' };
-    const attack = { kind, attacker, targetAbs: target.abs, victims: victims.slice() };
-    const next = nextBombDefender(st, attack);
-    if (next) return { ok: true, needsDefense: true, attack, defender: next.player, victim: next };
-    for (const v of victims) {
-      st.players[v.player].tokens[v.token].progress = -1;
-      clearFrozenToken(st, v.player, v.token);
-    }
-    return { ok: true, needsDefense: false, attack, killed: victims };
+  if (kind === 'ranjau') {
+    // Planting happens in the 'plantRanjau' phase; card consumed on plant.
+    if (!validRanjauBlocks(st).length) return { ok: false, error: 'tidak ada petak valid untuk ranjau' };
+    st.pendingPlant = { player: attacker, cardId: card.id };
+    st.phase = 'plantRanjau';
+    return { ok: true, needsPlant: true, attack: { kind, attacker } };
   }
   const targets = attackTargets(st, attacker, kind);
   const t = targets.find((x) => x.player === target.player && x.token === target.token);
@@ -439,36 +513,54 @@ function beginAttack(st, attacker, card, target) {
   // empty defense hand (Sensei 2026-11-03); bots auto-decline.
   return { ok: true, needsDefense: true, attack, defender: t.player, victim: t };
 }
-function nextBombDefender(st, attack) {
-  return attack.victims[0] || null;
-}
-// Resolve one defense step. For bombs, victims without a defense are
-// killed as the queue advances; victims with a defense get a choice.
+// Resolve one defense step. Single victim per step (Sensei 2026-11-03);
+// the caller advances the queue.
 function resolveDefenseStep(st, pending, defenseCardId) {
   const attack = pending.attack;
-  if (attack.kind === 'bom') {
-    const victim = attack.victims[0];
-    if (!victim) return { ok: true, done: true };
-    const r = resolveDefense(st, { attack, defender: victim.player }, defenseCardId);
-    if (!r.ok) return r;
-    if (r.defended && r.card && r.card.kind === 'kulit') {
-      // token already stepped back by resolveDefense; it survives
-    } else if (r.defended) {
-      // perisai / teleport: token survives unchanged (teleport moved it)
-    } else {
+  const victim = pending.victim || { player: pending.defender, token: attack.targetToken };
+  const r = resolveDefense(st, { attack, defender: victim.player }, defenseCardId);
+  if (!r.ok) return r;
+  if (r.needsDest) {
+    // Teleport/Escape: destination choice comes next; card not yet consumed.
+    return { ok: true, done: false, needsDest: r.needsDest, cardId: r.cardId, card: r.card };
+  }
+  if (!r.defended) {
+    // Accepted (or no card): apply the attack effect.
+    if (attack.kind === 'stomp') {
       st.players[victim.player].tokens[victim.token].progress = -1;
       clearFrozenToken(st, victim.player, victim.token);
+      return { ok: true, done: true, card: null, killed: [victim] };
     }
-    attack.victims.shift();
-    // Every victim is asked in turn (Sensei 2026-11-03); victims without
-    // defense cards get a disabled "Bertahan" option instead of dying silently.
-    if (!attack.victims.length) return { ok: true, done: true, card: r.card || null };
-    const nxt = attack.victims[0];
-    return { ok: true, done: false, defender: nxt.player, victim: nxt, card: r.card || null };
+    if (attack.kind === 'ranjau') {
+      // Mine blast: victim shattered to base, mine consumed (Sensei 2026-11-03).
+      st.players[victim.player].tokens[victim.token].progress = -1;
+      clearFrozenToken(st, victim.player, victim.token);
+      consumeMine(st, attack.mineId);
+      return { ok: true, done: true, card: null, killed: [victim], mineBlast: true };
+    }
+    // r.effect already applied by resolveDefense for non-defended.
+    return { ok: true, done: true, card: null, defended: false, effect: r.effect || null };
   }
-  const r = resolveDefense(st, pending, defenseCardId);
-  if (!r.ok) return r;
-  return { ok: true, done: true, card: r.card || null, defended: r.defended, reflected: r.reflected || false, effect: r.effect || null };
+  // Defended.
+  if (attack.kind === 'ranjau') {
+    // Mine consumed even when defended (it exploded) (Sensei 2026-11-03).
+    consumeMine(st, attack.mineId);
+  }
+  if (attack.kind === 'stomp') {
+    // perisai/antistep: victim stays, attacker stacks (Sensei 2026-11-03).
+    return { ok: true, done: true, card: r.card, defended: true };
+  }
+  return { ok: true, done: true, card: r.card || null, defended: r.defended, effect: r.effect || null };
+}
+// Push a one-shot animation event for the client (Sensei 2026-11-03).
+function pushAnimEvent(st, type, data) {
+  st.animEvents.push({ id: `ae${st.animEvents.length + 1}_${Date.now()}`, type, ...data });
+  // Bound the list; client tracks seen IDs.
+  if (st.animEvents.length > 20) st.animEvents = st.animEvents.slice(-20);
+}
+// Remove a mine by id (consumed after explosion).
+function consumeMine(st, mineId) {
+  st.mines = st.mines.filter((m) => m.id !== mineId);
 }
 
 // ---- client snapshot (never leaks other hands or the deck order) ----
@@ -514,6 +606,11 @@ function toClient(st, seat) {
       kind: st.pendingAttack.kind, attacker: st.pendingAttack.attacker,
       targetPlayer: st.pendingAttack.targetPlayer, targetToken: st.pendingAttack.targetToken,
       targetAbs: st.pendingAttack.targetAbs,
+      // Valid targets/blocks for client marking (Sensei 2026-11-03).
+      validTargets: st.pendingAttack.card && ['sniper', 'seret', 'beku'].includes(st.pendingAttack.kind)
+        ? attackTargets(st, st.pendingAttack.attacker, st.pendingAttack.kind).map((t) => ({ player: t.player, token: t.token }))
+        : [],
+      validBlocks: st.pendingAttack.kind === 'ranjau' ? validRanjauBlocks(st) : [],
     } : null,
     pendingDefense: st.pendingDefense ? {
       defender: st.pendingDefense.defender,
@@ -522,6 +619,27 @@ function toClient(st, seat) {
       targetToken: st.pendingDefense.attack.targetToken,
       targetAbs: st.pendingDefense.attack.targetAbs,
     } : null,
+    // Ranjau planting (Sensei 2026-11-03).
+    mines: st.mines.map((m) => ({ abs: m.abs, owner: m.owner })),
+    pendingPlant: st.pendingPlant && st.pendingPlant.player === seat ? {
+      validBlocks: validRanjauBlocks(st),
+    } : null,
+    // Teleport/Escape destination choice (Sensei 2026-11-03).
+    pendingTeleport: st.pendingTeleport && st.pendingTeleport.defender === seat ? {
+      token: st.pendingTeleport.token,
+      validDests: validTeleportDests(st, seat, st.pendingTeleport.token).map((d) => d.abs),
+    } : null,
+    pendingEscape: st.pendingEscape && st.pendingEscape.defender === seat ? {
+      token: st.pendingEscape.token,
+      validDests: validEscapeDests(st, seat, st.pendingEscape.token).map((d) => d.abs),
+    } : null,
+    // Stomp defense (Sensei 2026-11-03).
+    pendingStomp: st.pendingStomp ? {
+      attacker: st.pendingStomp.attacker,
+      victims: st.pendingStomp.victims.map((v) => ({ player: v.player, token: v.token })),
+    } : null,
+    // One-shot animation events (Sensei 2026-11-03).
+    animEvents: st.animEvents.slice(-20),
     pendingDraw: (st.pendingDraw && st.pendingDraw.player === seat) ? st.pendingDraw.card : null,
     pendingConfirm: st.pendingConfirm ? { noMove: !!st.pendingConfirm.noMove } : null,
     // Legal moves are server-computed for the current player only;
@@ -554,18 +672,25 @@ function botChooseMove(st, player, moves) {
   return moves.slice().sort((a, b) => score(b) - score(a))[0] || null;
 }
 function botChooseAttack(st, attacker, card) {
-  if (card.kind === 'bom') {
+  if (card.kind === 'ranjau') {
+    // Plant near enemies: prefer blocks close to enemy pawns (Sensei 2026-11-03).
+    const blocks = validRanjauBlocks(st);
+    if (!blocks.length) return null;
     let best = null;
-    for (let abs = 0; abs < 52; abs++) {
-      if (isSafeAbs(abs)) continue;
-      const vs = bombTargets(st, abs);
-      const enemies = vs.filter((v) => v.player !== attacker);
-      if (!enemies.length) continue;
-      const own = vs.filter((v) => v.player === attacker).length;
-      const score = enemies.length * 10 - own * 8;
+    for (const abs of blocks) {
+      let score = 0;
+      st.players.forEach((pl, pi) => {
+        if (pi === attacker) return;
+        pl.tokens.forEach((t) => {
+          if (t.progress < 0 || t.progress > 50) return;
+          const tAbs = absOf(pi, t.progress);
+          const dist = (tAbs - abs + 52) % 52;
+          if (dist > 0 && dist <= 6) score += (7 - dist);
+        });
+      });
       if (!best || score > best.score) best = { abs, score };
     }
-    return best && best.score > 0 ? { abs: best.abs } : null;
+    return best ? { abs: best.abs } : null;
   }
   const targets = attackTargets(st, attacker, card.kind);
   if (!targets.length) return null;
@@ -577,9 +702,34 @@ function botChooseDefense(st, defender, pending) {
   if (!hand.length) return null;
   const kind = pending.attack.kind;
   const byKind = (k) => hand.find((c) => c.kind === k);
-  if (kind === 'bom') return (byKind('perisai') || byKind('teleport') || byKind('kulit') || hand[0]).id;
-  if (kind === 'sniper') return (byKind('perisai') || byKind('cermin') || byKind('teleport') || byKind('kulit') || hand[0]).id;
-  return (byKind('cermin') || byKind('perisai') || byKind('teleport') || hand[0]).id;
+  // Priority: perisai > teleport > escape > antistep (Sensei 2026-11-03).
+  if (kind === 'ranjau') return (byKind('perisai') || byKind('teleport') || byKind('escape') || hand[0]).id;
+  if (kind === 'sniper') return (byKind('perisai') || byKind('teleport') || byKind('escape') || hand[0]).id;
+  if (kind === 'stomp') return (byKind('perisai') || byKind('antistep') || byKind('teleport') || byKind('escape') || hand[0]).id;
+  return (byKind('perisai') || byKind('teleport') || hand[0]).id;
+}
+// Bot destination choice for teleport/escape (Sensei 2026-11-03).
+function botChooseDest(st, player, token, dests, kind) {
+  if (!dests.length) return null;
+  if (kind === 'escape') {
+    // Escape: go as far back as possible.
+    return dests[dests.length - 1];
+  }
+  // Teleport: prefer backward if enemies nearby, else forward.
+  const cur = st.players[player].tokens[token].progress;
+  const curAbs = absOf(player, cur);
+  let threat = false;
+  st.players.forEach((pl, pi) => {
+    if (pi === player) return;
+    pl.tokens.forEach((t) => {
+      if (t.progress < 0 || t.progress > 50) return;
+      const tAbs = absOf(pi, t.progress);
+      const dist = (curAbs - tAbs + 52) % 52;
+      if (dist > 0 && dist <= 6) threat = true;
+    });
+  });
+  const sorted = dests.slice().sort((a, b) => threat ? a.progress - b.progress : b.progress - a.progress);
+  return sorted[0];
 }
 function botChooseNeutral(st, player) {
   const hand = st.players[player].hand.filter((c) => c.group === 'neutral');
@@ -612,9 +762,10 @@ module.exports = {
   newGame, buildDeck, shuffle, absOf, isSafeAbs, isFrozen, clearFrozenForTurn, clearFrozenToken, tokensAtAbs,
   homeCount, rollDice, legalMoves, applyMove, drawCard, returnHangus,
   checkWinner, endTurn, afterMoveFlow, startBlockCooldown, tickBlockCooldown,
-  onTurnStart, neutralSteps, useNeutral, attackTargets, bombTargets,
-  applyAttackEffect, resolveDefense, beginAttack, nextBombDefender,
+  onTurnStart, neutralSteps, useNeutral, attackTargets, mineAt, validRanjauBlocks,
+  applyAttackEffect, resolveDefense, beginAttack,
   resolveDefenseStep, resolveCaptureChoice, isAttackUsable,
+  validTeleportDests, validEscapeDests, doTeleportDest, doEscapeDest, plantRanjau, consumeMine, pushAnimEvent,
   toClient, botChooseMove, botChooseAttack,
-  botChooseDefense, botChooseNeutral, botSwapChoice,
+  botChooseDefense, botChooseDest, botChooseNeutral, botSwapChoice,
 };

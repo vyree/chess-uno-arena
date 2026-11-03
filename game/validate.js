@@ -17,46 +17,46 @@ function validNickname(n) {
   const t = n.trim();
   if (t.length < 1) return { ok: false, error: 'isi nickname dulu ya' };
   if (t.length > 16) return { ok: false, error: 'nickname maksimal 16 karakter' };
-  return { ok: true, value: escapeHtml(t) };
+  return { ok: true, data: escapeHtml(t) };
 }
 
 // Firebase ID token: optional at this layer (the server enforces its
 // presence when auth is enabled). Format check only; crypto is game/auth.js.
 function validIdToken(t) {
-  if (t === undefined || t === null) return { ok: true, value: null };
+  if (t === undefined || t === null) return { ok: true, data: null };
   if (typeof t !== 'string' || t.length < 10 || t.length > 8192) {
     return { ok: false, error: 'token login tidak valid' };
   }
-  return { ok: true, value: t };
+  return { ok: true, data: t };
 }
 
 function validCode(c) {
   if (typeof c !== 'string') return { ok: false, error: 'kode room harus teks' };
   const t = c.trim().toUpperCase();
   if (!/^[A-Z2-9]{6}$/.test(t)) return { ok: false, error: 'kode room harus 6 karakter' };
-  return { ok: true, value: t };
+  return { ok: true, data: t };
 }
 
 function validSquare(s) {
   if (typeof s !== 'string' || !/^[a-h][1-8]$/.test(s)) {
     return { ok: false, error: 'format petak salah (contoh: e2)' };
   }
-  return { ok: true, value: s };
+  return { ok: true, data: s };
 }
 
 function validPromo(p) {
-  if (p === undefined || p === null) return { ok: true, value: undefined };
+  if (p === undefined || p === null) return { ok: true, data: undefined };
   if (typeof p !== 'string' || !['q', 'r', 'b', 'n'].includes(p.toLowerCase())) {
     return { ok: false, error: 'promosi harus q/r/b/n' };
   }
-  return { ok: true, value: p.toLowerCase() };
+  return { ok: true, data: p.toLowerCase() };
 }
 
 function validCardId(id) {
   if (typeof id !== 'string' || !/^c\d+$/.test(id) || id.length > 12) {
     return { ok: false, error: 'id kartu tidak valid' };
   }
-  return { ok: true, value: id };
+  return { ok: true, data: id };
 }
 
 // UNO mode (Misi 5): 'normal' | 'hard' | 'hell'. Legacy Misi 2 clients
@@ -67,11 +67,11 @@ function validMode(d) {
 }
 
 function validColor(c) {
-  if (c === undefined || c === null) return { ok: true, value: undefined };
+  if (c === undefined || c === null) return { ok: true, data: undefined };
   if (!['red', 'yellow', 'green', 'blue', 'purple'].includes(c)) {
     return { ok: false, error: 'warna tidak valid' };
   }
-  return { ok: true, value: c };
+  return { ok: true, data: c };
 }
 
 // Truth or Truth payloads (Misi 3). The truth_* message validators
@@ -84,7 +84,7 @@ function validAskQuestion(q) {
   if (t.length < 3 || t.length > 200) {
     return { ok: false, error: 'pertanyaan harus 3-200 karakter' };
   }
-  return { ok: true, value: escapeHtml(t) };
+  return { ok: true, data: escapeHtml(t) };
 }
 function validAnswerText(a) {
   if (typeof a !== 'string') return { ok: false, error: 'jawaban harus teks' };
@@ -92,13 +92,13 @@ function validAnswerText(a) {
   if (t.length < 1 || t.length > 1000) {
     return { ok: false, error: 'jawaban harus 1-1000 karakter' };
   }
-  return { ok: true, value: escapeHtml(t) };
+  return { ok: true, data: escapeHtml(t) };
 }
 function validReactionKind(k) {
   if (!TRUTH_REACTIONS.includes(k)) {
     return { ok: false, error: 'reaksi harus lucu/nangis/lovely/marah' };
   }
-  return { ok: true, value: k };
+  return { ok: true, data: k };
 }
 
 // Validators per message type. Each returns {ok, data} or {ok:false, error}.
@@ -269,6 +269,37 @@ const VALIDATORS = {
     }
     return { ok: true, data: { targetPlayer: d.targetPlayer, targetToken: d.targetToken } };
   },
+  ludo_ranjau_plant(d) {
+    if (!Number.isInteger(d.abs) || d.abs < 0 || d.abs > 51) {
+      return { ok: false, error: 'abs harus 0-51' };
+    }
+    return { ok: true, data: { abs: d.abs } };
+  },
+  ludo_teleport_dest(d) {
+    if (!Number.isInteger(d.abs) || d.abs < 0 || d.abs > 51) {
+      return { ok: false, error: 'abs harus 0-51' };
+    }
+    const out = { abs: d.abs };
+    if (d.cardId !== undefined && d.cardId !== null) {
+      const c = validCardId(d.cardId);
+      if (!c.ok) return c;
+      out.cardId = c.value;
+    }
+    return { ok: true, data: out };
+  },
+  ludo_escape_dest(d) {
+    if (!Number.isInteger(d.abs) || d.abs < 0 || d.abs > 51) {
+      return { ok: false, error: 'abs harus 0-51' };
+    }
+    const out = { abs: d.abs };
+    if (d.cardId !== undefined && d.cardId !== null) {
+      const c = validCardId(d.cardId);
+      if (!c.ok) return c;
+      out.cardId = c.value;
+    }
+    return { ok: true, data: out };
+  },
+  ludo_reclaim() { return { ok: true, data: {} }; },
   ludo_draw() { return { ok: true, data: {} }; },
   ludo_draw_close() { return { ok: true, data: {} }; },
   ludo_move(d) {

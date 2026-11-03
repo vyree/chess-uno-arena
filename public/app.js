@@ -1717,20 +1717,28 @@ function ludoMySeat(m) {
   return m.players.findIndex((p) => p.id === m.you);
 }
 // UNO-style face for a Ludo skill card: corner index + tilted oval
-// with the big symbol + card name below (same language as cardHTML
-// for UNO). Group colours live in CSS; this only supplies the face.
-const LUDO_CARD_ICON = {
-  sniper: '🎯', bom: '💣', seret: '⛓️', beku: '❄️',
-  perisai: '🛡️', cermin: '🪞', teleport: '🌀', kulit: '🪨',
-  x2: '×2', plus1: '+1', plus2: '+2', plus3: '+3',
-  minus1: '−1', minus2: '−2', minus3: '−3', bebas: '1–6',
+// Card icons: custom SVG matching each card's effect (Sensei 2026-11-03).
+// Designed to be bold, readable at small sizes, and thematic.
+const LUDO_CARD_SVG = {
+  sniper: `<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="16" fill="none" stroke="currentColor" stroke-width="4"/><path d="M24 4v10M24 34v10M4 24h10M34 24h10" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="24" r="4" fill="currentColor"/></svg>`,
+  ranjau: `<svg viewBox="0 0 48 48"><circle cx="24" cy="28" r="14" fill="currentColor"/><path d="M24 14l3 6 6-2-2 6 6 3-6 3 2 6-6-2-3 6-3-6-6 2 2-6-6-3 6-3-2-6 6 2z" fill="currentColor" opacity="0.9"/><rect x="22" y="6" width="4" height="8" rx="2" fill="currentColor"/><circle cx="30" cy="8" r="2.5" fill="#ff2e93"/></svg>`,
+  seret: `<svg viewBox="0 0 48 48"><path d="M18 24a8 8 0 018-8h4a8 8 0 010 16h-4" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><path d="M30 24a8 8 0 01-8 8h-4a8 8 0 010-16h4" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" opacity="0.55"/></svg>`,
+  beku: `<svg viewBox="0 0 48 48"><path d="M24 6v36M8 15l32 18M40 15L8 33M24 6l-6 6M24 6l6 6M24 42l-6-6M24 42l6-6" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><rect x="16" y="16" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="3" opacity="0.6"/></svg>`,
+  perisai: `<svg viewBox="0 0 48 48"><path d="M24 4l16 6v12c0 10-7 18-16 22C15 40 8 32 8 22V10z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M24 12l8 3v7c0 6-3.5 10.5-8 13-4.5-2.5-8-7-8-13v-7z" fill="currentColor" opacity="0.35"/></svg>`,
+  antistep: `<svg viewBox="0 0 48 48"><ellipse cx="24" cy="26" rx="9" ry="12" fill="none" stroke="currentColor" stroke-width="4"/><path d="M18 26h12M24 20v12" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.7"/><circle cx="24" cy="24" r="19" fill="none" stroke="#ff2e93" stroke-width="4"/><path d="M10 10l28 28" stroke="#ff2e93" stroke-width="4" stroke-linecap="round"/></svg>`,
+  teleport: `<svg viewBox="0 0 48 48"><ellipse cx="24" cy="24" rx="16" ry="20" fill="none" stroke="currentColor" stroke-width="4"/><ellipse cx="24" cy="24" rx="9" ry="13" fill="none" stroke="currentColor" stroke-width="3" opacity="0.6"/><ellipse cx="24" cy="24" rx="3" ry="6" fill="currentColor"/><path d="M24 4a20 20 0 016 2M24 44a20 20 0 01-6-2" stroke="#ff2e93" stroke-width="3" stroke-linecap="round"/></svg>`,
+  escape: `<svg viewBox="0 0 48 48"><path d="M6 16h24a6 6 0 016 6v0a6 6 0 01-6 6H18" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M20 22l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 32h14M6 38h10" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.6"/></svg>`,
+};
+const LUDO_CARD_TEXT = {
+  x2: '×2', plus1: '+1', plus2: '+2', plus3: '+3', bebas: '1–6',
 };
 function ludoCardFace(card, info) {
-  const icon = LUDO_CARD_ICON[card.kind] || '?';
-  return `<i class="cnr tl">${icon}</i>`
+  const svg = LUDO_CARD_SVG[card.kind];
+  const icon = svg || `<span class="ludo-card-txt">${LUDO_CARD_TEXT[card.kind] || '?'}</span>`;
+  return `<i class="cnr tl">${svg ? svg : LUDO_CARD_TEXT[card.kind] || '?'}</i>`
     + `<span class="oval"><span class="val">${icon}</span></span>`
     + `<span class="ludo-card-name">${info.name}</span>`
-    + `<i class="cnr br">${icon}</i>`;
+    + `<i class="cnr br">${svg ? svg : LUDO_CARD_TEXT[card.kind] || '?'}</i>`;
 }
 // Info-only bubble. Usable cards go through their decision popups
 // instead (booster confirm, defense picker); no native prompt() left.
@@ -1796,6 +1804,7 @@ function showLudoBoosterPrompt(st, mySeat) {
 // Stage 'prompt': turn player clicks to draw; others wait.
 // Stage 'reveal': all see the card + effect; turn player closes it.
 let ludoDrawModalKey = null;
+const ludoSeenAnimEvents = new Set(); // seen animation event IDs (Sensei 2026-11-03)
 function showLudoDrawModal(ceremony, st, m, mySeat) {
   const isTurn = st.turn === mySeat;
   const turnNick = m.players[st.turn] ? m.players[st.turn].nickname : LUDO_COLORS[st.turn];
@@ -1844,22 +1853,40 @@ function showLudoChooseCaptureModal(pending, st, m) {
 }
 function showLudoAttackModal(atk, st) {
   const info = st.cardInfo[atk.kind];
+  const isRanjau = atk.kind === 'ranjau';
   const body = `<div class="ludo-modal-card"><div class="ludo-card card-attack">${ludoCardFace({ kind: atk.kind, group: 'attack' }, info)}</div></div>`
     + `<p><strong>${escapeHtml(info.name)}</strong></p>`
     + `<p class="muted">${escapeHtml(info.desc)}</p>`
-    + `<p>Kartu serangan <strong>wajib dipakai</strong>! Klik Pakai, lalu ketuk bidak musuh yang jadi target.</p>`;
+    + (isRanjau
+      ? `<p>Kartu serangan <strong>wajib dipakai</strong>! Klik Pakai, lalu ketuk petak yang ditandai kuning untuk menanam ranjau.</p>`
+      : `<p>Kartu serangan <strong>wajib dipakai</strong>! Klik Pakai, lalu ketuk bidak musuh yang ditandai untuk menyerang.</p>`);
   ludoModalKind = 'attack';
   // Sensei 2026-11-03: no "Buang" — usable attack cards must be used.
   // Unusable ones burn in the draw ceremony before reaching here.
-  showModal('⚔️ Kartu Serangan!', body, [
-    { label: '⚔️ Pakai', cls: 'primary', onClick: () => { ludoModalKind = null; } },
+  showModal(isRanjau ? '💣 Tanam Ranjau!' : '⚔️ Kartu Serangan!', body, [
+    { label: isRanjau ? '💣 Pakai' : '⚔️ Pakai', cls: 'primary', onClick: () => { ludoModalKind = null; } },
   ], 'ludo-modal');
 }
 function showLudoDefenseModal(dfn, st, mySeat) {
-  const myHand = (st.players[mySeat] && st.players[mySeat].hand || []).filter((c) => c.group === 'defense');
-  const atkInfo = st.cardInfo[dfn.attackKind];
+  const atkKind = dfn.attackKind;
+  // Valid defenses per attack kind (Sensei 2026-11-03):
+  // perisai: all. teleport: all. escape: killing only (sniper/ranjau/stomp).
+  // antistep: stomp only.
+  const isValidDefense = (kind) => {
+    if (kind === 'perisai' || kind === 'teleport') return true;
+    if (kind === 'antistep') return atkKind === 'stomp';
+    if (kind === 'escape') return ['sniper', 'ranjau', 'stomp'].includes(atkKind);
+    return false;
+  };
+  const myHand = (st.players[mySeat] && st.players[mySeat].hand || []).filter((c) => c.group === 'defense' && isValidDefense(c.kind));
+  const atkInfo = st.cardInfo[atkKind];
   const attackerName = (S.players[st.turn] && S.players[st.turn].nickname) || 'Musuh';
-  let body = `<p class="ludo-modal-alert">🛡️ <strong>Bidakmu akan diserang!</strong></p>`
+  const isMine = atkKind === 'ranjau';
+  const isStomp = atkKind === 'stomp';
+  let alertText = '🛡️ <strong>Bidakmu akan diserang!</strong>';
+  if (isMine) alertText = '💥 <strong>Ranjau meledak! Bidakmu menginjak ranjau!</strong>';
+  else if (isStomp) alertText = '👣 <strong>Bidakmu akan diinjak!</strong>';
+  let body = `<p class="ludo-modal-alert">${alertText}</p>`
     + `<p class="muted">${escapeHtml(attackerName)} menyerang dengan <strong>${escapeHtml(atkInfo.name)}</strong>: ${escapeHtml(atkInfo.desc)}</p>`;
   if (myHand.length) {
     body += `<p>🛡️ <strong>Bertahan</strong> dengan:</p><div class="ludo-defend-list">`;
@@ -1873,7 +1900,7 @@ function showLudoDefenseModal(dfn, st, mySeat) {
       + `<button class="btn primary small" disabled>Bertahan</button>`;
   }
   ludoModalKind = 'defense';
-  showModal('🛡️ Diserang!', body, [
+  showModal(isMine ? '💥 Ranjau!' : isStomp ? '👣 Diinjak!' : '🛡️ Diserang!', body, [
     { label: 'Terima serangan', cls: 'ghost', onClick: () => { ludoModalKind = null; send('ludo_defense', { cardId: null }); } },
   ], 'ludo-modal');
   document.querySelectorAll('#modal-body .ludo-defend-pick').forEach((b) => {
@@ -2155,9 +2182,10 @@ function renderLudo(m) {
     board.appendChild(centerNum);
     board.dataset.built = '1';
   }
-  // Skill targets are transient; token nodes persist across renders so
-  // position changes can glide/step instead of teleporting (Tahap inti).
-  board.querySelectorAll('.ludo-skill-target').forEach((el) => el.remove());
+  // Skill targets, block marks, and mine icons are transient; token nodes
+  // persist across renders so position changes can glide/step instead
+  // of teleporting (Tahap inti).
+  board.querySelectorAll('.ludo-skill-target,.ludo-block-mark,.ludo-mine-icon').forEach((el) => el.remove());
   const mySeat = ludoMySeat(m);
   const isMyTurn = st.turn === mySeat;
   const legal = new Set((st.legalMoves || []).map((x) => x.token));
@@ -2223,9 +2251,14 @@ function renderLudo(m) {
       wrap.classList.add('clickable');
       wrap.onclick = () => send('ludo_move', { token: item.ti });
     }
-    if (st.phase === 'attack' && st.pendingAttack && st.pendingAttack.kind !== 'bom' && item.pi !== mySeat) {
-      wrap.classList.add('targetable');
-      wrap.onclick = () => send('ludo_attack', { cardId: st.pendingAttack.cardId, targetPlayer: item.pi, targetToken: item.ti });
+    // Attack targets: only VALID targets are marked (Sensei 2026-11-03).
+    if (st.phase === 'attack' && st.pendingAttack && ['sniper', 'seret', 'beku'].includes(st.pendingAttack.kind)) {
+      const valid = st.pendingAttack.validTargets || [];
+      const isValid = valid.some((v) => v.player === item.pi && v.token === item.ti);
+      if (isValid) {
+        wrap.classList.add('targetable', 'valid-target');
+        wrap.onclick = () => send('ludo_attack', { cardId: st.pendingAttack.cardId, targetPlayer: item.pi, targetToken: item.ti });
+      }
     }
   });
   Object.keys(ludoTokenEls).forEach((k) => {
@@ -2305,16 +2338,59 @@ function renderLudo(m) {
       }
     });
   }
-  // Bom targets: invisible clickable cells at skill-block centres.
-  if (st.phase === 'attack' && st.pendingAttack && st.pendingAttack.kind === 'bom') {
-    for (const abs of st.skillBlocks) {
+  // Mine icons: show 💣 on planted Ranjau blocks (Sensei 2026-11-03).
+  for (const mine of (st.mines || [])) {
+    const [r, c] = LUDO_PATH[mine.abs];
+    const icon = document.createElement('div');
+    icon.className = 'ludo-mine-icon';
+    icon.style.left = `${(c + 0.5) / 15 * 100}%`;
+    icon.style.top = `${(r + 0.5) / 15 * 100}%`;
+    icon.textContent = '💣';
+    icon.title = 'Ranjau!';
+    board.appendChild(icon);
+  }
+  // Ranjau planting: mark valid blocks with yellow blinking (Sensei 2026-11-03).
+  if (st.phase === 'plantRanjau' && st.pendingPlant) {
+    for (const abs of st.pendingPlant.validBlocks) {
       const [r, c] = LUDO_PATH[abs];
       const btn = document.createElement('button');
-      btn.className = 'ludo-skill-target';
+      btn.className = 'ludo-block-mark';
       btn.style.left = `${(c + 0.5) / 15 * 100}%`;
       btn.style.top = `${(r + 0.5) / 15 * 100}%`;
-      btn.title = 'Target Bom Petak';
-      btn.onclick = () => send('ludo_attack', { cardId: st.pendingAttack.cardId, targetAbs: abs });
+      btn.title = 'Tanam Ranjau di sini';
+      btn.innerHTML = '💣';
+      btn.style.fontSize = '18px';
+      btn.onclick = () => send('ludo_ranjau_plant', { abs });
+      board.appendChild(btn);
+    }
+  }
+  // Teleport destination: mark valid blocks (Sensei 2026-11-03).
+  if (st.phase === 'teleportDest' && st.pendingTeleport) {
+    for (const abs of st.pendingTeleport.validDests) {
+      const [r, c] = LUDO_PATH[abs];
+      const btn = document.createElement('button');
+      btn.className = 'ludo-block-mark';
+      btn.style.left = `${(c + 0.5) / 15 * 100}%`;
+      btn.style.top = `${(r + 0.5) / 15 * 100}%`;
+      btn.title = 'Teleport ke sini';
+      btn.innerHTML = '🌀';
+      btn.style.fontSize = '18px';
+      btn.onclick = () => send('ludo_teleport_dest', { abs });
+      board.appendChild(btn);
+    }
+  }
+  // Escape destination: mark valid blocks (Sensei 2026-11-03).
+  if (st.phase === 'escapeDest' && st.pendingEscape) {
+    for (const abs of st.pendingEscape.validDests) {
+      const [r, c] = LUDO_PATH[abs];
+      const btn = document.createElement('button');
+      btn.className = 'ludo-block-mark';
+      btn.style.left = `${(c + 0.5) / 15 * 100}%`;
+      btn.style.top = `${(r + 0.5) / 15 * 100}%`;
+      btn.title = 'Escape ke sini';
+      btn.innerHTML = '💨';
+      btn.style.fontSize = '18px';
+      btn.onclick = () => send('ludo_escape_dest', { abs });
       board.appendChild(btn);
     }
   }
@@ -2353,7 +2429,12 @@ function renderLudo(m) {
     if (isMyTurn && st.phase === 'roll') promptText = 'LEMPAR DADUNYA! 🎲';
     else if (isMyTurn && st.phase === 'move') promptText = 'KETUK SEBUAH PION. 👆';
     else if (isMyTurn && st.phase === 'attack') promptText = 'PILIH TARGET! 🎯';
-    else if (st.phase === 'defense' && st.pendingDefense && st.pendingDefense.defender === mySeat) promptText = '🛡️ BIDAKMU DISERANG!';
+    else if (st.phase === 'plantRanjau' && st.pendingPlant) promptText = '💣 KETUK PETAK KUNING UNTUK TANAM RANJAU!';
+    else if (st.phase === 'teleportDest' && st.pendingTeleport) promptText = '🌀 PILIH TUJUAN TELEPORT!';
+    else if (st.phase === 'escapeDest' && st.pendingEscape) promptText = '💨 PILIH TUJUAN ESCAPE!';
+    else if ((st.phase === 'defense' || st.phase === 'mineDefense') && st.pendingDefense && st.pendingDefense.defender === mySeat) {
+      promptText = st.phase === 'mineDefense' ? '💥 RANJAU MELEDAK!' : '🛡️ BIDAKMU DISERANG!';
+    }
   }
   if (prompt) {
     if (prompt.textContent !== promptText) prompt.textContent = promptText;
@@ -2390,8 +2471,9 @@ function renderLudo(m) {
     ludoAttackModalKey = null;
   }
   const dfn = st.pendingDefense;
-  if (st.phase === 'defense' && dfn && dfn.defender === mySeat && !deferPopup) {
-    const key = `${dfn.defender}:${dfn.attackKind}:${dfn.targetPlayer}:${dfn.targetToken}:${dfn.targetAbs ?? ''}`;
+  // Defense modal for both 'defense' and 'mineDefense' phases (Sensei 2026-11-03).
+  if ((st.phase === 'defense' || st.phase === 'mineDefense') && dfn && dfn.defender === mySeat && !deferPopup) {
+    const key = `${st.phase}:${dfn.defender}:${dfn.attackKind}:${dfn.targetPlayer}:${dfn.targetToken}:${dfn.targetAbs ?? ''}`;
     if (ludoDefenseModalKey !== key) {
       ludoDefenseModalKey = key;
       showLudoDefenseModal(dfn, st, mySeat);
@@ -2428,9 +2510,10 @@ function renderLudo(m) {
     ludoBurnModalKey = null;
   }
   // Choose-capture popup (Sensei 2026-11-03): 2+ victims, pick one.
+  // Also used for stompChoose (stomp with 2+ victims).
   // Deferred while a dice animation runs, like other popups.
-  if (st.phase === 'chooseCapture' && st.pendingCaptureChoice && isMyTurn && !deferPopup) {
-    const key = `cc-${st.turn}-${st.pendingCaptureChoice.victims.length}`;
+  if ((st.phase === 'chooseCapture' || st.phase === 'stompChoose') && st.pendingCaptureChoice && isMyTurn && !deferPopup) {
+    const key = `cc-${st.phase}-${st.turn}-${st.pendingCaptureChoice.victims.length}`;
     if (ludoCaptureModalKey !== key) {
       ludoCaptureModalKey = key;
       showLudoChooseCaptureModal(st.pendingCaptureChoice, st, m);
@@ -2458,8 +2541,13 @@ function renderLudo(m) {
   else if (st.phase === 'standby') status = isMyTurn ? 'Bersiap — giliranmu dimulai…' : `Bersiap — giliran ${turnPlayer.nickname} dimulai…`;
   else if (st.phase === 'roll') status = isMyTurn ? 'Giliranmu — kocok dadumu di sangkarmu.' : `Menunggu ${turnPlayer.nickname} mengocok dadu…`;
   else if (st.phase === 'move') status = isMyTurn ? `Dadu: ${st.dice} → langkah: ${st.steps}. Klik tokenmu yang menyala, atau pakai 1 kartu netral dulu.` : `Menunggu ${turnPlayer.nickname} jalan ${st.steps} langkah…`;
-  else if (st.phase === 'attack') status = isMyTurn ? 'Kartu attack: tentukan Pakai/Buang di popup, lalu klik bidak target.' : `${turnPlayer.nickname} sedang memakai kartu attack…`;
+  else if (st.phase === 'attack') status = isMyTurn ? 'Kartu attack: tentukan Pakai di popup, lalu klik bidak target.' : `${turnPlayer.nickname} sedang memakai kartu attack…`;
+  else if (st.phase === 'plantRanjau') status = st.pendingPlant ? 'Pilih petak kuning untuk menanam ranjau.' : 'Menanam ranjau…';
+  else if (st.phase === 'teleportDest') status = st.pendingTeleport ? 'Pilih tujuan teleport (petak kuning).' : 'Teleport…';
+  else if (st.phase === 'escapeDest') status = st.pendingEscape ? 'Pilih tujuan escape (petak kuning).' : 'Escape…';
+  else if (st.phase === 'mineDefense') status = st.pendingDefense && st.pendingDefense.defender === mySeat ? '💥 Ranjau meledak! Tentukan di popup: Bertahan atau Terima.' : 'Ranjau meledak — menunggu defense…';
   else if (st.phase === 'defense') status = st.pendingDefense && st.pendingDefense.defender === mySeat ? 'Bidakmu diserang! Tentukan di popup: Bertahan atau Terima serangan.' : 'Ada serangan — menunggu defense…';
+  else if (st.phase === 'stompChoose') status = isMyTurn ? 'Pilih 1 bidak yang akan diinjak.' : `Menunggu ${turnPlayer.nickname} memilih bidak…`;
   else if (st.phase === 'swap') status = isMyTurn ? 'Tanganmu sudah penuh (3). Pilih 1 kartu lama untuk ditukar, atau Pertahankan tanganmu.' : 'Menunggu keputusan tukar kartu…';
   else if (st.phase === 'confirm') status = isMyTurn ? 'Giliranmu selesai — klik Confirm di popup.' : `Menunggu ${turnPlayer.nickname} konfirmasi…`;
   $('ludo-status').textContent = status;
@@ -2569,6 +2657,118 @@ function renderLudo(m) {
       logBox.appendChild(p);
     }
     logBox.scrollTop = logBox.scrollHeight;
+  }
+  // Process one-shot animation events (Sensei 2026-11-03).
+  ludoProcessAnimEvents(st, board);
+  // Bot takeover: dark overlay + reclaim button (Sensei 2026-11-03).
+  ludoRenderTakeoverOverlay(m, board, mySeat);
+}
+// Bot takeover overlay: when my seat is driven by a bot, darken the board
+// and show "Ambil Alih Permainan" button (Sensei 2026-11-03).
+function ludoRenderTakeoverOverlay(m, board, mySeat) {
+  const st = m.state;
+  let overlay = board.querySelector('.ludo-takeover-overlay');
+  const isTakenOver = m.players[mySeat] && m.players[mySeat].takenOver;
+  if (!isTakenOver || st.over) {
+    if (overlay) overlay.remove();
+    return;
+  }
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'ludo-takeover-overlay';
+    overlay.innerHTML = `<p>🤖 Bot sedang memainkan bidakmu.<br>Ketuk tombol untuk mengambil alih kembali.</p>`;
+    const btn = document.createElement('button');
+    btn.className = 'btn primary';
+    btn.textContent = '🎮 Ambil Alih Permainan';
+    btn.onclick = () => send('ludo_reclaim', {});
+    overlay.appendChild(btn);
+    board.appendChild(overlay);
+  }
+}
+// One-shot animation events: mine blast, shatter, chain, teleport (Sensei 2026-11-03).
+function ludoProcessAnimEvents(st, board) {
+  const events = st.animEvents || [];
+  for (const ev of events) {
+    if (ludoSeenAnimEvents.has(ev.id)) continue;
+    ludoSeenAnimEvents.add(ev.id);
+    if (ev.type === 'mineBlast') ludoAnimMineBlast(board, ev.abs);
+    else if (ev.type === 'shatter') ludoAnimShatter(ev.player, ev.token);
+    else if (ev.type === 'chain') ludoAnimChainPull(board, ev.fromAbs, ev.toAbs, ev.player, ev.token);
+    else if (ev.type === 'teleport') ludoAnimTeleport(board, ev.fromAbs, ev.toAbs, ev.player, ev.token);
+  }
+  // Bound the seen set.
+  if (ludoSeenAnimEvents.size > 50) {
+    const arr = Array.from(ludoSeenAnimEvents).slice(-30);
+    ludoSeenAnimEvents.clear();
+    arr.forEach((id) => ludoSeenAnimEvents.add(id));
+  }
+}
+// Mine blast: explosion at block (Sensei 2026-11-03).
+function ludoAnimMineBlast(board, abs) {
+  if (abs === null || abs === undefined || !LUDO_PATH[abs]) return;
+  const [r, c] = LUDO_PATH[abs];
+  const el = document.createElement('div');
+  el.className = 'ludo-explosion';
+  el.style.left = `${(c + 0.5) / 15 * 100}%`;
+  el.style.top = `${(r + 0.5) / 15 * 100}%`;
+  el.innerHTML = '<div class="blast"></div><div class="ring"></div>';
+  board.appendChild(el);
+  setTimeout(() => el.remove(), 800);
+}
+// Shatter: pawn breaks (Sensei 2026-11-03).
+function ludoAnimShatter(player, token) {
+  const key = `${player}:${token}`;
+  const el = ludoTokenEls[key];
+  if (!el) return;
+  el.classList.add('shattered');
+  setTimeout(() => el.classList.remove('shattered'), 700);
+}
+// Chain: chain from destination to pawn, then pull (Sensei 2026-11-03).
+// fromAbs = destination (where pawn will end up), toAbs = pawn's current position.
+function ludoAnimChainPull(board, fromAbs, toAbs, player, token) {
+  if (!LUDO_PATH[fromAbs] || !LUDO_PATH[toAbs]) return;
+  const [r1, c1] = LUDO_PATH[fromAbs];
+  const [r2, c2] = LUDO_PATH[toAbs];
+  const x1 = (c1 + 0.5) / 15 * 100, y1 = (r1 + 0.5) / 15 * 100;
+  const x2 = (c2 + 0.5) / 15 * 100, y2 = (r2 + 0.5) / 15 * 100;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.classList.add('ludo-chain-svg');
+  svg.setAttribute('viewBox', '0 0 100 100');
+  svg.setAttribute('preserveAspectRatio', 'none');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  // Curved chain for visual interest.
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - 8;
+  path.setAttribute('d', `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`);
+  svg.appendChild(path);
+  board.appendChild(svg);
+  // Remove after animation; the pawn move itself is handled by snapshot diff.
+  setTimeout(() => svg.remove(), 1200);
+}
+// Teleport: dissolve at origin, appear at destination (Sensei 2026-11-03).
+function ludoAnimTeleport(board, fromAbs, toAbs, player, token) {
+  const key = `${player}:${token}`;
+  const el = ludoTokenEls[key];
+  if (el) {
+    el.classList.add('teleporting');
+    setTimeout(() => el.classList.remove('teleporting'), 700);
+  }
+  if (LUDO_PATH[fromAbs]) {
+    const [r1, c1] = LUDO_PATH[fromAbs];
+    const out = document.createElement('div');
+    out.className = 'ludo-teleport-out';
+    out.style.left = `${(c1 + 0.5) / 15 * 100}%`;
+    out.style.top = `${(r1 + 0.5) / 15 * 100}%`;
+    board.appendChild(out);
+    setTimeout(() => out.remove(), 600);
+  }
+  if (LUDO_PATH[toAbs]) {
+    const [r2, c2] = LUDO_PATH[toAbs];
+    const inp = document.createElement('div');
+    inp.className = 'ludo-teleport-in';
+    inp.style.left = `${(c2 + 0.5) / 15 * 100}%`;
+    inp.style.top = `${(r2 + 0.5) / 15 * 100}%`;
+    board.appendChild(inp);
+    setTimeout(() => inp.remove(), 600);
   }
 }
 
