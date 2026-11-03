@@ -1657,6 +1657,21 @@ const LUDO_BASE = {
   blue: [[10,2],[10,4],[12,2],[12,4]],
 };
 const LUDO_COLORS = ['red', 'green', 'yellow', 'blue'];
+// Per-color finish trays (Sensei 2026-11-03): finished pawns sit at the
+// end of their own color's path, NOT the shared centre [7,7]. Each tray
+// is a 2x2 mini-grid just beyond the home-column end.
+const LUDO_FINISH = {
+  red: [7, 6.55],
+  green: [6.55, 7],
+  yellow: [7, 7.45],
+  blue: [7.45, 7],
+};
+function ludoFinishSlot(player, tokenIdx) {
+  const [r, c] = LUDO_FINISH[LUDO_COLORS[player]];
+  const dr = (tokenIdx >> 1) ? 0.22 : -0.22;
+  const dc = (tokenIdx & 1) ? 0.22 : -0.22;
+  return [[r + dr, c + dc]];
+}
 function ludoCellFor(player, progress, tokenIdx) {
   if (progress === -1) return [LUDO_BASE[LUDO_COLORS[player]][tokenIdx]];
   if (progress >= 0 && progress <= 50) {
@@ -1664,7 +1679,7 @@ function ludoCellFor(player, progress, tokenIdx) {
     return [LUDO_PATH[(start + progress) % 52]];
   }
   if (progress >= 51 && progress <= 56) return [LUDO_HOME[LUDO_COLORS[player]][progress - 51]];
-  return [[7, 7]];
+  return ludoFinishSlot(player, tokenIdx);
 }
 // Display-only base slots, symmetric by design (see TASK_INSTRUCTION.md).
 // Engine base cells (2,2),(2,4)... average toward the board centre, so
@@ -1896,15 +1911,15 @@ function ludoHopOnce(el) {
   void el.offsetWidth;
   el.classList.add('hopping');
 }
-function ludoCellCenter(pi, progress) {
-  const [r, c] = ludoCellFor(pi, progress, 0)[0];
+function ludoCellCenter(pi, progress, ti) {
+  const [r, c] = ludoCellFor(pi, progress, ti || 0)[0];
   return { left: ((c + 0.5) / 15) * 100, top: ((r + 0.5) / 15) * 100 };
 }
-function ludoStepPositions(pi, from, to) {
-  if (from === -1) return [ludoCellCenter(pi, to)];
+function ludoStepPositions(pi, from, to, ti) {
+  if (from === -1) return [ludoCellCenter(pi, to, ti)];
   const pts = [];
   const dir = to > from ? 1 : -1;
-  for (let p = from + dir; dir > 0 ? p <= to : p >= to; p += dir) pts.push(ludoCellCenter(pi, p));
+  for (let p = from + dir; dir > 0 ? p <= to : p >= to; p += dir) pts.push(ludoCellCenter(pi, p, ti));
   return pts;
 }
 function ludoAbs(pi, progress) {
@@ -1969,11 +1984,11 @@ async function ludoAnimDice(face, ms) {
   }
   img.alt = `Dadu ${face}`;
 }
-async function ludoAnimMove(key, pi, from, to, finalPos, thump) {
+async function ludoAnimMove(key, pi, ti, from, to, finalPos, thump) {
   const el = ludoTokenEls[key];
   if (!el) return;
   if (LUDO_REDUCED_MOTION) { ludoPlaceInstant(el, finalPos); return; }
-  const steps = ludoStepPositions(pi, from, to);
+  const steps = ludoStepPositions(pi, from, to, ti);
   for (let i = 0; i < steps.length; i++) {
     const p = i === steps.length - 1 ? finalPos : steps[i];
     el.style.left = `${p.left}%`;
@@ -2073,6 +2088,9 @@ function renderLudo(m) {
     const flying = ['hopping', 'captured', 'thump'].filter((c) => wrap.classList.contains(c));
     wrap.className = `ludo-token-wrap tok-${item.pl.color}` + (frozen ? ' frozen' : '')
       + (flying.length ? ` ${flying.join(' ')}` : '');
+    // Stacked pawns: the turn player's pawn paints on top (Sensei
+    // 2026-11-03), so it's easy to tap and clear whose pawn is where.
+    wrap.style.zIndex = item.pi === st.turn ? '3' : '';
     wrap.title = `${m.players[item.pi] ? m.players[item.pi].nickname : item.pl.color} #${item.ti + 1}` + (frozen ? ' (beku)' : '');
     let badge = wrap.querySelector('.ludo-frozen-badge');
     if (frozen && !badge) {
@@ -2143,7 +2161,7 @@ function renderLudo(m) {
     const movedKeys = new Set();
     jobs.moves.forEach((j) => {
       movedKeys.add(j.key);
-      ludoEnqueue(() => ludoAnimMove(j.key, j.pi, j.from, j.to, finalPos[j.key], j.thump));
+      ludoEnqueue(() => ludoAnimMove(j.key, j.pi, j.ti, j.from, j.to, finalPos[j.key], j.thump));
     });
     jobs.captures.forEach((c) => {
       movedKeys.add(c.key);

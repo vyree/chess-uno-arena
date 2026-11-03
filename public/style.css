@@ -867,7 +867,7 @@ body.low-gfx * {
 .ludo-num-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0; }
 .ludo-num-grid .btn { font-size: 18px; padding: 10px 0; }
 .modal-box.ludo-modal .btn[disabled] { opacity: .45; cursor: not-allowed; }
-.ludo-skill-target { position: absolute; width: 6.667%; aspect-ratio: 1; transform: translate(-50%, -50%); background: transparent; border: 2px dashed #fff; border-radius: 8px; cursor: pointer; z-index: 1; }
+.ludo-skill-target { position: absolute; width: 6.667%; aspect-ratio: 1; transform: translate(-50%, -50%); background: transparent; border: 2px dashed #fff; border-radius: 8px; cursor: pointer; z-index: 5; }
 /* Foony-style dice juice, recreated original: rapid in-place vibration
    (positional shake, linear/mechanical) while the roll resolves. */
 @keyframes ludo-dice-shake {
