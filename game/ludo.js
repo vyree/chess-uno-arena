@@ -70,6 +70,7 @@ function newGame(rand) {
     steps: null,    // client can animate no-move rolls (Sensei 2026-11-03)
     playerRolls: [null, null, null, null], // last roll per player, for yard dice (Sensei 2026-11-03)
     neutralUsed: false,
+    boosterDecisionPending: false, // strict gate: must answer "mau booster?" before moving (Sensei 2026-11-03)
     sixCount: 0,
     pendingAttack: null,
     pendingDefense: null,
@@ -184,6 +185,7 @@ function endTurn(st) {
   st.dice = null;
   st.steps = null;
   st.neutralUsed = false;
+  st.boosterDecisionPending = false;
   st.sixCount = 0;
   st.pendingAttack = null;
   st.pendingDefense = null;
@@ -201,6 +203,7 @@ function afterMoveFlow(st, moveResult) {
     st.dice = null;
     st.steps = null;
     st.neutralUsed = false;
+    st.boosterDecisionPending = false;
     st.pendingAttack = null;
     st.pendingDefense = null;
     st.pendingDraw = null;
@@ -448,6 +451,7 @@ function toClient(st, seat) {
     playerRolls: st.playerRolls.slice(),
     steps: st.steps,
     neutralUsed: st.neutralUsed,
+    boosterDecisionPending: st.boosterDecisionPending,
     sixCount: st.sixCount,
     winner: st.winner,
     over: st.over,

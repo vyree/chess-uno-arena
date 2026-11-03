@@ -1752,8 +1752,9 @@ let ludoBoosterPromptKey = null; // move-phase booster prompt already shown
 let ludoConfirmModalKey = null; // confirm stopper popup already shown
 let ludoModalKind = null;       // 'attack' | 'defense' | 'booster' | 'booster-prompt' | 'confirm' | null
 // Booster prompt (Sensei 2026-11-03): at move-phase entry, if the player
-// holds a booster (neutral) card, ask "Pakai kartu booster?". Skipped
-// entirely when holding none. Bots decide via botChooseNeutral.
+// Strict booster gate (Sensei 2026-11-03): the server sets
+// boosterDecisionPending; the player MUST answer Ya/Tidak before moving.
+// The decision is sent to the server; "Ya" then opens the card picker.
 function showLudoBoosterPrompt(st, mySeat) {
   const myHand = (st.players[mySeat] && st.players[mySeat].hand || []).filter((c) => c.group === 'neutral');
   if (!myHand.length) return;
@@ -1761,6 +1762,7 @@ function showLudoBoosterPrompt(st, mySeat) {
   showModal('✨ Kartu Booster', '<p>Sebelum bidak dijalankan — <strong>pakai kartu booster?</strong></p>', [
     {
       label: 'Ya, pakai', cls: 'primary', onClick: () => {
+        send('ludo_booster_decide', { use: true });
         ludoModalKind = null;
         if (myHand.length === 1) { showLudoBoosterModal(myHand[0], st); return; }
         let btns = '';
@@ -1780,7 +1782,12 @@ function showLudoBoosterPrompt(st, mySeat) {
         });
       },
     },
-    { label: 'Tidak', cls: 'ghost', onClick: () => { ludoModalKind = null; } },
+    {
+      label: 'Tidak', cls: 'ghost', onClick: () => {
+        send('ludo_booster_decide', { use: false });
+        ludoModalKind = null;
+      },
+    },
   ], 'ludo-modal');
 }
 function showLudoAttackModal(atk, st) {
@@ -2128,7 +2135,9 @@ function renderLudo(m) {
       wrap.appendChild(badge);
     } else if (!frozen && badge) badge.remove();
     wrap.onclick = null;
-    if (isMyTurn && st.phase === 'move' && legal.has(item.ti) && item.pi === mySeat) {
+    // Strict booster gate: tokens stay unclickable while the player
+    // must still answer "mau booster tidak?" (Sensei 2026-11-03).
+    if (isMyTurn && st.phase === 'move' && !st.boosterDecisionPending && legal.has(item.ti) && item.pi === mySeat) {
       wrap.classList.add('clickable');
       wrap.onclick = () => send('ludo_move', { token: item.ti });
     }
@@ -2305,11 +2314,10 @@ function renderLudo(m) {
     if (ludoDefenseModalKey && ludoModalKind === 'defense') { hideModal(); ludoModalKind = null; }
     ludoDefenseModalKey = null;
   }
-  // Booster prompt at move-phase entry (Sensei 2026-11-03): only when
-  // holding a booster and not used yet; skipped entirely otherwise.
-  const myHandNow = (st.players[mySeat] && st.players[mySeat].hand || []);
-  const hasBooster = myHandNow.some((c) => c.group === 'neutral');
-  if (st.phase === 'move' && isMyTurn && hasBooster && !st.neutralUsed) {
+  // Booster gate (Sensei 2026-11-03): server-driven. While
+  // boosterDecisionPending, the player must answer the Ya/Tidak prompt;
+  // tokens stay unclickable until the decision is sent.
+  if (st.phase === 'move' && isMyTurn && st.boosterDecisionPending) {
     const key = `b-${st.turn}-${st.dice}-${st.sixCount}`;
     if (ludoBoosterPromptKey !== key) {
       ludoBoosterPromptKey = key;
@@ -2323,15 +2331,15 @@ function renderLudo(m) {
   if (st.over) status = st.winner !== null ? `🏆 Pemenang: ${m.players[st.winner].nickname}` : 'Game selesai.';
   else if (st.phase === 'end') status = `Giliran ${turnPlayer.nickname} selesai.`;
   else if (st.phase === 'standby') status = isMyTurn ? 'Bersiap — giliranmu dimulai…' : `Bersiap — giliran ${turnPlayer.nickname} dimulai…`;
-  else if (st.phase === 'roll') status = isMyTurn ? 'Giliranmu — kocok dadu di tengah papan.' : `Menunggu ${turnPlayer.nickname} mengocok dadu…`;
+  else if (st.phase === 'roll') status = isMyTurn ? 'Giliranmu — kocok dadumu di sangkarmu.' : `Menunggu ${turnPlayer.nickname} mengocok dadu…`;
   else if (st.phase === 'move') status = isMyTurn ? `Dadu: ${st.dice} → langkah: ${st.steps}. Klik tokenmu yang menyala, atau pakai 1 kartu netral dulu.` : `Menunggu ${turnPlayer.nickname} jalan ${st.steps} langkah…`;
   else if (st.phase === 'attack') status = isMyTurn ? 'Kartu attack: tentukan Pakai/Buang di popup, lalu klik bidak target.' : `${turnPlayer.nickname} sedang memakai kartu attack…`;
   else if (st.phase === 'defense') status = st.pendingDefense && st.pendingDefense.defender === mySeat ? 'Bidakmu diserang! Tentukan di popup: Bertahan atau Terima serangan.' : 'Ada serangan — menunggu defense…';
   else if (st.phase === 'swap') status = isMyTurn ? 'Tanganmu sudah penuh (3). Pilih 1 kartu lama untuk ditukar, atau Pertahankan tanganmu.' : 'Menunggu keputusan tukar kartu…';
   else if (st.phase === 'confirm') status = isMyTurn ? 'Giliranmu selesai — klik Confirm di popup.' : `Menunggu ${turnPlayer.nickname} konfirmasi…`;
   $('ludo-status').textContent = status;
-  // Confirm stopper (Sensei 2026-11-03): turn holder gets a popup;
-  // everyone else gets a "..." thinking bubble by their name.
+  // Confirm stopper (Sensei 2026-11-03): turn holder gets a popup plus
+  // the "..." thinking bubble; everyone else gets "waiting~".
   const confirmKey = st.phase === 'confirm' && !st.over ? `c-${st.turn}-${st.pendingConfirm && st.pendingConfirm.noMove ? 1 : 0}` : null;
   if (confirmKey && isMyTurn) {
     if (ludoConfirmModalKey !== confirmKey) {
@@ -2350,7 +2358,9 @@ function renderLudo(m) {
   }
   board.querySelectorAll('.ludo-base-name').forEach((el) => {
     const pi = LUDO_COLORS.indexOf(el.dataset.color);
-    el.classList.toggle('thinking', st.phase === 'confirm' && !st.over && pi !== st.turn);
+    const inConfirm = st.phase === 'confirm' && !st.over;
+    el.classList.toggle('thinking', inConfirm && pi === st.turn);
+    el.classList.toggle('waiting', inConfirm && pi !== st.turn);
   });
   const actions = $('ludo-actions');
   actions.innerHTML = '';

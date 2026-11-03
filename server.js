@@ -1881,6 +1881,11 @@ function doLudoRoll(room) {
   st.playerRolls[st.turn] = st.dice; // yard dice shows each player's last roll
   st.neutralUsed = false;
   st.phase = 'move';
+  // Strict micro-sequence (Sensei 2026-11-03): if the roller holds a
+  // booster (neutral) card, they MUST answer "mau booster tidak?"
+  // before moving. The gate lifts on ludo_booster_decide.
+  const hand = st.players[st.turn].hand || [];
+  st.boosterDecisionPending = hand.some((c) => c.group === 'neutral');
   const moves = ludo.legalMoves(st, st.turn, st.steps, st.dice);
   if (!moves.length) {
     // Preserve the roll so the client can animate it: endTurn wipes st.dice.
@@ -1890,9 +1895,19 @@ function doLudoRoll(room) {
   }
   return { ok: true };
 }
+function doLudoBoosterDecide(room, use) {
+  const st = room.ludo.st;
+  if (st.phase !== 'move' || !st.boosterDecisionPending || st.over) {
+    return { ok: false, error: 'tidak ada keputusan booster yang menunggu' };
+  }
+  st.boosterDecisionPending = false;
+  ludoSync(room);
+  return { ok: true, use };
+}
 function doLudoMove(room, tokenIdx) {
   const st = room.ludo.st;
   if (st.phase !== 'move' || st.over) return { ok: false, error: 'bukan waktunya jalan' };
+  if (st.boosterDecisionPending) return { ok: false, error: 'jawab dulu: mau pakai booster tidak?' };
   const r = ludo.applyMove(st, st.turn, tokenIdx, st.steps, st.dice);
   if (!r.ok) return r;
   if (r.captured.length) {
@@ -1904,6 +1919,7 @@ function doLudoMove(room, tokenIdx) {
 }
 function doLudoNeutral(room, cardId, choice) {
   const st = room.ludo.st;
+  if (st.boosterDecisionPending) return { ok: false, error: 'jawab dulu: mau pakai booster tidak?' };
   const r = ludo.useNeutral(st, st.turn, cardId, choice);
   if (!r.ok) return r;
   ludoAnnounce(room, `${dispName(room.players[st.turn])} memakai ${ludo.CARD_DEFS[r.card.kind].name}.`, r.card.kind);
@@ -1995,6 +2011,13 @@ function ludoBotStep(room) {
     return;
   }
   if (st.phase === 'move') {
+    // Strict booster gate (Sensei 2026-11-03): the bot must also answer
+    // "mau booster tidak?" before moving. Its answer is implicit in
+    // whether botChooseNeutral finds a card worth using.
+    if (st.boosterDecisionPending) {
+      const want = !!ludo.botChooseNeutral(st, seat);
+      doLudoBoosterDecide(room, want);
+    }
     const neutral = ludo.botChooseNeutral(st, seat);
     if (neutral) {
       const nr = doLudoNeutral(room, neutral.cardId, neutral.choice);
@@ -2246,6 +2269,14 @@ async function route(ws, type, data) {
       if (st.phase !== 'confirm') { sendError(ws, 'Tidak ada konfirmasi yang menunggu'); return; }
       if (player.seat !== st.turn) { sendError(ws, 'Bukan giliranmu'); return; }
       ludoConfirmPass(room);
+      return;
+    }
+    case 'ludo_booster_decide': {
+      const room = needRoom(); if (!room) return;
+      if (room.game !== 'ludo' || room.status !== 'playing' || !room.ludo) { sendError(ws, 'Game Ludo belum berjalan'); return; }
+      if (player.seat !== room.ludo.st.turn) { sendError(ws, 'Bukan giliranmu'); return; }
+      const r = doLudoBoosterDecide(room, data.use);
+      if (!r.ok) { sendError(ws, r.error); return; }
       return;
     }
     case 'ludo_move': {

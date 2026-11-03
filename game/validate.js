@@ -256,6 +256,10 @@ const VALIDATORS = {
   create_ludo_bot_room() { return { ok: true, data: {} }; },
   ludo_roll() { return { ok: true, data: {} }; },
   ludo_confirm() { return { ok: true, data: {} }; },
+  ludo_booster_decide(d) {
+    if (typeof d.use !== 'boolean') return { ok: false, error: 'use harus boolean' };
+    return { ok: true, data: { use: d.use } };
+  },
   ludo_move(d) {
     if (!Number.isInteger(d.token) || d.token < 0 || d.token > 3) {
       return { ok: false, error: 'token harus 0-3' };
