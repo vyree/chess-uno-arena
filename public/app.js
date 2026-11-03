@@ -1761,7 +1761,7 @@ function showLudoAnnounce(m) {
 // captures) executed strictly in order. No new WS messages, no
 // protocol change. Pacing defaults: dice 550ms, step 120ms (tunable).
 const LUDO_STEP_MS = 120;
-const LUDO_DICE_SCRAMBLE_MS = 550;
+const LUDO_DICE_ANIM_MS = 1000;
 const LUDO_FRESH_THRESHOLD = 10;
 const LUDO_REDUCED_MOTION = typeof matchMedia === 'function'
   && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1846,11 +1846,15 @@ async function ludoAnimDice(face) {
   if (LUDO_REDUCED_MOTION) {
     img.src = `/assets/ludo-clean/dice-${face}.svg`;
   } else {
-    const frames = 7;
+    // Foony-style: rapid in-place vibration while faces flicker,
+    // then settle on the final face.
+    if (btn) btn.classList.add('shaking');
+    const frames = 8;
     for (let i = 0; i < frames; i++) {
       img.src = `/assets/ludo-clean/dice-${1 + Math.floor(Math.random() * 6)}.svg`;
-      await ludoWait(LUDO_DICE_SCRAMBLE_MS / frames);
+      await ludoWait(LUDO_DICE_ANIM_MS / frames);
     }
+    if (btn) btn.classList.remove('shaking');
     img.src = `/assets/ludo-clean/dice-${face}.svg`;
   }
   img.alt = `Dadu ${face}`;
@@ -2055,6 +2059,17 @@ function renderLudo(m) {
     turnBadge.classList.remove('swap');
     void turnBadge.offsetWidth;
     turnBadge.classList.add('swap');
+  }
+  // Foony-style turn prompt callout above the dice (own turn only).
+  const prompt = $('ludo-prompt');
+  let promptText = '';
+  if (!st.over) {
+    if (isMyTurn && st.phase === 'roll') promptText = 'LEMPAR DADUNYA! 🎲';
+    else if (isMyTurn && st.phase === 'move') promptText = 'KETUK SEBUAH PION. 👆';
+  }
+  if (prompt) {
+    if (prompt.textContent !== promptText) prompt.textContent = promptText;
+    prompt.classList.toggle('hidden', !promptText);
   }
   diceBtn.disabled = !(isMyTurn && st.phase === 'roll');
   diceBtn.onclick = () => send('ludo_roll');
