@@ -1749,6 +1749,8 @@ function showLudoBubble(card, state) {
 let ludoAttackModalKey = null;  // attack kind+attacker already prompted
 let ludoDefenseModalKey = null; // defense prompt already shown
 let ludoBoosterPromptKey = null; // move-phase booster prompt already shown
+let ludoCaptureModalKey = null; // choose-capture prompt already shown
+let ludoBurnModalKey = null; // burn notice already shown
 let ludoConfirmModalKey = null; // confirm stopper popup already shown
 let ludoModalKind = null;       // 'attack' | 'defense' | 'booster' | 'booster-prompt' | 'confirm' | null
 // Booster prompt (Sensei 2026-11-03): at move-phase entry, if the player
@@ -1790,16 +1792,67 @@ function showLudoBoosterPrompt(st, mySeat) {
     },
   ], 'ludo-modal');
 }
+// Draw ceremony popup (Sensei 2026-11-03): broadcast to ALL players.
+// Stage 'prompt': turn player clicks to draw; others wait.
+// Stage 'reveal': all see the card + effect; turn player closes it.
+let ludoDrawModalKey = null;
+function showLudoDrawModal(ceremony, st, m, mySeat) {
+  const isTurn = st.turn === mySeat;
+  const turnNick = m.players[st.turn] ? m.players[st.turn].nickname : LUDO_COLORS[st.turn];
+  ludoModalKind = 'draw';
+  if (ceremony.stage === 'prompt') {
+    showModal('🃏 Draw Kartu',
+      isTurn
+        ? '<p>Bidakmu berhenti di block kartu! Klik tombol di bawah untuk draw 1 kartu.</p>'
+        : `<p>Menunggu <strong>${escapeHtml(turnNick)}</strong> draw kartu…</p>`,
+      isTurn ? [{ label: '🃏 Draw Kartu', cls: 'primary', onClick: () => { ludoModalKind = null; send('ludo_draw'); } }] : [],
+      'ludo-modal');
+  } else if (ceremony.stage === 'reveal' && ceremony.card) {
+    const info = st.cardInfo[ceremony.card.kind];
+    const body = `<div class="ludo-modal-card"><div class="ludo-card card-${ceremony.card.group}">${ludoCardFace(ceremony.card, info)}</div></div>`
+      + `<p><strong>${escapeHtml(info.name)}</strong></p>`
+      + `<p class="muted">${escapeHtml(info.desc)}</p>`
+      + (isTurn ? '<p>Klik Tutup untuk melanjutkan.</p>' : `<p>Menunggu <strong>${escapeHtml(turnNick)}</strong> menutup…</p>`);
+    showModal('🃏 Hasil Draw',
+      body,
+      isTurn ? [{ label: 'Tutup', cls: 'primary', onClick: () => { ludoModalKind = null; send('ludo_draw_close'); } }] : [],
+      'ludo-modal');
+  }
+}
+function showLudoChooseCaptureModal(pending, st, m) {
+  let btns = '<div class="ludo-capture-grid">';
+  for (const v of pending.victims) {
+    const color = LUDO_COLORS[v.player];
+    const nick = m.players[v.player] ? m.players[v.player].nickname : color;
+    btns += `<button class="ludo-capture-pick tok-${color}" data-player="${v.player}" data-token="${v.token}">`
+      + `<span class="ludo-capture-pawn"></span><span>${escapeHtml(nick)} #${v.token + 1}</span></button>`;
+  }
+  btns += '</div>';
+  ludoModalKind = 'chooseCapture';
+  showModal('🎯 Pilih Bidak yang Dimakan',
+    `<p>Ada ${pending.victims.length} bidak di petak ini. Pilih <strong>satu</strong> yang dipulangkan ke base:</p>${btns}`,
+    [], 'ludo-modal');
+  document.querySelectorAll('#modal-body .ludo-capture-pick').forEach((b) => {
+    b.onclick = () => {
+      ludoModalKind = null; hideModal();
+      send('ludo_choose_capture', {
+        targetPlayer: parseInt(b.dataset.player, 10),
+        targetToken: parseInt(b.dataset.token, 10),
+      });
+    };
+  });
+}
 function showLudoAttackModal(atk, st) {
   const info = st.cardInfo[atk.kind];
   const body = `<div class="ludo-modal-card"><div class="ludo-card card-attack">${ludoCardFace({ kind: atk.kind, group: 'attack' }, info)}</div></div>`
     + `<p><strong>${escapeHtml(info.name)}</strong></p>`
     + `<p class="muted">${escapeHtml(info.desc)}</p>`
-    + `<p>Kamu dapat kartu serangan! Setelah pilih <strong>Pakai</strong>, ketuk bidak musuh yang jadi target.</p>`;
+    + `<p>Kartu serangan <strong>wajib dipakai</strong>! Klik Pakai, lalu ketuk bidak musuh yang jadi target.</p>`;
   ludoModalKind = 'attack';
+  // Sensei 2026-11-03: no "Buang" — usable attack cards must be used.
+  // Unusable ones burn in the draw ceremony before reaching here.
   showModal('⚔️ Kartu Serangan!', body, [
     { label: '⚔️ Pakai', cls: 'primary', onClick: () => { ludoModalKind = null; } },
-    { label: '🗑️ Buang', cls: 'ghost', onClick: () => { ludoModalKind = null; send('ludo_pass_attack'); } },
   ], 'ludo-modal');
 }
 function showLudoDefenseModal(dfn, st, mySeat) {
@@ -2346,6 +2399,45 @@ function renderLudo(m) {
   } else {
     if (ludoDefenseModalKey && ludoModalKind === 'defense') { hideModal(); ludoModalKind = null; }
     ludoDefenseModalKey = null;
+  }
+  // Draw ceremony popup (Sensei 2026-11-03): broadcast to ALL players,
+  // not just the turn holder. Deferred while dice animates.
+  if (st.phase === 'draw' && st.pendingDrawCeremony && !deferPopup) {
+    const c = st.pendingDrawCeremony;
+    const key = `d-${st.turn}-${c.stage}-${c.card ? c.card.id : 'x'}`;
+    if (ludoDrawModalKey !== key) {
+      ludoDrawModalKey = key;
+      showLudoDrawModal(c, st, m, mySeat);
+    }
+  } else {
+    if (ludoDrawModalKey && ludoModalKind === 'draw') { hideModal(); ludoModalKind = null; }
+    ludoDrawModalKey = null;
+  }
+  // Burn notice (Sensei 2026-11-03): attack card unusable, returned to deck.
+  if (st.drawBurned && !deferPopup) {
+    const key = `burn-${st.drawBurned.kind}-${st.drawBurned.t || ''}`;
+    if (ludoBurnModalKey !== key) {
+      ludoBurnModalKey = key;
+      ludoModalKind = 'burn';
+      showModal('🔥 Kartu Hangus',
+        `<p><strong>${escapeHtml(st.drawBurned.name)}</strong> tidak ada kondisi yang bisa dipakai — balikin kartu ke deck.</p>`,
+        [{ label: 'Confirm', cls: 'primary', onClick: () => { ludoModalKind = null; } }],
+        'ludo-modal');
+    }
+  } else if (!st.drawBurned) {
+    ludoBurnModalKey = null;
+  }
+  // Choose-capture popup (Sensei 2026-11-03): 2+ victims, pick one.
+  // Deferred while a dice animation runs, like other popups.
+  if (st.phase === 'chooseCapture' && st.pendingCaptureChoice && isMyTurn && !deferPopup) {
+    const key = `cc-${st.turn}-${st.pendingCaptureChoice.victims.length}`;
+    if (ludoCaptureModalKey !== key) {
+      ludoCaptureModalKey = key;
+      showLudoChooseCaptureModal(st.pendingCaptureChoice, st, m);
+    }
+  } else {
+    if (ludoCaptureModalKey && ludoModalKind === 'chooseCapture') { hideModal(); ludoModalKind = null; }
+    ludoCaptureModalKey = null;
   }
   // Booster gate (Sensei 2026-11-03): server-driven. While
   // boosterDecisionPending, the player must answer the Ya/Tidak prompt;

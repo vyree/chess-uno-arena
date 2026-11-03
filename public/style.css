@@ -947,6 +947,23 @@ body.low-gfx * {
   text-decoration: underline; text-decoration-style: dotted;
 }
 .ludo-log-card:hover { color: #ff2e93; }
+/* Choose-capture grid (Sensei 2026-11-03): pawn picks with colors. */
+.ludo-capture-grid { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin: 12px 0; }
+.ludo-capture-pick {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 12px 16px; border: 2px solid #555; border-radius: 12px;
+  background: rgba(255,255,255,.06); color: #fff; cursor: pointer;
+  font-size: 13px; font-weight: 600;
+}
+.ludo-capture-pick:hover { border-color: #ff2e93; background: rgba(255,46,147,.12); }
+.ludo-capture-pawn {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 3px solid rgba(255,255,255,.7);
+}
+.ludo-capture-pick.tok-red .ludo-capture-pawn { background: #ff4d6e; }
+.ludo-capture-pick.tok-green .ludo-capture-pawn { background: #2ed98f; }
+.ludo-capture-pick.tok-yellow .ludo-capture-pawn { background: #ffb81e; }
+.ludo-capture-pick.tok-blue .ludo-capture-pawn { background: #3aa0ff; }
 /* Ludo Tahap inti animations (dadu + jalan + makan), 2026-11-03.
    Tokens glide via left/top transition; hops, captures and dice
    effects use transform/opacity keyframes only, no new libraries. */

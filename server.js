@@ -1828,30 +1828,19 @@ function scheduleLudoBot(room) {
 function ludoAfterMove(room, moveResult) {
   const st = room.ludo.st;
   const seat = st.turn;
-  const player = room.players[seat];
+  st.drawBurned = null; // one-shot burn notice consumed
   if (st.over) { ludoFinish(room); return; }
   if (moveResult.landedSkill) {
     const abs = ludo.absOf(seat, moveResult.move.to);
     const cooled = abs !== null && st.blockCooldown[abs];
     if (!cooled && st.deck.length) {
-      const card = ludo.drawCard(st);
-      ludo.startBlockCooldown(st, abs);
+      // Sensei 2026-11-03: manual draw ceremony. The card is NOT drawn
+      // yet; the player clicks to draw in the ceremony popup.
+      st.phase = 'draw';
+      st.pendingDrawCeremony = { stage: 'prompt', card: null, moveResult, abs };
       room.ludo.lastMove = moveResult;
-      if (card.group === 'attack') {
-        st.phase = 'attack';
-        st.pendingAttack = { kind: card.kind, attacker: seat, card };
-        ludoSync(room);
-        return;
-      }
-      if (st.players[seat].hand.length < ludo.MAX_HAND) {
-        st.players[seat].hand.push(card);
-        ludoAnnounce(room, `${dispName(player)} mendapat kartu ${ludo.CARD_DEFS[card.kind].name}.`, card.kind);
-      } else {
-        st.phase = 'swap';
-        st.pendingDraw = { player: seat, card };
-        ludoSync(room);
-        return;
-      }
+      ludoSync(room);
+      return;
     }
   }
   const flow = ludo.afterMoveFlow(st, moveResult);
@@ -1865,6 +1854,68 @@ function ludoAfterMove(room, moveResult) {
     return;
   }
   ludoSync(room);
+}
+// Draw ceremony (Sensei 2026-11-03): player manually draws the card.
+function doLudoDraw(room) {
+  const st = room.ludo.st;
+  const c = st.pendingDrawCeremony;
+  if (st.phase !== 'draw' || !c || c.stage !== 'prompt' || st.over) {
+    return { ok: false, error: 'tidak ada draw yang menunggu' };
+  }
+  const card = ludo.drawCard(st);
+  if (!card) return { ok: false, error: 'deck kosong' };
+  ludo.startBlockCooldown(st, c.abs);
+  c.stage = 'reveal';
+  c.card = card;
+  ludoAnnounce(room, `${dispName(room.players[st.turn])} draw kartu ${ludo.CARD_DEFS[card.kind].name}.`, card.kind);
+  ludoSync(room);
+  return { ok: true, card };
+}
+// Close the draw ceremony popup. Routes the card: attack (use or burn),
+// else hand or swap.
+function doLudoDrawClose(room) {
+  const st = room.ludo.st;
+  const c = st.pendingDrawCeremony;
+  if (st.phase !== 'draw' || !c || c.stage !== 'reveal' || !c.card || st.over) {
+    return { ok: false, error: 'tidak ada hasil draw yang menunggu' };
+  }
+  const seat = st.turn;
+  const player = room.players[seat];
+  const card = c.card;
+  const moveResult = c.moveResult;
+  st.pendingDrawCeremony = null;
+  if (card.group === 'attack') {
+    // Sensei 2026-11-03: attack MUST be used now if usable; if not,
+    // it burns back to the deck with a message.
+    if (!ludo.isAttackUsable(st, seat, card)) {
+      ludo.returnHangus(st, card);
+      ludoAnnounce(room, `${ludo.CARD_DEFS[card.kind].name} tidak ada kondisi yang bisa dipakai — kembali ke deck.`, card.kind);
+      // Signal the client to show the burn message.
+      st.drawBurned = { kind: card.kind, name: ludo.CARD_DEFS[card.kind].name, t: Date.now() };
+      const flow = ludo.afterMoveFlow(st, moveResult);
+      if (flow.over) { ludoFinish(room); return { ok: true, burned: true }; }
+      if (flow.endTurn) { ludoTurnTransition(room, 800); return { ok: true, burned: true }; }
+      ludoSync(room);
+      return { ok: true, burned: true };
+    }
+    st.phase = 'attack';
+    st.pendingAttack = { kind: card.kind, attacker: seat, card };
+    ludoSync(room);
+    return { ok: true };
+  }
+  if (st.players[seat].hand.length < ludo.MAX_HAND) {
+    st.players[seat].hand.push(card);
+  } else {
+    st.phase = 'swap';
+    st.pendingDraw = { player: seat, card };
+    ludoSync(room);
+    return { ok: true };
+  }
+  const flow = ludo.afterMoveFlow(st, moveResult);
+  if (flow.over) { ludoFinish(room); return { ok: true }; }
+  if (flow.endTurn) { ludoTurnTransition(room, 800); return { ok: true }; }
+  ludoSync(room);
+  return { ok: true };
 }
 function ludoContinueAfterAttack(room) {
   const st = room.ludo.st;
@@ -1917,11 +1968,30 @@ function doLudoMove(room, tokenIdx) {
   if (st.boosterDecisionPending) return { ok: false, error: 'jawab dulu: mau pakai booster tidak?' };
   const r = ludo.applyMove(st, st.turn, tokenIdx, st.steps, st.dice);
   if (!r.ok) return r;
+  if (r.needsCaptureChoice) {
+    // Sensei 2026-11-03: 2+ victims — player must choose ONE via popup.
+    st.phase = 'chooseCapture';
+    st.pendingCaptureChoice = { victims: r.victims, moveResult: r };
+    ludoSync(room);
+    return { ok: true, needsChoice: true };
+  }
   if (r.captured.length) {
     const names = r.captured.map((v) => dispName(room.players[v.player])).join(', ');
     ludoAnnounce(room, `${dispName(room.players[st.turn])} memakan bidak ${names}!`);
   }
   ludoAfterMove(room, r);
+  return { ok: true };
+}
+function doLudoChooseCapture(room, targetPlayer, targetToken) {
+  const st = room.ludo.st;
+  if (st.phase !== 'chooseCapture' || !st.pendingCaptureChoice || st.over) {
+    return { ok: false, error: 'tidak ada pilihan makan yang menunggu' };
+  }
+  const r = ludo.resolveCaptureChoice(st, st.turn, targetPlayer, targetToken);
+  if (!r.ok) return r;
+  const v = r.moveResult.captured[0];
+  ludoAnnounce(room, `${dispName(room.players[st.turn])} memakan bidak ${dispName(room.players[v.player])}!`);
+  ludoAfterMove(room, r.moveResult);
   return { ok: true };
 }
 function doLudoNeutral(room, cardId, choice) {
@@ -2036,9 +2106,42 @@ function ludoBotStep(room) {
     else ludoTurnTransition(room);
     return;
   }
+  if (st.phase === 'chooseCapture') {
+    // Bot chooses the first victim (simple heuristic).
+    const pending = st.pendingCaptureChoice;
+    if (pending && pending.victims.length) {
+      const v = pending.victims[0];
+      doLudoChooseCapture(room, v.player, v.token);
+    }
+    return;
+  }
+  if (st.phase === 'draw') {
+    const c = st.pendingDrawCeremony;
+    if (!c) return;
+    if (c.stage === 'prompt') {
+      doLudoDraw(room);
+    } else if (c.stage === 'reveal') {
+      // Small delay so humans see the reveal, then auto-close.
+      setTimeout(() => {
+        if (room.ludo && room.ludo.st.phase === 'draw') doLudoDrawClose(room);
+      }, 1500);
+    }
+    return;
+  }
   if (st.phase === 'attack') {
     const card = st.pendingAttack.card;
-    const target = ludo.botChooseAttack(st, seat, card);
+    // Sensei 2026-11-03: usable attack MUST be used. botChooseAttack may
+    // return null (heuristic pass); fall back to the first valid target.
+    let target = ludo.botChooseAttack(st, seat, card);
+    if (!target) {
+      if (card.kind === 'bom') {
+        const abs = ludo.SKILL_BLOCKS.find((a) => ludo.bombTargets(st, a).length > 0);
+        if (abs !== undefined) target = { abs };
+      } else {
+        const ts = ludo.attackTargets(st, seat, card.kind);
+        if (ts.length) target = { player: ts[0].player, token: ts[0].token };
+      }
+    }
     if (!target) doLudoPassAttack(room);
     else {
       // botChooseAttack returns the engine shape {player, token} /
@@ -2283,6 +2386,30 @@ async function route(ws, type, data) {
       if (room.game !== 'ludo' || room.status !== 'playing' || !room.ludo) { sendError(ws, 'Game Ludo belum berjalan'); return; }
       if (player.seat !== room.ludo.st.turn) { sendError(ws, 'Bukan giliranmu'); return; }
       const r = doLudoBoosterDecide(room, data.use);
+      if (!r.ok) { sendError(ws, r.error); return; }
+      return;
+    }
+    case 'ludo_choose_capture': {
+      const room = needRoom(); if (!room) return;
+      if (room.game !== 'ludo' || room.status !== 'playing' || !room.ludo) { sendError(ws, 'Game Ludo belum berjalan'); return; }
+      if (player.seat !== room.ludo.st.turn) { sendError(ws, 'Bukan giliranmu'); return; }
+      const r = doLudoChooseCapture(room, data.targetPlayer, data.targetToken);
+      if (!r.ok) { sendError(ws, r.error); return; }
+      return;
+    }
+    case 'ludo_draw': {
+      const room = needRoom(); if (!room) return;
+      if (room.game !== 'ludo' || room.status !== 'playing' || !room.ludo) { sendError(ws, 'Game Ludo belum berjalan'); return; }
+      if (player.seat !== room.ludo.st.turn) { sendError(ws, 'Bukan giliranmu'); return; }
+      const r = doLudoDraw(room);
+      if (!r.ok) { sendError(ws, r.error); return; }
+      return;
+    }
+    case 'ludo_draw_close': {
+      const room = needRoom(); if (!room) return;
+      if (room.game !== 'ludo' || room.status !== 'playing' || !room.ludo) { sendError(ws, 'Game Ludo belum berjalan'); return; }
+      if (player.seat !== room.ludo.st.turn) { sendError(ws, 'Bukan giliranmu'); return; }
+      const r = doLudoDrawClose(room);
       if (!r.ok) { sendError(ws, r.error); return; }
       return;
     }

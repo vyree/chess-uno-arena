@@ -260,6 +260,17 @@ const VALIDATORS = {
     if (typeof d.use !== 'boolean') return { ok: false, error: 'use harus boolean' };
     return { ok: true, data: { use: d.use } };
   },
+  ludo_choose_capture(d) {
+    if (!Number.isInteger(d.targetPlayer) || d.targetPlayer < 0 || d.targetPlayer > 3) {
+      return { ok: false, error: 'targetPlayer harus 0-3' };
+    }
+    if (!Number.isInteger(d.targetToken) || d.targetToken < 0 || d.targetToken > 3) {
+      return { ok: false, error: 'targetToken harus 0-3' };
+    }
+    return { ok: true, data: { targetPlayer: d.targetPlayer, targetToken: d.targetToken } };
+  },
+  ludo_draw() { return { ok: true, data: {} }; },
+  ludo_draw_close() { return { ok: true, data: {} }; },
   ludo_move(d) {
     if (!Number.isInteger(d.token) || d.token < 0 || d.token > 3) {
       return { ok: false, error: 'token harus 0-3' };

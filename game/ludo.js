@@ -72,6 +72,9 @@ function newGame(rand) {
     neutralUsed: false,
     boosterDecisionPending: false, // strict gate: must answer "mau booster?" before moving (Sensei 2026-11-03)
     log: [], // persistent action log: {text, cardKind, t} (Sensei 2026-11-03)
+    pendingCaptureChoice: null, // {victims:[{player,token}], moveResult} when 2+ victims (Sensei 2026-11-03)
+    pendingDrawCeremony: null, // {stage:'prompt'|'reveal', card, moveResult, abs} (Sensei 2026-11-03)
+    drawBurned: null, // {kind, name} one-shot burn notice (Sensei 2026-11-03)
     sixCount: 0,
     pendingAttack: null,
     pendingDefense: null,
@@ -152,10 +155,17 @@ function applyMove(st, player, tokenIdx, steps, originalDice) {
     const abs = absOf(player, mv.to);
     if (!isSafeAbs(abs)) {
       const victims = tokensAtAbs(st, abs).filter((v) => v.player !== player);
-      for (const v of victims) {
-        st.players[v.player].tokens[v.token].progress = -1;
-        clearFrozenToken(st, v.player, v.token);
-        result.captured.push(v);
+      if (victims.length > 1) {
+        // Sensei 2026-11-03: player chooses ONE victim via popup.
+        // Capture is deferred; the mover's token is already placed.
+        result.needsCaptureChoice = true;
+        result.victims = victims;
+      } else {
+        for (const v of victims) {
+          st.players[v.player].tokens[v.token].progress = -1;
+          clearFrozenToken(st, v.player, v.token);
+          result.captured.push(v);
+        }
       }
     }
     if (SKILL_BLOCKS.includes(abs)) result.landedSkill = true;
@@ -164,6 +174,33 @@ function applyMove(st, player, tokenIdx, steps, originalDice) {
   return result;
 }
 
+// Check if an attack card has any valid target right now (Sensei 2026-11-03).
+// Used by the draw ceremony to decide use-vs-burn.
+function isAttackUsable(st, attacker, card) {
+  if (card.kind === 'bom') {
+    return SKILL_BLOCKS.some((abs) => bombTargets(st, abs).length > 0);
+  }
+  if (card.kind === 'sniper') {
+    const onTrack = st.players[attacker].tokens.some((x) => x.progress >= 0 && x.progress <= 50);
+    if (!onTrack) return false;
+  }
+  return attackTargets(st, attacker, card.kind).length > 0;
+}
+// Resolve a deferred multi-victim capture choice (Sensei 2026-11-03).
+// Captures ONLY the chosen victim; others stay on the square.
+function resolveCaptureChoice(st, player, targetPlayer, targetToken) {
+  const pending = st.pendingCaptureChoice;
+  if (!pending) return { ok: false, error: 'tidak ada pilihan makan yang menunggu' };
+  if (st.turn !== player) return { ok: false, error: 'bukan giliranmu' };
+  const victim = pending.victims.find((v) => v.player === targetPlayer && v.token === targetToken);
+  if (!victim) return { ok: false, error: 'target tidak valid' };
+  st.players[targetPlayer].tokens[targetToken].progress = -1;
+  clearFrozenToken(st, targetPlayer, targetToken);
+  const moveResult = pending.moveResult;
+  moveResult.captured = [{ player: targetPlayer, token: targetToken }];
+  st.pendingCaptureChoice = null;
+  return { ok: true, moveResult };
+}
 function drawCard(st) {
   if (!st.deck.length) return null;
   return st.deck.shift();
@@ -191,6 +228,8 @@ function endTurn(st) {
   st.pendingAttack = null;
   st.pendingDefense = null;
   st.pendingDraw = null;
+  st.pendingCaptureChoice = null;
+  st.pendingDrawCeremony = null;
 }
 // Advance after a completed move: extra roll on 6/capture/home,
 // otherwise the turn should end. The CALLER drives the end-of-turn
@@ -205,6 +244,8 @@ function afterMoveFlow(st, moveResult) {
     st.steps = null;
     st.neutralUsed = false;
     st.boosterDecisionPending = false;
+    st.pendingCaptureChoice = null;
+    st.pendingDrawCeremony = null;
     st.pendingAttack = null;
     st.pendingDefense = null;
     st.pendingDraw = null;
@@ -454,6 +495,14 @@ function toClient(st, seat) {
     neutralUsed: st.neutralUsed,
     boosterDecisionPending: st.boosterDecisionPending,
     log: st.log.slice(-50), // last 50 entries only, to bound payload
+    pendingCaptureChoice: st.pendingCaptureChoice ? {
+      victims: st.pendingCaptureChoice.victims.map((v) => ({ player: v.player, token: v.token })),
+    } : null,
+    pendingDrawCeremony: st.pendingDrawCeremony ? {
+      stage: st.pendingDrawCeremony.stage,
+      card: st.pendingDrawCeremony.card || null,
+    } : null,
+    drawBurned: st.drawBurned || null,
     sixCount: st.sixCount,
     winner: st.winner,
     over: st.over,
@@ -565,6 +614,7 @@ module.exports = {
   checkWinner, endTurn, afterMoveFlow, startBlockCooldown, tickBlockCooldown,
   onTurnStart, neutralSteps, useNeutral, attackTargets, bombTargets,
   applyAttackEffect, resolveDefense, beginAttack, nextBombDefender,
-  resolveDefenseStep, toClient, botChooseMove, botChooseAttack,
+  resolveDefenseStep, resolveCaptureChoice, isAttackUsable,
+  toClient, botChooseMove, botChooseAttack,
   botChooseDefense, botChooseNeutral, botSwapChoice,
 };
