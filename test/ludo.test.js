@@ -173,9 +173,26 @@ test('Bom Petak friendly fire: kena bidak sendiri juga', () => {
   const victims = ludo.bombTargets(st, 10);
   assert.equal(victims.length, 2);
   const b = ludo.beginAttack(st, 0, { id: 'a2', kind: 'bom', group: 'attack' }, { abs: 10 });
-  assert.equal(b.needsDefense, false);
+  // Sensei 2026-11-03: every victim is asked in turn, even with no
+  // defense cards (disabled Bertahan), instead of dying silently.
+  assert.equal(b.needsDefense, true);
+  let r = ludo.resolveDefenseStep(st, { attack: b.attack, defender: b.defender }, null);
+  assert.equal(r.done, false); // korban kedua masih antre
+  r = ludo.resolveDefenseStep(st, { attack: b.attack, defender: r.defender }, null);
+  assert.equal(r.done, true);
   assert.equal(st.players[0].tokens[0].progress, -1);
   assert.equal(st.players[1].tokens[0].progress, -1);
+});
+
+test('always-defense: target tanpa kartu defense tetap ditanya (Sensei 2026-11-03)', () => {
+  const st = fresh();
+  setTrack(st, 0, 0, 10);
+  setTrack(st, 1, 0, 10); // korban: tangan kosong, tanpa kartu defense
+  const b = ludo.beginAttack(st, 0, { id: 'a5', kind: 'sniper', group: 'attack' }, { player: 1, token: 0 });
+  assert.equal(b.needsDefense, true); // tetap prompt, bukan auto-kill
+  const r = ludo.resolveDefenseStep(st, { attack: b.attack, defender: 1 }, null); // terima serangan
+  assert.equal(r.done, true);
+  assert.equal(st.players[1].tokens[0].progress, -1); // sniper membunuh
 });
 
 test('netral hanya langkah: +3 dari 3 tidak menciptakan keluar base/kocok lagi', () => {
@@ -207,12 +224,15 @@ test('bebas pilih = langkah 1-6, bukan angka dadu', () => {
   assert.ok(ludo.neutralSteps('bebas', 2, 0).error);
 });
 
-test('Beku: token beku tidak bisa digerakkan di giliran berikutnya', () => {
+test('Beku: token beku tidak bisa digerakkan selama 2 giliran (Sensei 2026-11-03)', () => {
   const st = fresh();
   setTrack(st, 1, 0, 20);
-  st.frozen.push({ player: 1, token: 0 });
+  st.frozen.push({ player: 1, token: 0, turns: 2 });
   assert.equal(ludo.legalMoves(st, 1, 3, 3).filter((m) => m.token === 0).length, 0);
-  ludo.clearFrozenForTurn(st, 1);
+  ludo.clearFrozenForTurn(st, 1); // giliran 1 selesai: masih beku
+  assert.equal(ludo.isFrozen(st, 1, 0), true);
+  assert.equal(ludo.legalMoves(st, 1, 3, 3).filter((m) => m.token === 0).length, 0);
+  ludo.clearFrozenForTurn(st, 1); // giliran 2 selesai: cair
   assert.equal(ludo.isFrozen(st, 1, 0), false);
 });
 
@@ -267,7 +287,11 @@ test('bot attack Bom: botChooseAttack menemukan petak, semua korban kena (friend
   assert.deepEqual(rawBot, { abs: 10 });
   // Old server path would read rawBot.targetAbs = undefined and
   // bombTargets would return no victims; the translated path works.
-  assert.equal(ludo.beginAttack(st, 0, { id: 'a2', kind: 'bom', group: 'attack' }, { abs: rawBot.abs }).needsDefense, false);
+  const b2 = ludo.beginAttack(st, 0, { id: 'a2', kind: 'bom', group: 'attack' }, { abs: rawBot.abs });
+  assert.equal(b2.needsDefense, true); // Sensei 2026-11-03: always ask
+  let r2 = ludo.resolveDefenseStep(st, { attack: b2.attack, defender: b2.defender }, null);
+  r2 = ludo.resolveDefenseStep(st, { attack: b2.attack, defender: r2.defender }, null);
+  assert.equal(r2.done, true);
   assert.equal(st.players[0].tokens[0].progress, -1);
   assert.equal(st.players[1].tokens[0].progress, -1);
 });
@@ -288,17 +312,17 @@ test('bot attack Seret + Cermin memantulkan ke penyerang', () => {
   assert.equal(st.players[1].tokens[0].progress, 10); // korban tidak bergerak
 });
 
-test('bot attack Beku + Teleport memindah ke petak aman terdekat', () => {
+test('bot attack Beku + Teleport memindah ke petak bintang terdekat di BELAKANG', () => {
   const st = fresh();
   setTrack(st, 0, 0, 20);
-  setTrack(st, 1, 0, 10); // abs 23, petak aman terdekat di depan = 26
+  setTrack(st, 1, 0, 10); // abs 23, petak bintang terdekat di belakang = 21
   handOf(st, 1, ['teleport']);
   const card = { id: 'a4', kind: 'beku', group: 'attack' };
   const b = ludo.beginAttack(st, 0, card, { player: 1, token: 0 });
   assert.equal(b.needsDefense, true);
   const r = ludo.resolveDefenseStep(st, { attack: b.attack, defender: 1 }, 'h1-0');
   assert.equal(r.done, true);
-  assert.equal(st.players[1].tokens[0].progress, 13); // abs 26 - offset hijau 13
+  assert.equal(st.players[1].tokens[0].progress, 8); // abs 21 - offset hijau 13
   assert.equal(ludo.isFrozen(st, 1, 0), false);
 });
 

@@ -25,7 +25,7 @@ const CARD_DEFS = {
   beku: { group: 'attack', name: 'Es Beku', desc: 'Bekukan 1 bidak musuh: bidak itu tidak bisa digerakkan di giliran pemiliknya berikutnya. Dipakai langsung saat didapat.' },
   perisai: { group: 'defense', name: 'Perisai Baja', desc: 'Batalkan 1 serangan terhadap 1 bidakmu. Dipakai hanya saat bidakmu diserang; habis sekali pakai.' },
   cermin: { group: 'defense', name: 'Cermin Pantul', desc: 'Pantulkan serangan target-tunggal (Sniper, Rantai Seret, Es Beku) ke 1 bidak penyerang. Tidak berlaku untuk Bom Petak.' },
-  teleport: { group: 'defense', name: 'Teleport Darurat', desc: 'Saat diserang, bidakmu pindah ke petak aman terdekat di depan; kalau tidak ada, ke petak start warnanya.' },
+  teleport: { group: 'defense', name: 'Teleport Darurat', desc: 'Saat diserang, bidakmu pindah ke petak bintang terdekat di belakang; kalau tidak ada, ke petak start warnanya.' },
   kulit: { group: 'defense', name: 'Kulit Batu', desc: 'Serangan yang seharusnya membunuh diubah jadi mundur 6 petak saja, bukan pulang ke base.' },
   x2: { group: 'neutral', name: 'Langkah x2', desc: 'Langkah = 2 x dadu. Hanya mengubah langkah; tidak bisa dipakai untuk keluar base atau kocok lagi. Dipakai setelah kocok, sebelum jalan, maks 1 per kocokan.' },
   plus1: { group: 'neutral', name: '+1 Langkah', desc: 'Tambah 1 langkah. Hanya menambah langkah; tidak bisa dipakai untuk keluar base atau kocok lagi.' },
@@ -90,7 +90,11 @@ function isFrozen(st, player, token) {
   return st.frozen.some((f) => f.player === player && f.token === token);
 }
 function clearFrozenForTurn(st, player) {
-  st.frozen = st.frozen.filter((f) => f.player !== player);
+  // Frozen pawns thaw after missing 2 of their owner's turns
+  // (Sensei 2026-11-03; was: thawed after 1 turn).
+  st.frozen = st.frozen
+    .map((f) => (f.player === player ? { ...f, turns: (f.turns ?? 1) - 1 } : f))
+    .filter((f) => (f.turns ?? 1) > 0);
 }
 function clearFrozenToken(st, player, token) {
   st.frozen = st.frozen.filter((f) => !(f.player === player && f.token === token));
@@ -288,7 +292,7 @@ function applyAttackEffect(st, attack) {
   }
   if (kind === 'beku') {
     if (!isFrozen(st, targetPlayer, targetToken)) {
-      st.frozen.push({ player: targetPlayer, token: targetToken });
+      st.frozen.push({ player: targetPlayer, token: targetToken, turns: 2 });
     }
     return { frozen: [{ player: targetPlayer, token: targetToken }] };
   }
@@ -324,12 +328,14 @@ function resolveDefense(st, pending, defenseCardId) {
     let dest = null;
     if (cur >= 0 && cur <= 50) {
       const curAbs = absOf(defender, cur);
-      const ahead = SAFE_SQUARES.filter((s) => {
-        const dist = (s - curAbs + 52) % 52;
+      // Nearest star (safe) square BEHIND the pawn (Sensei 2026-11-03):
+      // teleporting forward to the start square wasted all progress.
+      const behind = SAFE_SQUARES.filter((s) => {
+        const dist = (curAbs - s + 52) % 52;
         return dist > 0;
-      }).sort((a, b) => ((a - curAbs + 52) % 52) - ((b - curAbs + 52) % 52));
-      if (ahead.length) {
-        const abs = ahead[0];
+      }).sort((a, b) => ((curAbs - a + 52) % 52) - ((curAbs - b + 52) % 52));
+      if (behind.length) {
+        const abs = behind[0];
         dest = (abs - START_OFFSETS[defender] + 52) % 52;
       }
     }
@@ -381,16 +387,12 @@ function beginAttack(st, attacker, card, target) {
     if (!onTrack) return { ok: false, error: 'Sniper butuh minimal 1 bidak di jalur utama' };
   }
   const attack = { kind, attacker, targetPlayer: t.player, targetToken: t.token };
-  const defenderHas = st.players[t.player].hand.some((c) => c.group === 'defense');
-  if (defenderHas) return { ok: true, needsDefense: true, attack, defender: t.player, victim: t };
-  const effect = applyAttackEffect(st, attack);
-  return { ok: true, needsDefense: false, attack, effect };
+  // Every target is notified and may choose to defend, even with an
+  // empty defense hand (Sensei 2026-11-03); bots auto-decline.
+  return { ok: true, needsDefense: true, attack, defender: t.player, victim: t };
 }
 function nextBombDefender(st, attack) {
-  for (const v of attack.victims) {
-    if (st.players[v.player].hand.some((c) => c.group === 'defense')) return v;
-  }
-  return null;
+  return attack.victims[0] || null;
 }
 // Resolve one defense step. For bombs, victims without a defense are
 // killed as the queue advances; victims with a defense get a choice.
@@ -410,14 +412,8 @@ function resolveDefenseStep(st, pending, defenseCardId) {
       clearFrozenToken(st, victim.player, victim.token);
     }
     attack.victims.shift();
-    // Kill victims who have no defense without asking them.
-    while (attack.victims.length) {
-      const nxt = attack.victims[0];
-      if (st.players[nxt.player].hand.some((c) => c.group === 'defense')) break;
-      st.players[nxt.player].tokens[nxt.token].progress = -1;
-      clearFrozenToken(st, nxt.player, nxt.token);
-      attack.victims.shift();
-    }
+    // Every victim is asked in turn (Sensei 2026-11-03); victims without
+    // defense cards get a disabled "Bertahan" option instead of dying silently.
     if (!attack.victims.length) return { ok: true, done: true, card: r.card || null };
     const nxt = attack.victims[0];
     return { ok: true, done: false, defender: nxt.player, victim: nxt, card: r.card || null };

@@ -1714,36 +1714,88 @@ function ludoCardFace(card, info) {
     + `<span class="ludo-card-name">${info.name}</span>`
     + `<i class="cnr br">${icon}</i>`;
 }
+// Info-only bubble. Usable cards go through their decision popups
+// instead (booster confirm, defense picker); no native prompt() left.
 function showLudoBubble(card, state) {
   const info = state.cardInfo[card.kind];
   const box = $('ludo-card-bubble');
   const groupLabel = card.group === 'attack' ? 'Attack (hitam)' : card.group === 'defense' ? 'Defense (putih)' : 'Netral (ungu)';
-  let actions = '';
-  const mySeat = ludoMySeat({ players: S.players, you: S.playerId });
-  const isMyTurn = state.turn === mySeat;
-  if (card.group === 'neutral' && state.phase === 'move' && isMyTurn && !state.neutralUsed) {
-    actions = `<button class="btn primary small" id="ludo-bubble-use">▶️ Pakai kartu ini</button>`;
-  } else if (card.group === 'defense' && state.phase === 'defense' && state.pendingDefense && state.pendingDefense.defender === mySeat) {
-    actions = `<button class="btn primary small" id="ludo-bubble-use">🛡️ Pakai defense ini</button>`;
-  }
-  box.innerHTML = `<div class="ludo-card card-${card.group} mini" aria-hidden="true">${ludoCardFace(card, info)}</div><strong>${info.name}</strong> <span class="muted">${groupLabel}</span><p>${info.desc}</p>${actions}<button class="btn ghost small" id="ludo-bubble-close">Tutup</button>`;
+  box.innerHTML = `<div class="ludo-card card-${card.group} mini" aria-hidden="true">${ludoCardFace(card, info)}</div><strong>${info.name}</strong> <span class="muted">${groupLabel}</span><p>${info.desc}</p><button class="btn ghost small" id="ludo-bubble-close">Tutup</button>`;
   box.classList.remove('hidden');
   $('ludo-bubble-close').onclick = () => box.classList.add('hidden');
-  const useBtn = $('ludo-bubble-use');
-  if (useBtn) useBtn.onclick = () => {
-    box.classList.add('hidden');
-    if (card.group === 'defense') {
-      send('ludo_defense', { cardId: card.id });
-      return;
+}
+// ---------- Ludo decision popups (Sensei 2026-11-03) ----------
+// Every interactive Ludo decision is a popup, never a banner or a
+// native prompt(): attack draw (Pakai/Buang), target defense
+// (Bertahan/Terima + card picker), booster confirm + number picker.
+let ludoAttackModalKey = null;  // attack kind+attacker already prompted
+let ludoDefenseModalKey = null; // defense prompt already shown
+let ludoModalKind = null;       // 'attack' | 'defense' | 'booster' | null
+function showLudoAttackModal(atk, st) {
+  const info = st.cardInfo[atk.kind];
+  const body = `<div class="ludo-modal-card"><div class="ludo-card card-attack">${ludoCardFace({ kind: atk.kind, group: 'attack' }, info)}</div></div>`
+    + `<p><strong>${escapeHtml(info.name)}</strong></p>`
+    + `<p class="muted">${escapeHtml(info.desc)}</p>`
+    + `<p>Kamu dapat kartu serangan! Setelah pilih <strong>Pakai</strong>, ketuk bidak musuh yang jadi target.</p>`;
+  ludoModalKind = 'attack';
+  showModal('⚔️ Kartu Serangan!', body, [
+    { label: '⚔️ Pakai', cls: 'primary', onClick: () => { ludoModalKind = null; } },
+    { label: '🗑️ Buang', cls: 'ghost', onClick: () => { ludoModalKind = null; send('ludo_pass_attack'); } },
+  ], 'ludo-modal');
+}
+function showLudoDefenseModal(dfn, st, mySeat) {
+  const myHand = (st.players[mySeat] && st.players[mySeat].hand || []).filter((c) => c.group === 'defense');
+  const atkInfo = st.cardInfo[dfn.attackKind];
+  const attackerName = (S.players[st.turn] && S.players[st.turn].nickname) || 'Musuh';
+  let body = `<p class="ludo-modal-alert">🛡️ <strong>Bidakmu akan diserang!</strong></p>`
+    + `<p class="muted">${escapeHtml(attackerName)} menyerang dengan <strong>${escapeHtml(atkInfo.name)}</strong>: ${escapeHtml(atkInfo.desc)}</p>`;
+  if (myHand.length) {
+    body += `<p>🛡️ <strong>Bertahan</strong> dengan:</p><div class="ludo-defend-list">`;
+    for (const c of myHand) {
+      const ci = st.cardInfo[c.kind];
+      body += `<button class="btn primary small ludo-defend-pick" data-card="${c.id}">${escapeHtml(ci.name)}</button>`;
     }
-    let choice;
-    if (card.kind === 'bebas') {
-      const v = prompt('Pilih jumlah langkah (1-6):', '6');
-      choice = parseInt(v, 10);
-      if (!choice || choice < 1 || choice > 6) { toast('Pilih 1-6 ya'); return; }
-    }
-    send('ludo_use_neutral', { cardId: card.id, choice });
-  };
+    body += `</div>`;
+  } else {
+    body += `<p class="ludo-warn">⚠️ Kamu tidak punya kartu bertahan yang sesuai — pilihan Bertahan dinonaktifkan.</p>`
+      + `<button class="btn primary small" disabled>Bertahan</button>`;
+  }
+  ludoModalKind = 'defense';
+  showModal('🛡️ Diserang!', body, [
+    { label: 'Terima serangan', cls: 'ghost', onClick: () => { ludoModalKind = null; send('ludo_defense', { cardId: null }); } },
+  ], 'ludo-modal');
+  document.querySelectorAll('#modal-body .ludo-defend-pick').forEach((b) => {
+    b.onclick = () => { ludoModalKind = null; hideModal(); send('ludo_defense', { cardId: b.dataset.card }); };
+  });
+}
+function showLudoBoosterModal(card, st) {
+  const info = st.cardInfo[card.kind];
+  const body = `<div class="ludo-modal-card"><div class="ludo-card card-neutral">${ludoCardFace(card, info)}</div></div>`
+    + `<p><strong>${escapeHtml(info.name)}</strong></p>`
+    + `<p class="muted">${escapeHtml(info.desc)}</p>`
+    + `<p>Pakai kartu booster ini?</p>`;
+  ludoModalKind = 'booster';
+  showModal('✨ Kartu Booster', body, [
+    {
+      label: 'Ya, pakai', cls: 'primary', onClick: () => {
+        ludoModalKind = null;
+        if (card.kind === 'bebas') showLudoNumberPicker(card);
+        else send('ludo_use_neutral', { cardId: card.id });
+      },
+    },
+    { label: 'Batal', cls: 'ghost', onClick: () => { ludoModalKind = null; } },
+  ], 'ludo-modal');
+}
+function showLudoNumberPicker(card) {
+  let btns = '';
+  for (let n = 1; n <= 6; n++) btns += `<button class="btn secondary ludo-num-pick" data-n="${n}">${n}</button>`;
+  ludoModalKind = 'booster';
+  showModal('Pilih angka', `<p>Berapa langkah untuk kartu <strong>Bebas Pilih 1–6</strong>?</p><div class="ludo-num-grid">${btns}</div>`, [
+    { label: 'Batal', cls: 'ghost', onClick: () => { ludoModalKind = null; } },
+  ], 'ludo-modal');
+  document.querySelectorAll('#modal-body .ludo-num-pick').forEach((b) => {
+    b.onclick = () => { ludoModalKind = null; hideModal(); send('ludo_use_neutral', { cardId: card.id, choice: parseInt(b.dataset.n, 10) }); };
+  });
 }
 let ludoAnnounceTimer = null;
 function showLudoAnnounce(m) {
@@ -2078,6 +2130,7 @@ function renderLudo(m) {
   if (!st.over) {
     if (isMyTurn && st.phase === 'roll') promptText = 'LEMPAR DADUNYA! 🎲';
     else if (isMyTurn && st.phase === 'move') promptText = 'KETUK SEBUAH PION. 👆';
+    else if (isMyTurn && st.phase === 'attack') promptText = 'PILIH TARGET! 🎯';
     else if (st.phase === 'defense' && st.pendingDefense && st.pendingDefense.defender === mySeat) promptText = '🛡️ BIDAKMU DISERANG!';
   }
   if (prompt) {
@@ -2088,12 +2141,37 @@ function renderLudo(m) {
   diceBtn.disabled = !canRoll;
   diceBtn.classList.toggle('rolling', canRoll);
   diceBtn.onclick = () => send('ludo_roll');
+  // ---- Decision popups: attack draw, target defense (Sensei 2026-11-03).
+  // Shown once per pending attack/defense; dismissed automatically if
+  // the phase moves on (timer, rejoin, etc.).
+  const atk = st.pendingAttack;
+  if (st.phase === 'attack' && atk && isMyTurn) {
+    const key = `${atk.kind}:${atk.attacker}`;
+    if (ludoAttackModalKey !== key) {
+      ludoAttackModalKey = key;
+      showLudoAttackModal(atk, st);
+    }
+  } else {
+    if (ludoAttackModalKey && ludoModalKind === 'attack') { hideModal(); ludoModalKind = null; }
+    ludoAttackModalKey = null;
+  }
+  const dfn = st.pendingDefense;
+  if (st.phase === 'defense' && dfn && dfn.defender === mySeat) {
+    const key = `${dfn.defender}:${dfn.attackKind}:${dfn.targetPlayer}:${dfn.targetToken}:${dfn.targetAbs ?? ''}`;
+    if (ludoDefenseModalKey !== key) {
+      ludoDefenseModalKey = key;
+      showLudoDefenseModal(dfn, st, mySeat);
+    }
+  } else {
+    if (ludoDefenseModalKey && ludoModalKind === 'defense') { hideModal(); ludoModalKind = null; }
+    ludoDefenseModalKey = null;
+  }
   let status = '';
   if (st.over) status = st.winner !== null ? `🏆 Pemenang: ${m.players[st.winner].nickname}` : 'Game selesai.';
   else if (st.phase === 'roll') status = isMyTurn ? 'Giliranmu — kocok dadu di tengah papan.' : `Menunggu ${turnPlayer.nickname} mengocok dadu…`;
   else if (st.phase === 'move') status = isMyTurn ? `Dadu: ${st.dice} → langkah: ${st.steps}. Klik tokenmu yang menyala, atau pakai 1 kartu netral dulu.` : `Menunggu ${turnPlayer.nickname} jalan ${st.steps} langkah…`;
-  else if (st.phase === 'attack') status = isMyTurn ? `Kamu mendapat kartu attack ${st.pendingAttack ? st.pendingAttack.kind : ''} — klik targetnya, atau Lewati.` : `${turnPlayer.nickname} sedang memakai kartu attack…`;
-  else if (st.phase === 'defense') status = st.pendingDefense && st.pendingDefense.defender === mySeat ? 'Bidakmu diserang! Pilih 1 kartu defense, atau Tolak (terima serangan).' : 'Ada serangan — menunggu defense…';
+  else if (st.phase === 'attack') status = isMyTurn ? 'Kartu attack: tentukan Pakai/Buang di popup, lalu klik bidak target.' : `${turnPlayer.nickname} sedang memakai kartu attack…`;
+  else if (st.phase === 'defense') status = st.pendingDefense && st.pendingDefense.defender === mySeat ? 'Bidakmu diserang! Tentukan di popup: Bertahan atau Terima serangan.' : 'Ada serangan — menunggu defense…';
   else if (st.phase === 'swap') status = isMyTurn ? 'Tanganmu sudah penuh (3). Pilih 1 kartu lama untuk ditukar, atau Pertahankan tanganmu.' : 'Menunggu keputusan tukar kartu…';
   $('ludo-status').textContent = status;
   const actions = $('ludo-actions');
@@ -2106,12 +2184,8 @@ function renderLudo(m) {
     b.onclick = () => send('ludo_pass_attack');
     actions.appendChild(b);
   }
-  if (st.phase === 'defense' && st.pendingDefense && st.pendingDefense.defender === mySeat) {
-    const b = document.createElement('button');
-    b.className = 'btn ghost'; b.textContent = '❌ Tolak defense (terima serangan)';
-    b.onclick = () => send('ludo_defense', { cardId: null });
-    actions.appendChild(b);
-  }
+  // Defense is decided in the popup (showLudoDefenseModal); no action
+  // button here, so it can never be tapped by mistake.
   if (isMyTurn && st.phase === 'swap' && st.pendingDraw) {
     const b = document.createElement('button');
     b.className = 'btn ghost'; b.textContent = 'Pertahankan tangan (kartu baru hangus)';
@@ -2129,7 +2203,10 @@ function renderLudo(m) {
     el.className = `ludo-card card-${card.group}`;
     el.title = info.name;
     el.innerHTML = ludoCardFace(card, info);
-    el.onclick = () => showLudoBubble(card, st);
+    // Usable booster cards open the confirm popup; everything else
+    // opens the info bubble. Defense is picked inside its own popup.
+    const usableBooster = card.group === 'neutral' && isMyTurn && st.phase === 'move' && !st.neutralUsed;
+    el.onclick = () => (usableBooster ? showLudoBoosterModal(card, st) : showLudoBubble(card, st));
     if (isMyTurn && st.phase === 'swap') {
       const swapBtn = document.createElement('button');
       swapBtn.className = 'btn secondary small';
@@ -2138,15 +2215,6 @@ function renderLudo(m) {
       const wrap = document.createElement('span');
       wrap.className = 'ludo-card-wrap';
       wrap.appendChild(el); wrap.appendChild(swapBtn);
-      handBox.appendChild(wrap);
-    } else if (st.phase === 'defense' && st.pendingDefense && st.pendingDefense.defender === mySeat && card.group === 'defense') {
-      const useBtn = document.createElement('button');
-      useBtn.className = 'btn primary small';
-      useBtn.textContent = 'Pakai defense ini';
-      useBtn.onclick = (e) => { e.stopPropagation(); send('ludo_defense', { cardId: card.id }); };
-      const wrap = document.createElement('span');
-      wrap.className = 'ludo-card-wrap';
-      wrap.appendChild(el); wrap.appendChild(useBtn);
       handBox.appendChild(wrap);
     } else {
       handBox.appendChild(el);

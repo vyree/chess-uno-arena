@@ -841,7 +841,32 @@ body.low-gfx * {
 }
 .ludo-token-wrap.targetable { cursor: crosshair; outline: 2px solid #ff2e93; border-radius: 50%; }
 .ludo-token-wrap.frozen { filter: drop-shadow(0 0 4px #7dd3fc); }
+/* Ice-block effect so a frozen pawn (2 turns, Sensei 2026-11-03) is
+   unmistakable: translucent blue shell with a shimmer sweep. */
+.ludo-token-wrap.frozen::after {
+  content: ''; position: absolute; inset: -22%; border-radius: 24%;
+  background: linear-gradient(135deg, rgba(125, 211, 252, .42), rgba(125, 211, 252, .08) 60%);
+  border: 2px solid rgba(186, 230, 253, .85);
+  box-shadow: 0 0 10px rgba(125, 211, 252, .8), inset 0 0 8px rgba(255, 255, 255, .35);
+  animation: ludo-ice-shimmer 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes ludo-ice-shimmer {
+  0%, 100% { opacity: .75; }
+  50% { opacity: 1; }
+}
 .ludo-frozen-badge { position: absolute; right: -20%; top: -20%; font-size: 12px; line-height: 1; }
+/* Ludo decision popups (Sensei 2026-11-03). */
+.modal-box.ludo-modal { max-width: 360px; }
+.ludo-modal-card { display: flex; justify-content: center; margin: 4px 0 8px; }
+.ludo-modal-card .ludo-card { width: 96px; height: 132px; }
+.ludo-modal-alert { font-size: 16px; }
+.ludo-warn { color: #fbbf24; font-size: 13px; }
+.ludo-defend-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.ludo-defend-list .btn { width: 100%; }
+.ludo-num-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0; }
+.ludo-num-grid .btn { font-size: 18px; padding: 10px 0; }
+.modal-box.ludo-modal .btn[disabled] { opacity: .45; cursor: not-allowed; }
 .ludo-skill-target { position: absolute; width: 6.667%; aspect-ratio: 1; transform: translate(-50%, -50%); background: transparent; border: 2px dashed #fff; border-radius: 8px; cursor: pointer; z-index: 1; }
 /* Foony-style dice juice, recreated original: rapid in-place vibration
    (positional shake, linear/mechanical) while the roll resolves. */
