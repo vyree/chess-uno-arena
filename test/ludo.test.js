@@ -195,6 +195,34 @@ test('always-defense: target tanpa kartu defense tetap ditanya (Sensei 2026-11-0
   assert.equal(st.players[1].tokens[0].progress, -1); // sniper membunuh
 });
 
+test('TURN phase machine: myPhase eksplisit per pemain (Sensei 2026-11-03)', () => {
+  const st = fresh();
+  st.phase = 'move'; st.turn = 0;
+  // Pemegang giliran: fasenya = st.phase.
+  assert.equal(ludo.toClient(st, 0).myPhase, 'move');
+  // Bukan giliran, tidak diserang: waiting.
+  assert.equal(ludo.toClient(st, 1).myPhase, 'waiting');
+  // Korban defense: defense (bukan waiting).
+  st.phase = 'defense';
+  st.pendingDefense = { defender: 1, attack: { kind: 'sniper', attacker: 0, targetPlayer: 1, targetToken: 0 } };
+  assert.equal(ludo.toClient(st, 1).myPhase, 'defense');
+  // Penyerang (pemegang giliran) tetap di fase defense global.
+  assert.equal(ludo.toClient(st, 0).myPhase, 'defense');
+  // Pemain ketiga yang tidak terlibat: waiting.
+  assert.equal(ludo.toClient(st, 2).myPhase, 'waiting');
+});
+
+test('lastRoll: angka dadu no-move roll tersedia untuk animasi klien', () => {
+  const st = fresh();
+  assert.equal(st.lastRoll, null);
+  // Simulasi doLudoRoll no-move: lastRoll diset sebelum endTurn.
+  st.dice = 4; st.lastRoll = st.dice;
+  ludo.endTurn(st);
+  assert.equal(st.dice, null); // endTurn tetap membersihkan dice...
+  assert.equal(st.lastRoll, 4); // ...tapi lastRoll bertahan
+  assert.equal(ludo.toClient(st, 0).lastRoll, 4);
+});
+
 test('netral hanya langkah: +3 dari 3 tidak menciptakan keluar base/kocok lagi', () => {
   const st = fresh();
   st.phase = 'move'; st.turn = 0; st.dice = 3; st.steps = 3;

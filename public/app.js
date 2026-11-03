@@ -1904,11 +1904,13 @@ function ludoBuildJobs(prev, snap) {
 // A newer roll supersedes an older dice job mid-flight (ludoDiceGen).
 const LUDO_DICE_MS_MINE = 3500;
 const LUDO_DICE_MS_OTHER = 800;
-let ludoDiceGen = 0;
-async function ludoAnimDice(face, ms, dg) {
+let ludoDiceGen = 0; // bumped only by fresh-path reset: kills a running shake
+let ludoRollSeq = 0; // every resolved roll gets a sequence number
+async function ludoAnimDice(face, ms) {
   const img = $('ludo-dice-img');
   const btn = $('ludo-dice');
   if (!img) return;
+  const genAtStart = ludoDiceGen;
   const finish = (final) => {
     if (btn) {
       btn.classList.remove('shaking');
@@ -1920,15 +1922,16 @@ async function ludoAnimDice(face, ms, dg) {
     finish(true);
   } else {
     // Foony-style: rapid in-place vibration while faces flicker,
-    // then settle on the final face.
+    // then settle on the final face. Once started, runs to completion;
+    // only a fresh-path reset (ludoDiceGen bump) may kill it mid-flight.
+    // A newer roll never kills a running shake (Sensei 2026-11-03).
     if (btn) btn.classList.add('shaking');
     const frames = Math.max(3, Math.round(ms / 150));
     for (let i = 0; i < frames; i++) {
-      if (dg !== ludoDiceGen) { finish(false); return; } // superseded
+      if (ludoDiceGen !== genAtStart) { finish(false); return; }
       img.src = `/assets/ludo-clean/dice-${1 + Math.floor(Math.random() * 6)}.svg`;
       await ludoWait(ms / frames);
     }
-    if (dg !== ludoDiceGen) { finish(false); return; } // superseded mid-flight
     finish(true);
   }
   img.alt = `Dadu ${face}`;
@@ -2085,15 +2088,23 @@ function renderLudo(m) {
     // or straight into the next turn when there was no legal move
     // (roll -> roll with a new turn holder, e.g. all pawns in base).
     // Both must play the dice animation, otherwise the number just pops.
-    const rollResolved = snap.dice && prev.phase === 'roll'
+    // The rolled face may live in lastRoll (no-move roll: endTurn wiped
+    // st.dice, but the server preserved it for the animation).
+    const rolledFace = snap.dice || snap.lastRoll;
+    const rollResolved = rolledFace && prev.phase === 'roll'
       && (snap.phase !== 'roll' || snap.turn !== prev.turn);
     if (rollResolved) {
       if (diceBtn) diceBtn.classList.remove('six');
-      const dg = ++ludoDiceGen;
+      const seq = ++ludoRollSeq;
       // The roller is whoever was in 'roll' phase (prev.turn); after a
       // no-move roll the turn may already have passed to someone else.
       const ms = prev.turn === mySeat ? LUDO_DICE_MS_MINE : LUDO_DICE_MS_OTHER;
-      ludoEnqueue(() => ludoAnimDice(snap.dice, ms, dg));
+      ludoEnqueue(async () => {
+        // A newer roll enqueued while we waited: skip, we're obsolete.
+        // But a RUNNING shake is never killed by a newer roll.
+        if (seq !== ludoRollSeq) return;
+        await ludoAnimDice(rolledFace, ms);
+      });
     }
     const jobs = ludoBuildJobs(prev, snap);
     const movedKeys = new Set();

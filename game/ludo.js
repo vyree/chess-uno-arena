@@ -66,7 +66,8 @@ function newGame(rand) {
     turn: 0,
     phase: 'roll',
     dice: null,
-    steps: null,
+    lastRoll: null, // last dice value, preserved across endTurn so the
+    steps: null,    // client can animate no-move rolls (Sensei 2026-11-03)
     neutralUsed: false,
     sixCount: 0,
     pendingAttack: null,
@@ -435,7 +436,13 @@ function toClient(st, seat) {
     })),
     turn: st.turn,
     phase: st.phase,
+    // TURN phase machine (Sensei 2026-11-03): every player always has
+    // an explicit phase. The turn holder's phase is st.phase; anyone
+    // else is 'waiting', except the defender who is 'defense'.
+    myPhase: seat === st.turn ? st.phase
+      : (st.pendingDefense && st.pendingDefense.defender === seat ? 'defense' : 'waiting'),
     dice: st.dice,
+    lastRoll: st.lastRoll,
     steps: st.steps,
     neutralUsed: st.neutralUsed,
     sixCount: st.sixCount,

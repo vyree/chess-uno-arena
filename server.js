@@ -1665,7 +1665,8 @@ function teardownBotRoom(room) {
 function ludoBotThinkMs() {
   const fixed = parseInt(process.env.LUDO_BOT_THINK_MS || '', 10);
   if (Number.isFinite(fixed) && fixed >= 0) return fixed;
-  return 800;
+  // 2.2s pauses so phase/action transitions are clear (Sensei 2026-11-03).
+  return 2200;
 }
 function ludoAnnounce(room, text, cardKind) {
   broadcast(room, { type: 'ludo_announce', text, cardKind: cardKind || null });
@@ -1750,6 +1751,7 @@ function ludoContinueAfterAttack(room) {
 function doLudoRoll(room) {
   const st = room.ludo.st;
   if (st.phase !== 'roll' || st.over) return { ok: false, error: 'bukan waktunya kocok' };
+  st.lastRoll = null; // stale roll from a previous turn must not linger
   st.dice = ludo.rollDice(st);
   if (st.dice === 6) st.sixCount += 1;
   st.steps = st.dice;
@@ -1757,6 +1759,8 @@ function doLudoRoll(room) {
   st.phase = 'move';
   const moves = ludo.legalMoves(st, st.turn, st.steps, st.dice);
   if (!moves.length) {
+    // Preserve the roll so the client can animate it: endTurn wipes st.dice.
+    st.lastRoll = st.dice;
     ludo.endTurn(st);
     ludo.tickBlockCooldown(st);
     return { ok: true, noMove: true };
