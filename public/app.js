@@ -1817,9 +1817,9 @@ function showLudoAnnounce(m) {
 // Tokens persist across renders; each render diffs the new snapshot
 // against the previous one and enqueues animation jobs (dice, moves,
 // captures) executed strictly in order. No new WS messages, no
-// protocol change. Pacing defaults: dice 550ms, step 120ms (tunable).
+// protocol change. Pacing: step 280ms (tunable); dice 3.5s for your own
+// roll, 0.8s for others (see ludoAnimDice).
 const LUDO_STEP_MS = 280;
-const LUDO_DICE_ANIM_MS = 3500;
 const LUDO_FRESH_THRESHOLD = 10;
 const LUDO_REDUCED_MOTION = typeof matchMedia === 'function'
   && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1897,26 +1897,41 @@ function ludoBuildJobs(prev, snap) {
   });
   return { moves, captures };
 }
-async function ludoAnimDice(face) {
+// Dice pacing (Sensei 2026-11-03): the 3.5s shake is drama for YOUR
+// roll; other players' rolls get a quick 0.8s shake. The old code shook
+// 3.5s for EVERY roll while the server paces bots at 800ms/action, so
+// the animation queue piled up and the dice looked stuck spinning.
+// A newer roll supersedes an older dice job mid-flight (ludoDiceGen).
+const LUDO_DICE_MS_MINE = 3500;
+const LUDO_DICE_MS_OTHER = 800;
+let ludoDiceGen = 0;
+async function ludoAnimDice(face, ms, dg) {
   const img = $('ludo-dice-img');
   const btn = $('ludo-dice');
   if (!img) return;
+  const finish = (final) => {
+    if (btn) {
+      btn.classList.remove('shaking');
+      if (final) btn.classList.toggle('six', face === 6);
+    }
+    if (final) img.src = `/assets/ludo-clean/dice-${face}.svg`;
+  };
   if (LUDO_REDUCED_MOTION) {
-    img.src = `/assets/ludo-clean/dice-${face}.svg`;
+    finish(true);
   } else {
     // Foony-style: rapid in-place vibration while faces flicker,
     // then settle on the final face.
     if (btn) btn.classList.add('shaking');
-    const frames = Math.max(8, Math.round(LUDO_DICE_ANIM_MS / 150));
+    const frames = Math.max(3, Math.round(ms / 150));
     for (let i = 0; i < frames; i++) {
+      if (dg !== ludoDiceGen) { finish(false); return; } // superseded
       img.src = `/assets/ludo-clean/dice-${1 + Math.floor(Math.random() * 6)}.svg`;
-      await ludoWait(LUDO_DICE_ANIM_MS / frames);
+      await ludoWait(ms / frames);
     }
-    if (btn) btn.classList.remove('shaking');
-    img.src = `/assets/ludo-clean/dice-${face}.svg`;
+    if (dg !== ludoDiceGen) { finish(false); return; } // superseded mid-flight
+    finish(true);
   }
   img.alt = `Dadu ${face}`;
-  if (btn) btn.classList.toggle('six', face === 6);
 }
 async function ludoAnimMove(key, pi, from, to, finalPos, thump) {
   const el = ludoTokenEls[key];
@@ -2052,6 +2067,8 @@ function renderLudo(m) {
   if (!prev || ludoCountChanged(prev, snap) >= LUDO_FRESH_THRESHOLD) {
     // Fresh game / rejoin: place everything instantly, drop the queue.
     ludoAnimGen++;
+    ludoDiceGen++; // a running dice shake must not survive the reset
+    if (diceBtn) diceBtn.classList.remove('shaking');
     ludoAnimChain = Promise.resolve();
     Object.keys(finalPos).forEach((k) => {
       const el = ludoTokenEls[k];
@@ -2072,7 +2089,11 @@ function renderLudo(m) {
       && (snap.phase !== 'roll' || snap.turn !== prev.turn);
     if (rollResolved) {
       if (diceBtn) diceBtn.classList.remove('six');
-      ludoEnqueue(() => ludoAnimDice(snap.dice));
+      const dg = ++ludoDiceGen;
+      // The roller is whoever was in 'roll' phase (prev.turn); after a
+      // no-move roll the turn may already have passed to someone else.
+      const ms = prev.turn === mySeat ? LUDO_DICE_MS_MINE : LUDO_DICE_MS_OTHER;
+      ludoEnqueue(() => ludoAnimDice(snap.dice, ms, dg));
     }
     const jobs = ludoBuildJobs(prev, snap);
     const movedKeys = new Set();
