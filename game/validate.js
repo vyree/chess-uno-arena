@@ -255,6 +255,7 @@ const VALIDATORS = {
   // ---- Ludo Jahat (Fase 1) ----
   create_ludo_bot_room() { return { ok: true, data: {} }; },
   ludo_roll() { return { ok: true, data: {} }; },
+  ludo_confirm() { return { ok: true, data: {} }; },
   ludo_move(d) {
     if (!Number.isInteger(d.token) || d.token < 0 || d.token > 3) {
       return { ok: false, error: 'token harus 0-3' };

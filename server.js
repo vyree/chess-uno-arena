@@ -1680,6 +1680,13 @@ function ludoSync(room) {
     sendGameState(room);
     return;
   }
+  // Confirm stopper: broadcast, auto-confirm for bots, 30s idle for humans.
+  if (st.phase === 'confirm') {
+    sendGameState(room);
+    ludoEnsureConfirmBot(room);
+    ludoArmIdleTakeover(room);
+    return;
+  }
   startTurnTimer(room);
   sendGameState(room);
   scheduleLudoBot(room);
@@ -1694,7 +1701,7 @@ function ludoArmIdleTakeover(room) {
   if (room.ludo.idleTimer) { clearTimeout(room.ludo.idleTimer); room.ludo.idleTimer = null; }
   const st = room.ludo && room.ludo.st;
   if (room.game !== 'ludo' || room.status !== 'playing' || !st || st.over) return;
-  if (!['roll', 'move', 'attack', 'defense', 'swap'].includes(st.phase)) return;
+  if (!['roll', 'move', 'attack', 'defense', 'swap', 'confirm'].includes(st.phase)) return;
   const actor = (st.phase === 'defense' && st.pendingDefense) ? st.pendingDefense.defender : st.turn;
   const p = room.players[actor];
   if (!p || p.isBot || p.takenOver || !p.connected) return;
@@ -1723,17 +1730,21 @@ const LUDO_ANIM_STEP_MS = 280;
 const LUDO_ANIM_DICE_MS = 800;
 const LUDO_ANIM_CAPTURE_MS = 1000;
 // TURN phase machine driver (Sensei 2026-11-03). A finished turn gets
-// visible beats: 'end' (finisher's turn closes) -> 'standby' (next
-// player's turn opens) -> 'roll' (action begins). Each beat is
-// broadcast so phase transitions are clear and never overlap logic.
+// visible beats: 'end' (finisher's turn closes) -> 'confirm' (turn
+// holder clicks confirm; others see "...") -> 'standby' (next player's
+// turn opens) -> 'roll' (action begins). Each beat is broadcast so
+// phase transitions are clear and never overlap logic.
 // animMs: estimated client animation time for the last action; the
 // 'end' beat lasts long enough for it to finish.
-function ludoTurnTransition(room, animMs) {
+// noMove: the turn ended with no legal moves (different confirm text).
+function ludoTurnTransition(room, animMs, noMove) {
   const st = room.ludo && room.ludo.st;
   if (!st || st.over) return;
   clearLudoPhaseTimer(room);
   clearTurnTimer(room); // previous player's 60s countdown stops here
+  if (room.ludo.confirmTimer) { clearTimeout(room.ludo.confirmTimer); room.ludo.confirmTimer = null; }
   st.phase = 'end';
+  st.pendingConfirm = { noMove: !!noMove };
   ludoSync(room); // 'end' beat
   const endMs = Math.max(800, animMs || 800);
   room.ludoPhaseTimer = setTimeout(() => {
@@ -1741,20 +1752,44 @@ function ludoTurnTransition(room, animMs) {
     if (rooms.get(room.code) !== room) return; // room destroyed meanwhile
     const s2 = room.ludo && room.ludo.st;
     if (!s2 || s2.over || s2.phase !== 'end') return;
-    const before = s2.turn;
-    ludo.endTurn(s2); // turn=next, phase='roll' (engine primitive)
-    if (s2.turn !== before) ludo.tickBlockCooldown(s2);
-    s2.phase = 'standby'; // override: 'standby' beat before action
+    // Confirm stopper (Sensei 2026-11-03): the turn holder must click
+    // confirm before the turn passes. Bots auto-confirm via ludoSync.
+    s2.phase = 'confirm';
     ludoSync(room);
-    room.ludoPhaseTimer = setTimeout(() => {
-      room.ludoPhaseTimer = null;
-      if (rooms.get(room.code) !== room) return;
-      const s3 = room.ludo && room.ludo.st;
-      if (!s3 || s3.over || s3.phase !== 'standby') return;
-      s3.phase = 'roll';
-      ludoSync(room); // starts turn timer, schedules bot
-    }, 800);
+  }, endMs);
+}
+// The turn holder confirmed (human click or bot auto). Pass the turn.
+function ludoConfirmPass(room) {
+  const st = room.ludo && room.ludo.st;
+  if (!st || st.over || st.phase !== 'confirm') return;
+  st.pendingConfirm = null;
+  if (room.ludo.confirmTimer) { clearTimeout(room.ludo.confirmTimer); room.ludo.confirmTimer = null; }
+  clearLudoPhaseTimer(room);
+  const before = st.turn;
+  ludo.endTurn(st); // turn=next, phase='roll' (engine primitive)
+  if (st.turn !== before) ludo.tickBlockCooldown(st);
+  st.phase = 'standby'; // override: 'standby' beat before action
+  ludoSync(room);
+  room.ludoPhaseTimer = setTimeout(() => {
+    room.ludoPhaseTimer = null;
+    if (rooms.get(room.code) !== room) return;
+    const s3 = room.ludo && room.ludo.st;
+    if (!s3 || s3.over || s3.phase !== 'standby') return;
+    s3.phase = 'roll';
+    ludoSync(room); // starts turn timer, schedules bot
   }, 800);
+}
+// Bots never click: auto-confirm after a readable beat.
+function ludoEnsureConfirmBot(room) {
+  const st = room.ludo && room.ludo.st;
+  if (!st || st.phase !== 'confirm' || room.ludo.confirmTimer) return;
+  const p = room.players[st.turn];
+  if (!seatDriven(p)) return;
+  room.ludo.confirmTimer = setTimeout(() => {
+    room.ludo.confirmTimer = null;
+    if (rooms.get(room.code) !== room || room.status !== 'playing') return;
+    ludoConfirmPass(room);
+  }, 1500);
 }
 function ludoFinish(room) {
   const st = room.ludo.st;
@@ -1762,6 +1797,7 @@ function ludoFinish(room) {
   clearTurnTimer(room);
   clearLudoPhaseTimer(room);
   if (room.ludo.idleTimer) { clearTimeout(room.ludo.idleTimer); room.ludo.idleTimer = null; }
+  if (room.ludo.confirmTimer) { clearTimeout(room.ludo.confirmTimer); room.ludo.confirmTimer = null; }
   broadcast(room, gameOverPayload(room, { winner: st.winner, reason: 'ludo' }));
 }
 function scheduleLudoBot(room) {
@@ -1953,7 +1989,7 @@ function ludoBotStep(room) {
   if (st.phase === 'roll') {
     const r = doLudoRoll(room);
     if (!r.ok) return;
-    if (r.endTurn) ludoTurnTransition(room, LUDO_ANIM_DICE_MS + 200);
+    if (r.endTurn) ludoTurnTransition(room, LUDO_ANIM_DICE_MS + 200, r.noMove);
     else ludoSync(room);
     return;
   }
@@ -2198,8 +2234,17 @@ async function route(ws, type, data) {
       if (player.seat !== room.ludo.st.turn) { sendError(ws, 'Bukan giliranmu'); return; }
       const r = doLudoRoll(room);
       if (!r.ok) { sendError(ws, r.error); return; }
-      if (r.endTurn) ludoTurnTransition(room, LUDO_ANIM_DICE_MS + 200);
+      if (r.endTurn) ludoTurnTransition(room, LUDO_ANIM_DICE_MS + 200, r.noMove);
       else ludoSync(room);
+      return;
+    }
+    case 'ludo_confirm': {
+      const room = needRoom(); if (!room) return;
+      if (room.game !== 'ludo' || room.status !== 'playing' || !room.ludo) { sendError(ws, 'Game Ludo belum berjalan'); return; }
+      const st = room.ludo.st;
+      if (st.phase !== 'confirm') { sendError(ws, 'Tidak ada konfirmasi yang menunggu'); return; }
+      if (player.seat !== st.turn) { sendError(ws, 'Bukan giliranmu'); return; }
+      ludoConfirmPass(room);
       return;
     }
     case 'ludo_move': {

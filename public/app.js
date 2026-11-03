@@ -1746,7 +1746,8 @@ function showLudoBubble(card, state) {
 let ludoAttackModalKey = null;  // attack kind+attacker already prompted
 let ludoDefenseModalKey = null; // defense prompt already shown
 let ludoBoosterPromptKey = null; // move-phase booster prompt already shown
-let ludoModalKind = null;       // 'attack' | 'defense' | 'booster' | 'booster-prompt' | null
+let ludoConfirmModalKey = null; // confirm stopper popup already shown
+let ludoModalKind = null;       // 'attack' | 'defense' | 'booster' | 'booster-prompt' | 'confirm' | null
 // Booster prompt (Sensei 2026-11-03): at move-phase entry, if the player
 // holds a booster (neutral) card, ask "Pakai kartu booster?". Skipped
 // entirely when holding none. Bots decide via botChooseNeutral.
@@ -2292,7 +2293,30 @@ function renderLudo(m) {
   else if (st.phase === 'attack') status = isMyTurn ? 'Kartu attack: tentukan Pakai/Buang di popup, lalu klik bidak target.' : `${turnPlayer.nickname} sedang memakai kartu attack…`;
   else if (st.phase === 'defense') status = st.pendingDefense && st.pendingDefense.defender === mySeat ? 'Bidakmu diserang! Tentukan di popup: Bertahan atau Terima serangan.' : 'Ada serangan — menunggu defense…';
   else if (st.phase === 'swap') status = isMyTurn ? 'Tanganmu sudah penuh (3). Pilih 1 kartu lama untuk ditukar, atau Pertahankan tanganmu.' : 'Menunggu keputusan tukar kartu…';
+  else if (st.phase === 'confirm') status = isMyTurn ? 'Giliranmu selesai — klik Confirm di popup.' : `Menunggu ${turnPlayer.nickname} konfirmasi…`;
   $('ludo-status').textContent = status;
+  // Confirm stopper (Sensei 2026-11-03): turn holder gets a popup;
+  // everyone else gets a "..." thinking bubble by their name.
+  const confirmKey = st.phase === 'confirm' && !st.over ? `c-${st.turn}-${st.pendingConfirm && st.pendingConfirm.noMove ? 1 : 0}` : null;
+  if (confirmKey && isMyTurn) {
+    if (ludoConfirmModalKey !== confirmKey) {
+      ludoConfirmModalKey = confirmKey;
+      ludoModalKind = 'confirm';
+      const noMove = st.pendingConfirm && st.pendingConfirm.noMove;
+      showModal('⏸️ Konfirmasi Giliran',
+        `<p>${noMove ? 'Tidak ada bidak yang bisa bergerak turn ini, next turn, klik confirm.' : 'Giliranmu sudah selesai, pindahkan turn. Klik confirm.'}</p>`,
+        // Key stays set until the phase leaves 'confirm' so the popup
+        // never flickers back while the server processes the click.
+        [{ label: 'Confirm', cls: 'primary', onClick: () => { send('ludo_confirm'); } }]);
+    }
+  } else if (ludoConfirmModalKey) {
+    ludoConfirmModalKey = null;
+    if (ludoModalKind === 'confirm') { ludoModalKind = null; hideModal(); }
+  }
+  board.querySelectorAll('.ludo-base-name').forEach((el) => {
+    const pi = LUDO_COLORS.indexOf(el.dataset.color);
+    el.classList.toggle('thinking', st.phase === 'confirm' && !st.over && pi !== st.turn);
+  });
   const actions = $('ludo-actions');
   actions.innerHTML = '';
   // Rolling is done by tapping the dice itself (see diceBtn below);

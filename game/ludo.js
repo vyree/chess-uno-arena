@@ -466,6 +466,7 @@ function toClient(st, seat) {
       targetAbs: st.pendingDefense.attack.targetAbs,
     } : null,
     pendingDraw: (st.pendingDraw && st.pendingDraw.player === seat) ? st.pendingDraw.card : null,
+    pendingConfirm: st.pendingConfirm ? { noMove: !!st.pendingConfirm.noMove } : null,
     // Legal moves are server-computed for the current player only;
     // the client never derives rules, it only renders this list.
     legalMoves: (st.phase === 'move' && st.turn === seat && st.steps !== null)
