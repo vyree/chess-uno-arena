@@ -1730,7 +1730,40 @@ function showLudoBubble(card, state) {
 // (Bertahan/Terima + card picker), booster confirm + number picker.
 let ludoAttackModalKey = null;  // attack kind+attacker already prompted
 let ludoDefenseModalKey = null; // defense prompt already shown
-let ludoModalKind = null;       // 'attack' | 'defense' | 'booster' | null
+let ludoBoosterPromptKey = null; // move-phase booster prompt already shown
+let ludoModalKind = null;       // 'attack' | 'defense' | 'booster' | 'booster-prompt' | null
+// Booster prompt (Sensei 2026-11-03): at move-phase entry, if the player
+// holds a booster (neutral) card, ask "Pakai kartu booster?". Skipped
+// entirely when holding none. Bots decide via botChooseNeutral.
+function showLudoBoosterPrompt(st, mySeat) {
+  const myHand = (st.players[mySeat] && st.players[mySeat].hand || []).filter((c) => c.group === 'neutral');
+  if (!myHand.length) return;
+  ludoModalKind = 'booster-prompt';
+  showModal('✨ Kartu Booster', '<p>Sebelum bidak dijalankan — <strong>pakai kartu booster?</strong></p>', [
+    {
+      label: 'Ya, pakai', cls: 'primary', onClick: () => {
+        ludoModalKind = null;
+        if (myHand.length === 1) { showLudoBoosterModal(myHand[0], st); return; }
+        let btns = '';
+        for (const c of myHand) {
+          btns += `<button class="btn secondary small ludo-booster-pick" data-card="${c.id}">${escapeHtml(st.cardInfo[c.kind].name)}</button>`;
+        }
+        ludoModalKind = 'booster';
+        showModal('Pilih kartu booster', `<div class="ludo-defend-list">${btns}</div>`, [
+          { label: 'Batal', cls: 'ghost', onClick: () => { ludoModalKind = null; } },
+        ], 'ludo-modal');
+        document.querySelectorAll('#modal-body .ludo-booster-pick').forEach((b) => {
+          b.onclick = () => {
+            ludoModalKind = null; hideModal();
+            const card = myHand.find((c) => c.id === b.dataset.card);
+            if (card) showLudoBoosterModal(card, st);
+          };
+        });
+      },
+    },
+    { label: 'Tidak', cls: 'ghost', onClick: () => { ludoModalKind = null; } },
+  ], 'ludo-modal');
+}
 function showLudoAttackModal(atk, st) {
   const info = st.cardInfo[atk.kind];
   const body = `<div class="ludo-modal-card"><div class="ludo-card card-attack">${ludoCardFace({ kind: atk.kind, group: 'attack' }, info)}</div></div>`
@@ -2197,6 +2230,20 @@ function renderLudo(m) {
   } else {
     if (ludoDefenseModalKey && ludoModalKind === 'defense') { hideModal(); ludoModalKind = null; }
     ludoDefenseModalKey = null;
+  }
+  // Booster prompt at move-phase entry (Sensei 2026-11-03): only when
+  // holding a booster and not used yet; skipped entirely otherwise.
+  const myHandNow = (st.players[mySeat] && st.players[mySeat].hand || []);
+  const hasBooster = myHandNow.some((c) => c.group === 'neutral');
+  if (st.phase === 'move' && isMyTurn && hasBooster && !st.neutralUsed) {
+    const key = `b-${st.turn}-${st.dice}-${st.sixCount}`;
+    if (ludoBoosterPromptKey !== key) {
+      ludoBoosterPromptKey = key;
+      showLudoBoosterPrompt(st, mySeat);
+    }
+  } else {
+    if (ludoBoosterPromptKey && ludoModalKind === 'booster-prompt') { hideModal(); ludoModalKind = null; }
+    ludoBoosterPromptKey = null;
   }
   let status = '';
   if (st.over) status = st.winner !== null ? `🏆 Pemenang: ${m.players[st.winner].nickname}` : 'Game selesai.';
