@@ -1967,11 +1967,13 @@ const LUDO_DICE_MS_OTHER = 800;
 let ludoDiceGen = 0; // bumped only by fresh-path reset: kills a running shake
 const ludoDiceEls = {}; // yard dice buttons by player index (Sensei 2026-11-03)
 const ludoDiceSeq = {}; // per-player roll sequence; a queued shake skips if obsolete
+let ludoDiceAnimating = false; // true while a dice shake runs; popups wait (Sensei 2026-11-03)
 async function ludoAnimDice(pi, face, ms) {
   const btn = ludoDiceEls[pi];
   const img = btn && btn.querySelector('img');
   if (!img) return;
   const genAtStart = ludoDiceGen;
+  ludoDiceAnimating = true;
   const finish = (final) => {
     if (btn) {
       btn.classList.remove('shaking');
@@ -1996,6 +1998,25 @@ async function ludoAnimDice(pi, face, ms) {
     finish(true);
   }
   img.alt = `Dadu ${face}`;
+  ludoDiceAnimating = false;
+  // Show the big result number at board center, then release queued popups.
+  ludoShowCenterNumber(face);
+  ludoFlushPopupQueue();
+}
+// Center result number: big digit at the board center after a roll.
+function ludoShowCenterNumber(face) {
+  const el = $('ludo-center-number');
+  if (!el) return;
+  el.textContent = face;
+  el.classList.remove('hidden');
+  clearTimeout(ludoCenterNumTimer);
+  ludoCenterNumTimer = setTimeout(() => el.classList.add('hidden'), 2500);
+}
+let ludoCenterNumTimer = null;
+// Popup queue flush: after a dice animation, re-run render so deferred
+// popups (keys unset during the animation) finally appear.
+function ludoFlushPopupQueue() {
+  if (ludoLastM) renderLudo(ludoLastM);
 }
 async function ludoAnimMove(key, pi, ti, from, to, finalPos, thump) {
   const el = ludoTokenEls[key];
@@ -2027,7 +2048,9 @@ async function ludoAnimCapture(key, pi, ti) {
   el.classList.remove('captured');
   ludoPlaceInstant(el, home);
 }
+let ludoLastM = null; // last match object, for popup re-render after dice anim
 function renderLudo(m) {
+  ludoLastM = m;
   const st = m.state;
   const board = $('ludo-board');
   // Board background is the ludo-clean SVG (stars, skill blocks, home
@@ -2071,6 +2094,12 @@ function renderLudo(m) {
       board.appendChild(d);
       ludoDiceEls[pi] = d;
     });
+    // Center result number (Sensei 2026-11-03): big dice result shown
+    // at the board center after the roll animation, so everyone sees it.
+    const centerNum = document.createElement('div');
+    centerNum.id = 'ludo-center-number';
+    centerNum.className = 'ludo-center-number hidden';
+    board.appendChild(centerNum);
     board.dataset.built = '1';
   }
   // Skill targets are transient; token nodes persist across renders so
@@ -2290,10 +2319,14 @@ function renderLudo(m) {
     btn.onclick = active ? () => send('ludo_roll') : null;
   }
   // ---- Decision popups: attack draw, target defense (Sensei 2026-11-03).
+  // Popup deferral (Sensei 2026-11-03): while a dice animation runs,
+  // NO popup may appear. The keys stay unset so the popups show on the
+  // re-render triggered when the animation finishes.
+  const deferPopup = ludoDiceAnimating;
   // Shown once per pending attack/defense; dismissed automatically if
   // the phase moves on (timer, rejoin, etc.).
   const atk = st.pendingAttack;
-  if (st.phase === 'attack' && atk && isMyTurn) {
+  if (st.phase === 'attack' && atk && isMyTurn && !deferPopup) {
     const key = `${atk.kind}:${atk.attacker}`;
     if (ludoAttackModalKey !== key) {
       ludoAttackModalKey = key;
@@ -2304,7 +2337,7 @@ function renderLudo(m) {
     ludoAttackModalKey = null;
   }
   const dfn = st.pendingDefense;
-  if (st.phase === 'defense' && dfn && dfn.defender === mySeat) {
+  if (st.phase === 'defense' && dfn && dfn.defender === mySeat && !deferPopup) {
     const key = `${dfn.defender}:${dfn.attackKind}:${dfn.targetPlayer}:${dfn.targetToken}:${dfn.targetAbs ?? ''}`;
     if (ludoDefenseModalKey !== key) {
       ludoDefenseModalKey = key;
@@ -2317,7 +2350,7 @@ function renderLudo(m) {
   // Booster gate (Sensei 2026-11-03): server-driven. While
   // boosterDecisionPending, the player must answer the Ya/Tidak prompt;
   // tokens stay unclickable until the decision is sent.
-  if (st.phase === 'move' && isMyTurn && st.boosterDecisionPending) {
+  if (st.phase === 'move' && isMyTurn && st.boosterDecisionPending && !deferPopup) {
     const key = `b-${st.turn}-${st.dice}-${st.sixCount}`;
     if (ludoBoosterPromptKey !== key) {
       ludoBoosterPromptKey = key;
@@ -2340,8 +2373,9 @@ function renderLudo(m) {
   $('ludo-status').textContent = status;
   // Confirm stopper (Sensei 2026-11-03): turn holder gets a popup plus
   // the "..." thinking bubble; everyone else gets "waiting~".
+  // Deferred while a dice animation runs (Sensei 2026-11-03).
   const confirmKey = st.phase === 'confirm' && !st.over ? `c-${st.turn}-${st.pendingConfirm && st.pendingConfirm.noMove ? 1 : 0}` : null;
-  if (confirmKey && isMyTurn) {
+  if (confirmKey && isMyTurn && !deferPopup) {
     if (ludoConfirmModalKey !== confirmKey) {
       ludoConfirmModalKey = confirmKey;
       ludoModalKind = 'confirm';
@@ -2414,6 +2448,35 @@ function renderLudo(m) {
     div.className = 'muted';
     div.textContent = `Kartu baru: ${info.name} (${st.pendingDraw.group === 'defense' ? 'Defense' : 'Netral'}). Tukar dengan 1 kartu di atas, atau pertahankan tanganmu.`;
     handBox.appendChild(div);
+  }
+  // Action log (Sensei 2026-11-03): scrollable history; card names are
+  // clickable to show the card's effect info.
+  const logBox = $('ludo-log');
+  if (logBox) {
+    logBox.innerHTML = '';
+    for (const entry of (st.log || [])) {
+      const p = document.createElement('p');
+      p.className = 'ludo-log-entry';
+      if (entry.cardKind && st.cardInfo[entry.cardKind]) {
+        const info = st.cardInfo[entry.cardKind];
+        // Split text on the card name to make it clickable.
+        const parts = entry.text.split(info.name);
+        parts.forEach((part, i) => {
+          p.appendChild(document.createTextNode(part));
+          if (i < parts.length - 1) {
+            const link = document.createElement('span');
+            link.className = 'ludo-log-card';
+            link.textContent = info.name;
+            link.onclick = () => showLudoBubble({ kind: entry.cardKind }, st);
+            p.appendChild(link);
+          }
+        });
+      } else {
+        p.textContent = entry.text;
+      }
+      logBox.appendChild(p);
+    }
+    logBox.scrollTop = logBox.scrollHeight;
   }
 }
 

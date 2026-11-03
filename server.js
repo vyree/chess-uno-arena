@@ -1670,6 +1670,13 @@ function ludoBotThinkMs() {
 }
 function ludoAnnounce(room, text, cardKind) {
   broadcast(room, { type: 'ludo_announce', text, cardKind: cardKind || null });
+  // Persistent action log (Sensei 2026-11-03): kept in state so late
+  // joiners and re-renders see the full history.
+  const st = room.ludo && room.ludo.st;
+  if (st) {
+    st.log.push({ text, cardKind: cardKind || null, t: Date.now() });
+    if (st.log.length > 50) st.log = st.log.slice(-50);
+  }
 }
 function ludoSync(room) {
   if (!room.ludo || room.ludo.st.over) return;

@@ -71,6 +71,7 @@ function newGame(rand) {
     playerRolls: [null, null, null, null], // last roll per player, for yard dice (Sensei 2026-11-03)
     neutralUsed: false,
     boosterDecisionPending: false, // strict gate: must answer "mau booster?" before moving (Sensei 2026-11-03)
+    log: [], // persistent action log: {text, cardKind, t} (Sensei 2026-11-03)
     sixCount: 0,
     pendingAttack: null,
     pendingDefense: null,
@@ -452,6 +453,7 @@ function toClient(st, seat) {
     steps: st.steps,
     neutralUsed: st.neutralUsed,
     boosterDecisionPending: st.boosterDecisionPending,
+    log: st.log.slice(-50), // last 50 entries only, to bound payload
     sixCount: st.sixCount,
     winner: st.winner,
     over: st.over,

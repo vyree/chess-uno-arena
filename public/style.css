@@ -921,6 +921,32 @@ body.low-gfx * {
 .ludo-yard-dice.shaking { animation: ludo-dice-shake .12s linear infinite; }
 .ludo-yard-dice.six img { animation: ludo-dice-glow 1s ease-in-out infinite; }
 .ludo-yard-dice:active:not(:disabled) { transform: translate(-50%, -50%) scale(.9); }
+/* Center result number (Sensei 2026-11-03): big digit at board center
+   after the dice animation, visible to all players. */
+.ludo-center-number {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  font-size: 72px; font-weight: 900; color: #fff;
+  text-shadow: 0 0 20px #ff2e93, 0 2px 8px rgba(0,0,0,.8);
+  z-index: 5; pointer-events: none;
+  animation: ludo-center-pop .3s ease-out;
+}
+.ludo-center-number.hidden { display: none; }
+@keyframes ludo-center-pop {
+  0% { transform: translate(-50%, -50%) scale(.3); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+/* Action log (Sensei 2026-11-03): scrollable history under the card box. */
+.ludo-log {
+  max-height: 120px; overflow-y: auto;
+  font-size: 13px; line-height: 1.5;
+  background: rgba(0,0,0,.25); border-radius: 8px; padding: 8px 10px;
+}
+.ludo-log-entry { margin: 2px 0; color: #ddd; }
+.ludo-log-card {
+  color: #ffd54a; font-weight: 700; cursor: pointer;
+  text-decoration: underline; text-decoration-style: dotted;
+}
+.ludo-log-card:hover { color: #ff2e93; }
 /* Ludo Tahap inti animations (dadu + jalan + makan), 2026-11-03.
    Tokens glide via left/top transition; hops, captures and dice
    effects use transform/opacity keyframes only, no new libraries. */
