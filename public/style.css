@@ -835,6 +835,41 @@ body.low-gfx * {
 .ludo-dice img { width: 100%; height: 100%; display: block; border-radius: 12px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.5)); }
 .ludo-dice:disabled { opacity: .6; cursor: default; }
 .ludo-dice-idle { opacity: .85; }
+/* Ludo Tahap inti animations (dadu + jalan + makan), 2026-11-03.
+   Tokens glide via left/top transition; hops, captures and dice
+   effects use transform/opacity keyframes only, no new libraries. */
+.ludo-token-wrap { transition: left .12s ease, top .12s ease; }
+.ludo-token-wrap.no-anim { transition: none !important; }
+@keyframes ludo-hop {
+  0% { transform: translate(-50%, -50%); }
+  45% { transform: translate(-50%, -78%) scale(1.08); }
+  100% { transform: translate(-50%, -50%); }
+}
+.ludo-token-wrap.hopping { animation: ludo-hop .13s ease-out; z-index: 3; }
+@keyframes ludo-captured {
+  30% { transform: translate(-50%, -90%) scale(.7); opacity: 1; }
+  100% { transform: translate(-50%, -140%) scale(.35); opacity: 0; }
+}
+.ludo-token-wrap.captured { animation: ludo-captured .38s ease-in forwards; z-index: 3; }
+@keyframes ludo-thump {
+  35% { transform: translate(-50%, -50%) scale(1.35); }
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+.ludo-token-wrap.thump { animation: ludo-thump .3s ease-out; }
+@keyframes ludo-dice-glow {
+  50% { filter: drop-shadow(0 0 14px #ffd54a); }
+}
+.ludo-dice.six img { animation: ludo-dice-glow 1s ease-in-out infinite; }
+.ludo-dice:active { transform: translate(-50%, -50%) scale(.9); }
+.ludo-base-name.turn { text-shadow: 0 0 8px #ffd54a, 0 1px 2px #000; }
+@keyframes ludo-badge-in {
+  from { transform: translateX(14px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+#ludo-turn-badge.swap { animation: ludo-badge-in .25s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .ludo-token-wrap, .ludo-dice img, #ludo-turn-badge { transition: none !important; animation: none !important; }
+}
 /* Ludo header on one line, even at 390px: scoped to #screen-ludo so
    other games keep their own game-bar layout. */
 #screen-ludo .game-bar { flex-wrap: nowrap; gap: 6px; }

@@ -1,6 +1,11 @@
 # Ludo Jahat — Rencana Animasi (PARKIR, dikerjakan bertahap)
 
-Status: **disimpan 28 Okt 2026 atas perintah Sensei; BELUM dikerjakan.**
+Status: **Tahap inti SELESAI 3 Nov 2026** (dadu + jalan + makan; commit
+menyusul). Tahap kartu + pengumuman/menang/timer masih PARKIR menunggu
+kata Sensei. Pacing default: dadu 550ms, langkah 120ms/petak (tunable
+di `LUDO_STEP_MS` / `LUDO_DICE_SCRAMBLE_MS`, public/app.js).
+
+Riwayat: disimpan 28 Okt 2026 atas perintah Sensei; BELUM dikerjakan.
 Alasan: Sensei menilai game terasa kaku — belum ada animasi di setiap aksi
 (dadu diputar, bidak jalan, dan lain-lain). Peta ini dibuat dari inspeksi
 kode 28 Okt 2026 (renderLudo di public/app.js, gaya di public/style.css,

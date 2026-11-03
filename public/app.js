@@ -1755,6 +1755,137 @@ function showLudoAnnounce(m) {
   if (ludoAnnounceTimer) clearTimeout(ludoAnnounceTimer);
   ludoAnnounceTimer = setTimeout(() => el.classList.add('hidden'), 3000);
 }
+// ---------- Ludo Tahap inti animation engine (dadu + jalan + makan) ----------
+// Tokens persist across renders; each render diffs the new snapshot
+// against the previous one and enqueues animation jobs (dice, moves,
+// captures) executed strictly in order. No new WS messages, no
+// protocol change. Pacing defaults: dice 550ms, step 120ms (tunable).
+const LUDO_STEP_MS = 120;
+const LUDO_DICE_SCRAMBLE_MS = 550;
+const LUDO_FRESH_THRESHOLD = 10;
+const LUDO_REDUCED_MOTION = typeof matchMedia === 'function'
+  && matchMedia('(prefers-reduced-motion: reduce)').matches;
+let ludoPrevSnap = null;
+let ludoAnimChain = Promise.resolve();
+let ludoAnimGen = 0;
+let ludoTokenEls = {};
+function ludoTokenKey(pi, ti) { return `p${pi}t${ti}`; }
+function ludoWait(ms) { return new Promise((res) => setTimeout(res, ms)); }
+function ludoEnqueue(job) {
+  const gen = ludoAnimGen;
+  ludoAnimChain = ludoAnimChain.then(
+    () => { if (gen === ludoAnimGen) return job(); },
+    () => { if (gen === ludoAnimGen) return job(); },
+  );
+}
+function ludoSnap(st) {
+  return {
+    dice: st.dice || null,
+    phase: st.phase,
+    turn: st.turn,
+    tokens: st.players.map((pl) => pl.tokens.map((t) => t.progress)),
+  };
+}
+function ludoCountChanged(a, b) {
+  let n = 0;
+  a.tokens.forEach((toks, pi) => {
+    toks.forEach((p, ti) => { if (b.tokens[pi][ti] !== p) n++; });
+  });
+  return n;
+}
+function ludoPlaceInstant(el, pos) {
+  el.classList.add('no-anim');
+  el.style.left = `${pos.left}%`;
+  el.style.top = `${pos.top}%`;
+  void el.offsetWidth;
+  el.classList.remove('no-anim');
+}
+function ludoHopOnce(el) {
+  el.classList.remove('hopping');
+  void el.offsetWidth;
+  el.classList.add('hopping');
+}
+function ludoCellCenter(pi, progress) {
+  const [r, c] = ludoCellFor(pi, progress, 0)[0];
+  return { left: ((c + 0.5) / 15) * 100, top: ((r + 0.5) / 15) * 100 };
+}
+function ludoStepPositions(pi, from, to) {
+  if (from === -1) return [ludoCellCenter(pi, to)];
+  const pts = [];
+  const dir = to > from ? 1 : -1;
+  for (let p = from + dir; dir > 0 ? p <= to : p >= to; p += dir) pts.push(ludoCellCenter(pi, p));
+  return pts;
+}
+function ludoAbs(pi, progress) {
+  if (progress < 0 || progress > 50) return null;
+  return ([0, 13, 26, 39][pi] + progress) % 52;
+}
+function ludoBuildJobs(prev, snap) {
+  const moves = [];
+  const captures = [];
+  snap.tokens.forEach((toks, pi) => {
+    toks.forEach((to, ti) => {
+      const from = prev.tokens[pi][ti];
+      if (from === to) return;
+      if (to === -1) captures.push({ key: ludoTokenKey(pi, ti), pi, ti, from });
+      else moves.push({ key: ludoTokenKey(pi, ti), pi, ti, from, to, thump: false });
+    });
+  });
+  captures.forEach((c) => {
+    const abs = ludoAbs(c.pi, c.from);
+    if (abs === null) return;
+    const atk = moves.find((mv) => ludoAbs(mv.pi, mv.to) === abs);
+    if (atk) atk.thump = true;
+  });
+  return { moves, captures };
+}
+async function ludoAnimDice(face) {
+  const img = $('ludo-dice-img');
+  const btn = $('ludo-dice');
+  if (!img) return;
+  if (LUDO_REDUCED_MOTION) {
+    img.src = `/assets/ludo-clean/dice-${face}.svg`;
+  } else {
+    const frames = 7;
+    for (let i = 0; i < frames; i++) {
+      img.src = `/assets/ludo-clean/dice-${1 + Math.floor(Math.random() * 6)}.svg`;
+      await ludoWait(LUDO_DICE_SCRAMBLE_MS / frames);
+    }
+    img.src = `/assets/ludo-clean/dice-${face}.svg`;
+  }
+  img.alt = `Dadu ${face}`;
+  if (btn) btn.classList.toggle('six', face === 6);
+}
+async function ludoAnimMove(key, pi, from, to, finalPos, thump) {
+  const el = ludoTokenEls[key];
+  if (!el) return;
+  if (LUDO_REDUCED_MOTION) { ludoPlaceInstant(el, finalPos); return; }
+  const steps = ludoStepPositions(pi, from, to);
+  for (let i = 0; i < steps.length; i++) {
+    const p = i === steps.length - 1 ? finalPos : steps[i];
+    el.style.left = `${p.left}%`;
+    el.style.top = `${p.top}%`;
+    ludoHopOnce(el);
+    await ludoWait(LUDO_STEP_MS);
+  }
+  el.classList.remove('hopping');
+  if (thump) {
+    el.classList.add('thump');
+    await ludoWait(300);
+    el.classList.remove('thump');
+  }
+}
+async function ludoAnimCapture(key, pi, ti) {
+  const el = ludoTokenEls[key];
+  if (!el) return;
+  const home = ludoTokenPos(pi, -1, ti);
+  if (LUDO_REDUCED_MOTION) { ludoPlaceInstant(el, home); return; }
+  el.classList.remove('hopping');
+  el.classList.add('captured');
+  await ludoWait(380);
+  el.classList.remove('captured');
+  ludoPlaceInstant(el, home);
+}
 function renderLudo(m) {
   const st = m.state;
   const board = $('ludo-board');
@@ -1780,7 +1911,9 @@ function renderLudo(m) {
     });
     board.dataset.built = '1';
   }
-  board.querySelectorAll('.ludo-token-wrap, .ludo-skill-target').forEach((el) => el.remove());
+  // Skill targets are transient; token nodes persist across renders so
+  // position changes can glide/step instead of teleporting (Tahap inti).
+  board.querySelectorAll('.ludo-skill-target').forEach((el) => el.remove());
   const mySeat = ludoMySeat(m);
   const isMyTurn = st.turn === mySeat;
   const legal = new Set((st.legalMoves || []).map((x) => x.token));
@@ -1798,28 +1931,44 @@ function renderLudo(m) {
     stackAt[key] = (stackAt[key] || 0) + 1;
   });
   const stackSeen = {};
+  const finalPos = {};
+  const seenKeys = new Set();
   tokenList.forEach((item) => {
     const key = `${item.pos.left.toFixed(3)},${item.pos.top.toFixed(3)}`;
     const n = stackAt[key];
     const idx = stackSeen[key] || 0;
     stackSeen[key] = idx + 1;
     const dx = n > 1 ? (idx - (n - 1) / 2) * 1.4 : 0;
-    const wrap = document.createElement('span');
-    wrap.className = `ludo-token-wrap tok-${item.pl.color}` + (item.pl.frozen.includes(item.ti) ? ' frozen' : '');
-    wrap.style.left = `${item.pos.left + dx}%`;
-    wrap.style.top = `${item.pos.top}%`;
-    wrap.title = `${m.players[item.pi] ? m.players[item.pi].nickname : item.pl.color} #${item.ti + 1}` + (item.pl.frozen.includes(item.ti) ? ' (beku)' : '');
-    const img = document.createElement('img');
-    img.className = 'ludo-token-img';
-    img.src = `/assets/ludo-clean/pawn-${item.pl.color}.svg`;
-    img.alt = `Pion ${item.pl.color}`;
-    wrap.appendChild(img);
-    if (item.pl.frozen.includes(item.ti)) {
-      const badge = document.createElement('span');
+    const tkey = ludoTokenKey(item.pi, item.ti);
+    seenKeys.add(tkey);
+    finalPos[tkey] = { left: item.pos.left + dx, top: item.pos.top };
+    const frozen = item.pl.frozen.includes(item.ti);
+    let wrap = ludoTokenEls[tkey];
+    if (!wrap) {
+      wrap = document.createElement('span');
+      const img = document.createElement('img');
+      img.className = 'ludo-token-img';
+      img.src = `/assets/ludo-clean/pawn-${item.pl.color}.svg`;
+      img.alt = `Pion ${item.pl.color}`;
+      wrap.appendChild(img);
+      ludoTokenEls[tkey] = wrap;
+      board.appendChild(wrap);
+      wrap.style.left = `${finalPos[tkey].left}%`;
+      wrap.style.top = `${finalPos[tkey].top}%`;
+    }
+    // Preserve in-flight animation classes across renders.
+    const flying = ['hopping', 'captured', 'thump'].filter((c) => wrap.classList.contains(c));
+    wrap.className = `ludo-token-wrap tok-${item.pl.color}` + (frozen ? ' frozen' : '')
+      + (flying.length ? ` ${flying.join(' ')}` : '');
+    wrap.title = `${m.players[item.pi] ? m.players[item.pi].nickname : item.pl.color} #${item.ti + 1}` + (frozen ? ' (beku)' : '');
+    let badge = wrap.querySelector('.ludo-frozen-badge');
+    if (frozen && !badge) {
+      badge = document.createElement('span');
       badge.className = 'ludo-frozen-badge';
       badge.textContent = '❄️';
       wrap.appendChild(badge);
-    }
+    } else if (!frozen && badge) badge.remove();
+    wrap.onclick = null;
     if (isMyTurn && st.phase === 'move' && legal.has(item.ti) && item.pi === mySeat) {
       wrap.classList.add('clickable');
       wrap.onclick = () => send('ludo_move', { token: item.ti });
@@ -1828,8 +1977,55 @@ function renderLudo(m) {
       wrap.classList.add('targetable');
       wrap.onclick = () => send('ludo_attack', { cardId: st.pendingAttack.cardId, targetPlayer: item.pi, targetToken: item.ti });
     }
-    board.appendChild(wrap);
   });
+  Object.keys(ludoTokenEls).forEach((k) => {
+    if (!seenKeys.has(k)) { ludoTokenEls[k].remove(); delete ludoTokenEls[k]; }
+  });
+  // Diff vs previous snapshot, then enqueue animation jobs in order.
+  const snap = ludoSnap(st);
+  const prev = ludoPrevSnap;
+  ludoPrevSnap = snap;
+  const diceBtn = $('ludo-dice');
+  const diceImg = $('ludo-dice-img');
+  if (!prev || ludoCountChanged(prev, snap) >= LUDO_FRESH_THRESHOLD) {
+    // Fresh game / rejoin: place everything instantly, drop the queue.
+    ludoAnimGen++;
+    ludoAnimChain = Promise.resolve();
+    Object.keys(finalPos).forEach((k) => {
+      const el = ludoTokenEls[k];
+      el.classList.remove('hopping', 'captured', 'thump');
+      ludoPlaceInstant(el, finalPos[k]);
+    });
+    if (diceImg) {
+      diceImg.src = snap.dice ? `/assets/ludo-clean/dice-${snap.dice}.svg` : '/assets/ludo-clean/dice-blank.svg';
+      diceImg.alt = snap.dice ? `Dadu ${snap.dice}` : 'Dadu belum dikocok';
+    }
+    if (diceBtn) diceBtn.classList.toggle('six', snap.dice === 6);
+  } else {
+    if (prev.phase === 'roll' && snap.phase !== 'roll' && snap.dice) {
+      if (diceBtn) diceBtn.classList.remove('six');
+      ludoEnqueue(() => ludoAnimDice(snap.dice));
+    }
+    const jobs = ludoBuildJobs(prev, snap);
+    const movedKeys = new Set();
+    jobs.moves.forEach((j) => {
+      movedKeys.add(j.key);
+      ludoEnqueue(() => ludoAnimMove(j.key, j.pi, j.from, j.to, finalPos[j.key], j.thump));
+    });
+    jobs.captures.forEach((c) => {
+      movedKeys.add(c.key);
+      ludoEnqueue(() => ludoAnimCapture(c.key, c.pi, c.ti));
+    });
+    // Non-moving tokens glide to their final spot (stacking shuffle).
+    Object.keys(finalPos).forEach((k) => {
+      if (!movedKeys.has(k)) {
+        const el = ludoTokenEls[k];
+        el.style.left = `${finalPos[k].left}%`;
+        el.style.top = `${finalPos[k].top}%`;
+      }
+    });
+  }
+  if (diceImg) diceImg.classList.toggle('ludo-dice-idle', !st.dice);
   // Bom targets: invisible clickable cells at skill-block centres.
   if (st.phase === 'attack' && st.pendingAttack && st.pendingAttack.kind === 'bom') {
     for (const abs of st.skillBlocks) {
@@ -1849,15 +2045,16 @@ function renderLudo(m) {
   board.querySelectorAll('.ludo-base-name').forEach((el) => {
     const pi = LUDO_COLORS.indexOf(el.dataset.color);
     el.textContent = m.players[pi] ? m.players[pi].nickname : '';
+    el.classList.toggle('turn', pi === st.turn);
   });
   const turnPlayer = m.players[st.turn];
-  $('ludo-turn-badge').textContent = turnPlayer ? `Giliran: ${turnPlayer.nickname}` : '';
-  const diceBtn = $('ludo-dice');
-  const diceImg = $('ludo-dice-img');
-  if (diceImg) {
-    diceImg.src = st.dice ? `/assets/ludo-clean/dice-${st.dice}.svg` : '/assets/ludo-clean/dice-blank.svg';
-    diceImg.alt = st.dice ? `Dadu ${st.dice}` : 'Dadu belum dikocok';
-    diceImg.classList.toggle('ludo-dice-idle', !st.dice);
+  const turnBadge = $('ludo-turn-badge');
+  const badgeText = turnPlayer ? `Giliran: ${turnPlayer.nickname}` : '';
+  if (turnBadge.textContent !== badgeText) {
+    turnBadge.textContent = badgeText;
+    turnBadge.classList.remove('swap');
+    void turnBadge.offsetWidth;
+    turnBadge.classList.add('swap');
   }
   diceBtn.disabled = !(isMyTurn && st.phase === 'roll');
   diceBtn.onclick = () => send('ludo_roll');
