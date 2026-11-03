@@ -1878,6 +1878,7 @@ function doLudoRoll(room) {
   st.dice = ludo.rollDice(st);
   if (st.dice === 6) st.sixCount += 1;
   st.steps = st.dice;
+  st.playerRolls[st.turn] = st.dice; // yard dice shows each player's last roll
   st.neutralUsed = false;
   st.phase = 'move';
   const moves = ludo.legalMoves(st, st.turn, st.steps, st.dice);

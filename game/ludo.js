@@ -68,6 +68,7 @@ function newGame(rand) {
     dice: null,
     lastRoll: null, // last dice value, preserved across endTurn so the
     steps: null,    // client can animate no-move rolls (Sensei 2026-11-03)
+    playerRolls: [null, null, null, null], // last roll per player, for yard dice (Sensei 2026-11-03)
     neutralUsed: false,
     sixCount: 0,
     pendingAttack: null,
@@ -444,6 +445,7 @@ function toClient(st, seat) {
       : (st.pendingDefense && st.pendingDefense.defender === seat ? 'defense' : 'waiting'),
     dice: st.dice,
     lastRoll: st.lastRoll,
+    playerRolls: st.playerRolls.slice(),
     steps: st.steps,
     neutralUsed: st.neutralUsed,
     sixCount: st.sixCount,

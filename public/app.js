@@ -1659,17 +1659,20 @@ const LUDO_BASE = {
 const LUDO_COLORS = ['red', 'green', 'yellow', 'blue'];
 // Per-color finish trays (Sensei 2026-11-03): finished pawns sit at the
 // end of their own color's path, NOT the shared centre [7,7]. Each tray
-// is a 2x2 mini-grid just beyond the home-column end.
+// is a neat 2x2 grid just beyond the home-column end; finished pawns
+// render smaller (see .ludo-token-wrap.finished) so the grid never
+// overlaps. Tidied 2026-11-03 per Sensei: clean spacing, aesthetic.
 const LUDO_FINISH = {
-  red: [7, 6.55],
-  green: [6.55, 7],
-  yellow: [7, 7.45],
-  blue: [7.45, 7],
+  red: [7, 6.62],
+  green: [6.62, 7],
+  yellow: [7, 7.38],
+  blue: [7.38, 7],
 };
+const LUDO_FINISH_HALF_GAP = 0.325; // 2x2 grid, 0.65 cell spacing
 function ludoFinishSlot(player, tokenIdx) {
   const [r, c] = LUDO_FINISH[LUDO_COLORS[player]];
-  const dr = (tokenIdx >> 1) ? 0.22 : -0.22;
-  const dc = (tokenIdx & 1) ? 0.22 : -0.22;
+  const dr = (tokenIdx >> 1) ? LUDO_FINISH_HALF_GAP : -LUDO_FINISH_HALF_GAP;
+  const dc = (tokenIdx & 1) ? LUDO_FINISH_HALF_GAP : -LUDO_FINISH_HALF_GAP;
   return [[r + dr, c + dc]];
 }
 function ludoCellFor(player, progress, tokenIdx) {
@@ -1891,6 +1894,7 @@ function ludoSnap(st) {
     phase: st.phase,
     turn: st.turn,
     tokens: st.players.map((pl) => pl.tokens.map((t) => t.progress)),
+    playerRolls: (st.playerRolls || [null, null, null, null]).slice(),
   };
 }
 function ludoCountChanged(a, b) {
@@ -1954,10 +1958,11 @@ function ludoBuildJobs(prev, snap) {
 const LUDO_DICE_MS_MINE = 3500;
 const LUDO_DICE_MS_OTHER = 800;
 let ludoDiceGen = 0; // bumped only by fresh-path reset: kills a running shake
-let ludoRollSeq = 0; // every resolved roll gets a sequence number
-async function ludoAnimDice(face, ms) {
-  const img = $('ludo-dice-img');
-  const btn = $('ludo-dice');
+const ludoDiceEls = {}; // yard dice buttons by player index (Sensei 2026-11-03)
+const ludoDiceSeq = {}; // per-player roll sequence; a queued shake skips if obsolete
+async function ludoAnimDice(pi, face, ms) {
+  const btn = ludoDiceEls[pi];
+  const img = btn && btn.querySelector('img');
   if (!img) return;
   const genAtStart = ludoDiceGen;
   const finish = (final) => {
@@ -2047,6 +2052,18 @@ function renderLudo(m) {
       + '<rect x="2.5" y="2.5" width="95" height="95" fill="none" stroke="#a855f7" stroke-width="4"'
       + ' stroke-dasharray="11 9" class="ring-dashes"/></svg>';
     board.appendChild(ring);
+    // Yard dice (Sensei 2026-11-03): one dice per player at the yard
+    // centre; each player clicks only their own dice to roll.
+    LUDO_COLORS.forEach((color, pi) => {
+      const d = document.createElement('button');
+      d.id = `ludo-dice-${pi}`;
+      d.className = `ludo-yard-dice dice-${color}`;
+      d.title = 'Kocok dadu';
+      d.dataset.pi = pi;
+      d.innerHTML = `<img src="/assets/ludo-clean/dice-blank.svg" alt="Dadu belum dikocok">`;
+      board.appendChild(d);
+      ludoDiceEls[pi] = d;
+    });
     board.dataset.built = '1';
   }
   // Skill targets are transient; token nodes persist across renders so
@@ -2096,8 +2113,9 @@ function renderLudo(m) {
     }
     // Preserve in-flight animation classes across renders.
     const flying = ['hopping', 'captured', 'thump'].filter((c) => wrap.classList.contains(c));
+    const finished = item.pl.tokens[item.ti].progress === 57;
     wrap.className = `ludo-token-wrap tok-${item.pl.color}` + (frozen ? ' frozen' : '')
-      + (flying.length ? ` ${flying.join(' ')}` : '');
+      + (finished ? ' finished' : '') + (flying.length ? ` ${flying.join(' ')}` : '');
     // Stacked pawns: the turn player's pawn paints on top (Sensei
     // 2026-11-03), so it's easy to tap and clear whose pawn is where.
     wrap.style.zIndex = item.pi === st.turn ? '3' : '';
@@ -2126,46 +2144,56 @@ function renderLudo(m) {
   const snap = ludoSnap(st);
   const prev = ludoPrevSnap;
   ludoPrevSnap = snap;
-  const diceBtn = $('ludo-dice');
-  const diceImg = $('ludo-dice-img');
+  // Yard dice: each player has their own dice showing their last roll.
+  const setDiceFace = (pi, face) => {
+    const btn = ludoDiceEls[pi];
+    if (!btn) return;
+    const img = btn.querySelector('img');
+    img.src = face ? `/assets/ludo-clean/dice-${face}.svg` : '/assets/ludo-clean/dice-blank.svg';
+    img.alt = face ? `Dadu ${face}` : 'Dadu belum dikocok';
+    btn.classList.toggle('six', face === 6);
+  };
   if (!prev || ludoCountChanged(prev, snap) >= LUDO_FRESH_THRESHOLD) {
     // Fresh game / rejoin: place everything instantly, drop the queue.
     ludoAnimGen++;
     ludoDiceGen++; // a running dice shake must not survive the reset
-    if (diceBtn) diceBtn.classList.remove('shaking');
+    Object.values(ludoDiceEls).forEach((b) => b.classList.remove('shaking'));
     ludoAnimChain = Promise.resolve();
     Object.keys(finalPos).forEach((k) => {
       const el = ludoTokenEls[k];
       el.classList.remove('hopping', 'captured', 'thump');
       ludoPlaceInstant(el, finalPos[k]);
     });
-    if (diceImg) {
-      diceImg.src = snap.dice ? `/assets/ludo-clean/dice-${snap.dice}.svg` : '/assets/ludo-clean/dice-blank.svg';
-      diceImg.alt = snap.dice ? `Dadu ${snap.dice}` : 'Dadu belum dikocok';
-    }
-    if (diceBtn) diceBtn.classList.toggle('six', snap.dice === 6);
+    for (let pi = 0; pi < 4; pi++) setDiceFace(pi, snap.playerRolls[pi]);
   } else {
     // A roll resolves either into an action phase (roll -> move/...),
     // or straight into the next turn when there was no legal move
     // (roll -> roll with a new turn holder, e.g. all pawns in base).
-    // Both must play the dice animation, otherwise the number just pops.
-    // The rolled face may live in lastRoll (no-move roll: endTurn wiped
-    // st.dice, but the server preserved it for the animation).
-    const rolledFace = snap.dice || snap.lastRoll;
+    // Both must play the dice animation on the ROLLER's yard dice,
+    // otherwise the number just pops.
+    const roller = prev.turn;
+    const rolledFace = snap.playerRolls[roller];
     const rollResolved = rolledFace && prev.phase === 'roll'
-      && (snap.phase !== 'roll' || snap.turn !== prev.turn);
+      && (snap.phase !== 'roll' || snap.turn !== prev.turn)
+      && rolledFace !== prev.playerRolls[roller];
     if (rollResolved) {
-      if (diceBtn) diceBtn.classList.remove('six');
-      const seq = ++ludoRollSeq;
-      // The roller is whoever was in 'roll' phase (prev.turn); after a
-      // no-move roll the turn may already have passed to someone else.
-      const ms = prev.turn === mySeat ? LUDO_DICE_MS_MINE : LUDO_DICE_MS_OTHER;
+      const btn = ludoDiceEls[roller];
+      if (btn) btn.classList.remove('six');
+      const seq = (ludoDiceSeq[roller] || 0) + 1;
+      ludoDiceSeq[roller] = seq;
+      // Own roll gets the dramatic 3.5s shake; others get a quick 0.8s.
+      const ms = roller === mySeat ? LUDO_DICE_MS_MINE : LUDO_DICE_MS_OTHER;
       ludoEnqueue(async () => {
-        // A newer roll enqueued while we waited: skip, we're obsolete.
-        // But a RUNNING shake is never killed by a newer roll.
-        if (seq !== ludoRollSeq) return;
-        await ludoAnimDice(rolledFace, ms);
+        // A newer roll for the same dice enqueued while we waited:
+        // skip, we're obsolete. A RUNNING shake is never killed.
+        if (ludoDiceSeq[roller] !== seq) return;
+        await ludoAnimDice(roller, rolledFace, ms);
       });
+    } else {
+      // No new roll: keep each dice showing its player's last roll.
+      for (let pi = 0; pi < 4; pi++) {
+        if (snap.playerRolls[pi] !== prev.playerRolls[pi]) setDiceFace(pi, snap.playerRolls[pi]);
+      }
     }
     const jobs = ludoBuildJobs(prev, snap);
     const movedKeys = new Set();
@@ -2186,7 +2214,6 @@ function renderLudo(m) {
       }
     });
   }
-  if (diceImg) diceImg.classList.toggle('ludo-dice-idle', !st.dice);
   // Bom targets: invisible clickable cells at skill-block centres.
   if (st.phase === 'attack' && st.pendingAttack && st.pendingAttack.kind === 'bom') {
     for (const abs of st.skillBlocks) {
@@ -2241,10 +2268,18 @@ function renderLudo(m) {
     if (prompt.textContent !== promptText) prompt.textContent = promptText;
     prompt.classList.toggle('hidden', !promptText);
   }
+  // Yard dice: only the turn holder's own dice is clickable, and only
+  // in 'roll' phase (Sensei 2026-11-03). Others are dimmed.
   const canRoll = isMyTurn && st.phase === 'roll';
-  diceBtn.disabled = !canRoll;
-  diceBtn.classList.toggle('rolling', canRoll);
-  diceBtn.onclick = () => send('ludo_roll');
+  for (let pi = 0; pi < 4; pi++) {
+    const btn = ludoDiceEls[pi];
+    if (!btn) continue;
+    const mine = pi === mySeat;
+    const active = mine && canRoll;
+    btn.disabled = !active;
+    btn.classList.toggle('rolling', active);
+    btn.onclick = active ? () => send('ludo_roll') : null;
+  }
   // ---- Decision popups: attack draw, target defense (Sensei 2026-11-03).
   // Shown once per pending attack/defense; dismissed automatically if
   // the phase moves on (timer, rejoin, etc.).
@@ -2319,7 +2354,7 @@ function renderLudo(m) {
   });
   const actions = $('ludo-actions');
   actions.innerHTML = '';
-  // Rolling is done by tapping the dice itself (see diceBtn below);
+  // Rolling is done by tapping your own yard dice (see yard dice loop below);
   // no separate roll button, so it can never be tapped by mistake.
   if (isMyTurn && st.phase === 'attack') {
     const b = document.createElement('button');
