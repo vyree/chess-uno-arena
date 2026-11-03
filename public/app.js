@@ -2040,6 +2040,11 @@ function renderLudo(m) {
     const ring = document.createElement('div');
     ring.id = 'ludo-turn-ring';
     ring.className = 'ludo-turn-ring';
+    // Square outline: white base + purple marching dashes (Sensei 2026-11-03).
+    ring.innerHTML = '<svg viewBox="0 0 100 100" preserveAspectRatio="none">'
+      + '<rect x="2.5" y="2.5" width="95" height="95" fill="none" stroke="#ffffff" stroke-width="4"/>'
+      + '<rect x="2.5" y="2.5" width="95" height="95" fill="none" stroke="#a855f7" stroke-width="4"'
+      + ' stroke-dasharray="11 9" class="ring-dashes"/></svg>';
     board.appendChild(ring);
     board.dataset.built = '1';
   }

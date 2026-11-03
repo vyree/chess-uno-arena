@@ -1715,17 +1715,27 @@ function ludoArmIdleTakeover(room) {
 function clearLudoPhaseTimer(room) {
   if (room.ludoPhaseTimer) { clearTimeout(room.ludoPhaseTimer); room.ludoPhaseTimer = null; }
 }
+// Client animation times (must match public/app.js: LUDO_STEP_MS=280,
+// LUDO_DICE_MS_OTHER=800). The turn ceremony waits for the client's
+// animation to finish before passing the turn, so animations never
+// overlap the next player's turn (Sensei 2026-11-03).
+const LUDO_ANIM_STEP_MS = 280;
+const LUDO_ANIM_DICE_MS = 800;
+const LUDO_ANIM_CAPTURE_MS = 1000;
 // TURN phase machine driver (Sensei 2026-11-03). A finished turn gets
 // visible beats: 'end' (finisher's turn closes) -> 'standby' (next
 // player's turn opens) -> 'roll' (action begins). Each beat is
 // broadcast so phase transitions are clear and never overlap logic.
-function ludoTurnTransition(room) {
+// animMs: estimated client animation time for the last action; the
+// 'end' beat lasts long enough for it to finish.
+function ludoTurnTransition(room, animMs) {
   const st = room.ludo && room.ludo.st;
   if (!st || st.over) return;
   clearLudoPhaseTimer(room);
   clearTurnTimer(room); // previous player's 60s countdown stops here
   st.phase = 'end';
   ludoSync(room); // 'end' beat
+  const endMs = Math.max(800, animMs || 800);
   room.ludoPhaseTimer = setTimeout(() => {
     room.ludoPhaseTimer = null;
     if (rooms.get(room.code) !== room) return; // room destroyed meanwhile
@@ -1803,7 +1813,14 @@ function ludoAfterMove(room, moveResult) {
   }
   const flow = ludo.afterMoveFlow(st, moveResult);
   if (flow.over) { ludoFinish(room); return; }
-  if (flow.endTurn) { ludoTurnTransition(room); return; }
+  if (flow.endTurn) {
+    // Wait for the move/capture animation before passing the turn.
+    const steps = moveResult.move ? Math.abs(moveResult.move.to - moveResult.move.from) : 0;
+    const animMs = steps * LUDO_ANIM_STEP_MS
+      + (moveResult.captured && moveResult.captured.length ? LUDO_ANIM_CAPTURE_MS : 0) + 400;
+    ludoTurnTransition(room, animMs);
+    return;
+  }
   ludoSync(room);
 }
 function ludoContinueAfterAttack(room) {
@@ -1814,7 +1831,8 @@ function ludoContinueAfterAttack(room) {
   st.pendingDefense = null;
   const flow = ludo.afterMoveFlow(st, moveResult);
   if (flow.over) { ludoFinish(room); return; }
-  if (flow.endTurn) { ludoTurnTransition(room); return; }
+  // Attack/defense popups take a beat to dismiss on the client.
+  if (flow.endTurn) { ludoTurnTransition(room, 1200); return; }
   ludoSync(room);
 }
 function doLudoRoll(room) {
@@ -1919,7 +1937,7 @@ function doLudoSwap(room, oldCardId) {
   room.ludo.lastMove = null;
   const flow = ludo.afterMoveFlow(st, moveResult);
   if (flow.over) { ludoFinish(room); return { ok: true }; }
-  if (flow.endTurn) { ludoTurnTransition(room); return { ok: true }; }
+  if (flow.endTurn) { ludoTurnTransition(room, 800); return { ok: true }; }
   ludoSync(room);
   return { ok: true };
 }
@@ -1935,7 +1953,7 @@ function ludoBotStep(room) {
   if (st.phase === 'roll') {
     const r = doLudoRoll(room);
     if (!r.ok) return;
-    if (r.endTurn) ludoTurnTransition(room);
+    if (r.endTurn) ludoTurnTransition(room, LUDO_ANIM_DICE_MS + 200);
     else ludoSync(room);
     return;
   }
@@ -2180,7 +2198,7 @@ async function route(ws, type, data) {
       if (player.seat !== room.ludo.st.turn) { sendError(ws, 'Bukan giliranmu'); return; }
       const r = doLudoRoll(room);
       if (!r.ok) { sendError(ws, r.error); return; }
-      if (r.endTurn) ludoTurnTransition(room);
+      if (r.endTurn) ludoTurnTransition(room, LUDO_ANIM_DICE_MS + 200);
       else ludoSync(room);
       return;
     }

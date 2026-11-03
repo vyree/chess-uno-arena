@@ -819,22 +819,19 @@ body.low-gfx * {
 .ludo-pawn.p-blue { color: #5aa8ff; }
 .ludo-wrap { position: relative; max-width: 480px; margin: 0 auto; }
 .ludo-board { position: relative; aspect-ratio: 1; background: #111827; border-radius: 12px; overflow: hidden; }
-/* Turn ring (Sensei 2026-11-03): a purple-white striped circle that
-   rotates around the turn player's yard as the "whose turn" marker. */
-.ludo-turn-ring {
-  position: absolute; width: 38%; aspect-ratio: 1; border-radius: 50%;
-  pointer-events: none; z-index: 2;
-  background: repeating-conic-gradient(#a855f7 0deg 14deg, #ffffff 14deg 28deg);
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 11px), #000 calc(100% - 10px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 11px), #000 calc(100% - 10px));
-  animation: ludo-ring-spin 3.5s linear infinite;
-}
-.ludo-turn-ring.ring-red { left: 1%; top: 1%; }
-.ludo-turn-ring.ring-green { left: 61%; top: 1%; }
-.ludo-turn-ring.ring-yellow { left: 61%; top: 61%; }
-.ludo-turn-ring.ring-blue { left: 1%; top: 61%; }
-@keyframes ludo-ring-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .ludo-turn-ring { animation: none; } }
+/* Turn ring (Sensei 2026-11-03): a purple-white striped SQUARE line
+   walking around the outside of the turn player's yard as the
+   "whose turn" marker. White base border + purple dashes marching
+   via stroke-dashoffset. */
+.ludo-turn-ring { position: absolute; width: 40%; aspect-ratio: 1; pointer-events: none; z-index: 2; }
+.ludo-turn-ring svg { width: 100%; height: 100%; display: block; }
+.ludo-turn-ring .ring-dashes { animation: ring-dash-walk 0.9s linear infinite; }
+@keyframes ring-dash-walk { to { stroke-dashoffset: -20; } }
+.ludo-turn-ring.ring-red { left: 0%; top: 0%; }
+.ludo-turn-ring.ring-green { left: 60%; top: 0%; }
+.ludo-turn-ring.ring-yellow { left: 60%; top: 60%; }
+.ludo-turn-ring.ring-blue { left: 0%; top: 60%; }
+@media (prefers-reduced-motion: reduce) { .ludo-turn-ring .ring-dashes { animation: none; } }
 .ludo-board-bg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border-radius: 12px; }
 /* Player name in the top band of each yard (outer edge to inner box):
    40% wide, 6.667% tall, so it never reaches the first pawn row. */
